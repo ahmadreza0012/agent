@@ -54,8 +54,6 @@ def run_backtest_mode(config: Config, logger) -> None:
         commission_pct=config.backtest.commission_pct,
         slippage_pct=config.backtest.slippage_pct,
         position_size_pct=config.risk.max_position_size_pct,
-        stop_loss_pct=config.risk.stop_loss_pct,
-        take_profit_pct=config.risk.take_profit_pct,
     )
     
     # نمایش گزارش

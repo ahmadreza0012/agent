@@ -1,11 +1,16 @@
 """
-Backtester
+Backtester (نسخه بازنویسی‌شده - یک‌پارچه)
 
-این ماژول عملکرد واقعی استراتژی را روی داده تاریخی شبیه‌سازی می‌کند و گزارش می‌دهد:
-- سود/زیان کل
-- تعداد معاملات
-- درصد معاملات برنده
-- بیشترین افت سرمایه (Max Drawdown)
+این ماژول عملکرد واقعی استراتژی را روی داده تاریخی شبیه‌سازی می‌کند.
+
+نکته مهم درباره زمان‌بندی اجرا (جلوگیری از Look-Ahead Bias):
+- سیگنال بر اساس close کندل N تولید می‌شود
+- اجرای معامله با قیمت open کندل N+1 انجام می‌شود (چون در واقعیت
+  نمی‌توانید در لحظه تولید سیگنال، در قیمت close همان کندل معامله کنید)
+
+این نسخه عمداً از یک حلقه واحد استفاده می‌کند (نه دو حلقه موازی برای
+trade_log و equity_curve) تا ریسک ناهم‌ترازی و واگرایی بین دو محاسبه
+از بین برود.
 """
 
 import pandas as pd
@@ -21,219 +26,164 @@ logger = logging.getLogger(__name__)
 
 
 def validate_ohlcv_data(df: pd.DataFrame) -> Dict[str, Any]:
-    """
-    اعتبارسنجی داده‌های OHLCV قبل از اجرای بک‌تست.
-    
-    Args:
-        df: DataFrame حاوی داده‌های قیمت
-        
-    Returns:
-        دیکشنری شامل وضعیت اعتبارسنجی و خطاها
-    """
+    """اعتبارسنجی داده‌های OHLCV قبل از اجرای بک‌تست."""
     errors = []
     warnings = []
-    
-    # بررسی ستون‌های ضروری
+
     required_columns = ['open', 'high', 'low', 'close']
     missing_cols = [col for col in required_columns if col not in df.columns]
     if missing_cols:
         errors.append(f"ستون‌های ضروری وجود ندارند: {missing_cols}")
         return {"valid": False, "errors": errors, "warnings": warnings}
-    
-    # بررسی مقادیر منفی
+
     for col in required_columns:
         if (df[col] < 0).any():
-            errors.append(f"مقادیر منفی در ستون {col} обнаружены")
-    
-    # بررسی مقادیر صفر در close price
+            errors.append(f"مقادیر منفی در ستون {col} یافت شد")
+
     if (df['close'] == 0).any():
-        errors.append("قیمت بسته شدن صفر обнаружен است")
-    
-    # بررسی NaN values
+        errors.append("قیمت بسته شدن صفر یافت شد")
+
     nan_counts = df[required_columns].isna().sum()
     if nan_counts.any():
         for col, count in nan_counts[nan_counts > 0].items():
             errors.append(f"{count} مقدار NaN در ستون {col} وجود دارد")
-    
-    # بررسی افزایشی بودن timestamp (اگر وجود داشته باشد)
+
     if 'timestamp' in df.columns:
         ts_diff = df['timestamp'].diff()[1:]
         if (ts_diff <= pd.Timedelta(0)).any():
             non_increasing_count = (ts_diff <= pd.Timedelta(0)).sum()
-            warnings.append(f"{non_increasing_count} تکرار یا کاهش در timestamp обнаружен است")
-    
-    # بررسی منطق قیمت‌ها: high >= low, high >= open, high >= close, etc.
+            warnings.append(f"{non_increasing_count} تکرار یا کاهش در timestamp یافت شد")
+
     if (df['high'] < df['low']).any():
         errors.append("بعضی کندل‌ها high کمتر از low دارند")
-    
+
     if (df['high'] < df['open']).any() or (df['high'] < df['close']).any():
         warnings.append("بعضی کندل‌ها high کمتر از open یا close دارند")
-    
+
     if (df['low'] > df['open']).any() or (df['low'] > df['close']).any():
         warnings.append("بعضی کندل‌ها low بیشتر از open یا close دارند")
-    
+
     valid = len(errors) == 0
-    
+
     return {
         "valid": valid,
         "errors": errors,
         "warnings": warnings,
         "row_count": len(df),
-        "nan_free_rows": len(df.dropna(subset=required_columns))
+        "nan_free_rows": len(df.dropna(subset=required_columns)),
     }
 
 
 def run_backtest(
     df: pd.DataFrame,
-    initial_capital: float = 10_000_000,  # ۱۰ میلیون تومان سرمایه فرضی
-    commission_pct: float = 0.0025,  # ۰.۲۵٪ کارمزد هر معامله
-    slippage_pct: float = 0.001,  # ۰.۱٪ لغزش قیمت برای سفارش‌های مارکت
-    position_size_pct: float = 1.0,  # درصد سرمایه استفاده شده در هر معامله (پیش‌فرض ۱۰۰٪)
-    stop_loss_pct: Optional[float] = None,  # درصد حد ضرر (اختیاری)
-    take_profit_pct: Optional[float] = None,  # درصد حد سود (اختیاری)
+    initial_capital: float = 10_000_000,
+    commission_pct: float = 0.0025,
+    slippage_pct: float = 0.001,
+    position_size_pct: float = 1.0,
 ) -> dict:
     """
-    شبیه‌سازی معاملات بر اساس سیگنال‌های خرید/فروش موجود در df.
-    
-    با احتساب:
-    - کارمزد خرید و فروش
-    - لغزش قیمت (slippage) برای سفارش‌های مارکت
-    - امکان تنظیم حد ضرر و حد سود
-    - اندازه موقعیت قابل تنظیم
+    شبیه‌سازی معاملات با یک حلقه واحد روی تمام ردیف‌های داده.
 
-    Args:
-        df: DataFrame خروجی apply_moving_average_strategy (باید ستون position داشته باشد)
-        initial_capital: سرمایه اولیه فرضی به تومان
-        commission_pct: نرخ کارمزد هر معامله (مثلا 0.0025 یعنی 0.25%)
-        slippage_pct: درصد لغزش قیمت (پیش‌فرض 0.001 یعنی 0.1%)
-        position_size_pct: درصدی از سرمایه که در هر معامله استفاده می‌شود
-        stop_loss_pct: درصد حد ضرر نسبت به قیمت ورود (مثلا 0.05 یعنی 5%)
-        take_profit_pct: درصد حد سود نسبت به قیمت ورود (مثلا 0.10 یعنی 10%)
+    منطق زمان‌بندی:
+    - در ردیف idx، ابتدا چک می‌کنیم آیا سیگنالی در ردیف قبلی (idx-1)
+      صادر شده بود؛ اگر بله، با قیمت open همین ردیف (idx) اجرا می‌شود.
+    - سپس ارزش لحظه‌ای پرتفو (mark-to-market) با قیمت close همین ردیف
+      محاسبه و در equity_curve ثبت می‌شود.
 
-    Returns:
-        دیکشنری شامل نتایج کامل بک‌تست
+    این ترتیب تضمین می‌کند که هیچ معامله‌ای با اطلاعات از آینده انجام نشود.
     """
-    # اعتبارسنجی داده‌ها
     validation_result = validate_ohlcv_data(df)
     if not validation_result["valid"]:
         logger.error("اعتبارسنجی داده‌ها ناموفق بود:")
         for error in validation_result["errors"]:
             logger.error(f"  - {error}")
         return {"error": "invalid_data", "validation_errors": validation_result["errors"]}
-    
+
     for warning in validation_result.get("warnings", []):
         logger.warning(f"هشدار داده: {warning}")
-    
-    # آماده‌سازی داده‌ها
-    valid = df.dropna(subset=["position"]).reset_index(drop=True)
-    trades = valid[valid["position"] != 0].copy()
 
-    if len(trades) == 0:
-        logger.warning("هیچ معامله‌ای برای بک‌تست وجود ندارد.")
-        return {"error": "no_trades"}
+    # ایندکس را کاملاً یکدست (0..n-1) می‌کنیم تا هیچ‌جا ناهم‌ترازی ایندکس رخ ندهد
+    df = df.reset_index(drop=True)
+    n = len(df)
+
+    if "position" not in df.columns:
+        return {"error": "missing_position_column"}
 
     capital = initial_capital
     position_open = False
     entry_price = 0.0
     entry_timestamp = None
-    units_held = 0.0  # تعداد واحد دارایی خریداری شده
+    units_held = 0.0
     trade_log = []
-    
-    # منحنی سرمایه: شروع با سرمایه اولیه
-    # برای هر ردیف در داده‌های اصلی، ارزش پرتفو را محاسبه می‌کنیم
     equity_curve = []
-    
-    # ایجاد lookup برای دسترسی سریع به قیمت‌ها بر اساس ایندکس
-    price_lookup = df.set_index(df.index)[['close', 'timestamp']].to_dict('index')
-    
-    #跟踪当前在数据集中的位置
-    current_data_idx = 0
-    
-    for trade_idx, row in trades.iterrows():
-        price = row["close"]
-        action = "BUY" if row["position"] == 1 else "SELL"
-        trade_timestamp = row.get("timestamp", f"trade_{trade_idx}")
+    equity_timestamps = []
 
-        if action == "BUY" and not position_open:
-            # ورود به معامله با احتساب کارمزد و لغزش
-            # برای سفارش خرید مارکت، قیمت اجرا شده بدتر از close است (بالاتر)
-            execution_price = price * (1 + slippage_pct)
-            entry_price_raw = execution_price
-            entry_price_with_commission = entry_price_raw * (1 + commission_pct)
-            
-            # محاسبه تعداد واحد قابل خرید با توجه به position_size_pct
-            allocated_capital = capital * position_size_pct
-            units_held = allocated_capital / entry_price_with_commission
-            
-            entry_price = entry_price_with_commission
-            entry_timestamp = trade_timestamp
-            position_open = True
-            
-            logger.debug(f"BUY @ {execution_price:.2f} (با لغزش و کارمزد: {entry_price:.2f})")
+    for idx in range(n):
+        row = df.loc[idx]
 
-        elif action == "SELL" and position_open:
-            # بررسی حد ضرر و حد سود در طول معامله (بین ورود تا این نقطه)
-            # این بخش ساده‌سازی شده: فقط در نقطه فروش چک می‌کنیم
-            exited_due_to_stop_loss = False
-            exited_due_to_take_profit = False
-            
-            # برای بررسی دقیق‌تر، باید بین entry و exit را چک کنیم
-            # این نسخه ساده فقط exit معمولی انجام می‌دهد
-            
-            # خروج از معامله با احتساب کارمزد و لغزش
-            # برای سفارش فروش مارکت، قیمت اجرا شده بدتر از close است (پایین‌تر)
-            execution_price = price * (1 - slippage_pct)
-            exit_price_after_commission = execution_price * (1 - commission_pct)
-            
-            trade_return_pct = (exit_price_after_commission - entry_price) / entry_price
-            pnl = units_held * exit_price_after_commission - (units_held * entry_price)
-            
-            # بازگشت سرمایه به پورتفو
-            capital += pnl
-            
-            trade_log.append({
-                "entry_timestamp": entry_timestamp,
-                "exit_timestamp": trade_timestamp,
-                "entry_price": entry_price / (1 + commission_pct),  # قیمت بدون کارمزد
-                "exit_price": exit_price_after_commission / (1 - commission_pct),  # قیمت بدون کارمزد
-                "execution_price_entry": entry_price_raw,
-                "execution_price_exit": execution_price,
-                "units": units_held,
-                "return_pct": trade_return_pct * 100,
-                "pnl": pnl,
-                "capital_before": capital - pnl,
-                "capital_after": capital,
-                "exit_reason": "signal",
-            })
-            
-            position_open = False
-            entry_price = 0.0
-            units_held = 0.0
-            entry_timestamp = None
-            
-            logger.debug(f"SELL @ {execution_price:.2f} | PnL: {pnl:.2f} | Return: {trade_return_pct*100:.2f}%")
+        # ---- اجرای سیگنالی که در ردیف قبلی (idx-1) تولید شده بود ----
+        if idx > 0:
+            prev_signal = df.loc[idx - 1, "position"]
 
-    # بررسی اینکه آیا موقعیت بازی مانده است
-    open_position_warning = False
+            if pd.notna(prev_signal) and prev_signal != 0:
+                this_open = row["open"]
+                this_timestamp = row.get("timestamp", idx)
+
+                if prev_signal == 1 and not position_open:
+                    # ورود: قیمت اجرا بدتر از open است (لغزش خرید به سمت بالا)
+                    execution_price = this_open * (1 + slippage_pct)
+                    entry_price = execution_price * (1 + commission_pct)
+                    allocated_capital = capital * position_size_pct
+                    units_held = allocated_capital / entry_price
+                    entry_timestamp = this_timestamp
+                    position_open = True
+
+                elif prev_signal == -1 and position_open:
+                    # خروج: قیمت اجرا بدتر از open است (لغزش فروش به سمت پایین)
+                    execution_price = this_open * (1 - slippage_pct)
+                    exit_price = execution_price * (1 - commission_pct)
+                    pnl = units_held * exit_price - units_held * entry_price
+                    capital += pnl
+
+                    trade_log.append({
+                        "entry_timestamp": entry_timestamp,
+                        "exit_timestamp": this_timestamp,
+                        "entry_price": entry_price,
+                        "exit_price": exit_price,
+                        "units": units_held,
+                        "pnl": pnl,
+                        "return_pct": (exit_price - entry_price) / entry_price * 100,
+                        "capital_after": capital,
+                    })
+
+                    position_open = False
+                    units_held = 0.0
+                    entry_price = 0.0
+                    entry_timestamp = None
+
+        # ---- محاسبه ارزش لحظه‌ای پرتفو (mark-to-market) با close همین ردیف ----
+        close_price = row["close"]
+        current_equity = units_held * close_price if position_open else capital
+
+        equity_curve.append(current_equity)
+        equity_timestamps.append(row.get("timestamp", idx))
+
+    # ---- بررسی موقعیت باز در پایان داده ----
+    open_position_info = None
     if position_open:
-        open_position_warning = True
-        last_price = valid.iloc[-1]["close"]
-        last_timestamp = valid.iloc[-1].get("timestamp", "end_of_data")
-        
-        # محاسبه ارزش لحظه‌ای موقعیت باز
-        unrealized_execution_price = last_price * (1 - slippage_pct)
-        unrealized_exit_value = units_held * unrealized_execution_price * (1 - commission_pct)
-        unrealized_pnl = unrealized_exit_value - (units_held * entry_price)
-        
+        last_price = df.loc[n - 1, "close"]
+        unrealized_value = units_held * last_price
+        unrealized_pnl = unrealized_value - (units_held * entry_price)
+
         logger.warning(
             f"⚠️ هشدار: بک‌تست با یک موقعیت خرید باز پایان یافت!"
             f"\n   قیمت ورود: {entry_price:.2f}"
             f"\n   آخرین قیمت: {last_price:.2f}"
-            f"\n   سود/زیان تحقق‌نیافته: {unrealized_pnl:.2f} تومان ({unrealized_pnl/(units_held*entry_price)*100:.2f}%)"
-            f"\n   این معامله در آمار نهایی لحاظ نشده است."
+            f"\n   سود/زیان تحقق‌نیافته: {unrealized_pnl:.2f} تومان "
+            f"({(unrealized_pnl/(units_held*entry_price))*100:.2f}%)"
+            f"\n   این معامله در آمار «تعداد معاملات» لحاظ نشده، ولی در equity_curve نهایی لحاظ شده است."
         )
-        
-        # اضافه کردن اطلاعات موقعیت باز به نتایج
+
         open_position_info = {
             "status": "open",
             "entry_timestamp": entry_timestamp,
@@ -243,86 +193,39 @@ def run_backtest(
             "unrealized_pnl": unrealized_pnl,
             "unrealized_pnl_pct": (unrealized_pnl / (units_held * entry_price)) * 100,
         }
-    else:
-        open_position_info = None
 
-    # ساخت منحنی سرمایه با احتساب موقعیت‌های باز (mark-to-market)
-    # این بخش مهم است: قبلاً فقط هنگام بستن معامله آپدیت می‌شد
-    equity_curve = [initial_capital]
-    current_capital = initial_capital
-    position_open_sim = False
-    sim_entry_price = 0.0
-    sim_units = 0.0
-    
-    for idx, row in df.iterrows():
-        close_price = row["close"]
-        
-        # بررسی سیگنال در این ردیف
-        if idx in trades.index and trades.loc[idx, "position"] == 1 and not position_open_sim:
-            # BUY
-            exec_price = close_price * (1 + slippage_pct)
-            exec_price_with_comm = exec_price * (1 + commission_pct)
-            allocated = current_capital * position_size_pct
-            sim_units = allocated / exec_price_with_comm
-            sim_entry_price = exec_price_with_comm
-            position_open_sim = True
-            
-        elif idx in trades.index and trades.loc[idx, "position"] == -1 and position_open_sim:
-            # SELL
-            exec_price = close_price * (1 - slippage_pct)
-            exec_price_after_comm = exec_price * (1 - commission_pct)
-            pnl = sim_units * exec_price_after_comm - (sim_units * sim_entry_price)
-            current_capital += pnl
-            position_open_sim = False
-            sim_units = 0.0
-            sim_entry_price = 0.0
-        
-        # محاسبه ارزش فعلی پرتفو (mark-to-market)
-        if position_open_sim:
-            # ارزش لحظه‌ای با احتساب هزینه خروج فرضی
-            current_exec_price = close_price * (1 - slippage_pct)
-            current_exit_value = sim_units * current_exec_price * (1 - commission_pct)
-            current_equity = current_capital + (current_exit_value - (sim_units * sim_entry_price))
-        else:
-            current_equity = current_capital
-        
-        equity_curve.append(current_equity)
-    
-    # حذف نقطه اضافی اول اگر نیاز باشد
-    if len(equity_curve) > len(df) + 1:
-        equity_curve = equity_curve[:len(df) + 1]
-    
     if len(trade_log) == 0:
         logger.warning("هیچ معامله کاملی (خرید+فروش) انجام نشد.")
-        return {"error": "no_completed_trades", "open_position": open_position_info}
+        return {
+            "error": "no_completed_trades",
+            "open_position": open_position_info,
+            "equity_curve": equity_curve,
+        }
 
     trade_log_df = pd.DataFrame(trade_log)
 
-    # محاسبه آمار نهایی
-    total_return_pct = ((capital - initial_capital) / initial_capital) * 100
+    # سرمایه نهایی: از آخرین مقدار equity_curve می‌گیریم تا موقعیت باز هم لحاظ شود
+    final_capital = equity_curve[-1]
+    total_return_pct = ((final_capital - initial_capital) / initial_capital) * 100
     winning_trades = (trade_log_df["return_pct"] > 0).sum()
     losing_trades = (trade_log_df["return_pct"] <= 0).sum()
-    win_rate = (winning_trades / len(trade_log_df)) * 100 if len(trade_log_df) > 0 else 0
-    
-    # محاسبه دقیق‌ترین افت سرمایه با استفاده از منحنی سرمایه کامل
+    win_rate = (winning_trades / len(trade_log_df)) * 100
+
     equity_series = pd.Series(equity_curve)
     running_max = equity_series.cummax()
     drawdown = (equity_series - running_max) / running_max * 100
     max_drawdown = drawdown.min()
-    
-    # محاسبه Sharpe Ratio ساده‌سازی شده (فرض 252 روز معاملاتی)
+
     if len(equity_series) > 1:
         returns = equity_series.pct_change().dropna()
-        if returns.std() > 0:
-            sharpe_ratio = (returns.mean() / returns.std()) * np.sqrt(252)
-        else:
-            sharpe_ratio = 0.0
+        sharpe_ratio = (returns.mean() / returns.std()) * np.sqrt(252) if returns.std() > 0 else 0.0
     else:
         sharpe_ratio = 0.0
 
     results = {
         "initial_capital": initial_capital,
-        "final_capital": capital,
+        "final_capital": final_capital,
+        "position_still_open": position_open,
         "total_return_pct": total_return_pct,
         "num_trades": len(trade_log_df),
         "winning_trades": int(winning_trades),
@@ -349,7 +252,7 @@ def print_report(results: dict) -> None:
             print("خطاهای اعتبارسنجی:")
             for err in results["validation_errors"]:
                 print(f"  - {err}")
-        if "open_position" in results and results["open_position"]:
+        if results.get("open_position"):
             op = results["open_position"]
             print(f"\nموقعیت باز:")
             print(f"  قیمت ورود: {op['entry_price']:,.2f}")
@@ -367,12 +270,12 @@ def print_report(results: dict) -> None:
     print(f"معاملات بازنده:         {results['losing_trades']}")
     print(f"درصد برد (Win Rate):    {results['win_rate_pct']:.1f}%")
     print(f"بیشترین افت سرمایه:     {results['max_drawdown_pct']:.2f}%")
-    print(f"Sharpe Ratio:           {results.get('sharpe_ratio', 'N/A'):.3f}" if results.get('sharpe_ratio') else "Sharpe Ratio: N/A")
+    print(f"Sharpe Ratio:           {results['sharpe_ratio']:.3f}")
     print("-" * 60)
-    print(f"کارمزد استفاده شده:     {results.get('commission_pct_used', 0)*100:.2f}%")
-    print(f"لغزش قیمت استفاده شده:  {results.get('slippage_pct_used', 0)*100:.2f}%")
-    print(f"اندازه موقعیت:          {results.get('position_size_pct_used', 1)*100:.0f}% از سرمایه")
-    
+    print(f"کارمزد استفاده شده:     {results['commission_pct_used']*100:.2f}%")
+    print(f"لغزش قیمت استفاده شده:  {results['slippage_pct_used']*100:.2f}%")
+    print(f"اندازه موقعیت:          {results['position_size_pct_used']*100:.0f}% از سرمایه")
+
     if results.get("open_position"):
         op = results["open_position"]
         print("-" * 60)
@@ -380,27 +283,24 @@ def print_report(results: dict) -> None:
         print(f"   قیمت ورود: {op['entry_price']:,.2f}")
         print(f"   آخرین قیمت: {op['last_price']:,.2f}")
         print(f"   سود/زیان تحقق‌نیافته: {op['unrealized_pnl']:,.2f} تومان ({op['unrealized_pnl_pct']:.2f}%)")
-        print("   این معامله در آمار نهایی لحاظ نشده است.")
-    
+        print("   این مبلغ در سرمایه نهایی لحاظ شده، ولی به‌عنوان یک معامله بسته‌شده شمرده نشده.")
+
     print("=" * 60)
 
 
 if __name__ == "__main__":
-    # بارگذاری داده‌ای که با سیگنال‌ها ذخیره کرده بودیم
     df = pd.read_csv("data/btcirt_with_signals.csv", parse_dates=["timestamp"])
 
-    # اجرای بک‌تست با پارامترهای پیشرفته
     results = run_backtest(
         df,
-        initial_capital=10_000_000,  # ۱۰ میلیون تومان
-        commission_pct=0.0025,  # ۰.۲۵٪ کارمزد (نرخ رایج نوبیتکس)
-        slippage_pct=0.001,  # ۰.۱٪ لغزش قیمت
-        position_size_pct=1.0,  # ۱۰۰٪ سرمایه در هر معامله
+        initial_capital=10_000_000,
+        commission_pct=0.0025,
+        slippage_pct=0.001,
+        position_size_pct=1.0,
     )
 
     print_report(results)
 
-    # نمایش جزئیات هر معامله
     if "trade_log" in results:
         print("\nجزئیات معاملات:")
         print(results["trade_log"].to_string(index=False))
