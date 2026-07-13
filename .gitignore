@@ -5,14 +5,22 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Logs
-*.log
-logs/
-
-# Environment
-.venv/
+# Dependencies
 venv/
+.venv/
 .env
 .env.local
+*.env.*
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Editors
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
 ```
-Nothing should be ignored in this case, as only a Python source file (.py) was added without any build artifacts, dependencies, or temporary files.
