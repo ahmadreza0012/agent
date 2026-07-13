@@ -15,3 +15,4 @@ venv/
 .env
 .env.local
 ```
+Nothing should be ignored in this case, as only a Python source file (.py) was added without any build artifacts, dependencies, or temporary files.
