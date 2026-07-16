@@ -80,6 +80,8 @@ def run_backtest(
     commission_pct: float = 0.0025,
     slippage_pct: float = 0.001,
     position_size_pct: float = 1.0,
+    stop_loss_pct: Optional[float] = None,
+    take_profit_pct: Optional[float] = None,
 ) -> dict:
     """
     شبیه‌سازی معاملات با یک حلقه واحد روی تمام ردیف‌های داده.
@@ -91,6 +93,21 @@ def run_backtest(
       محاسبه و در equity_curve ثبت می‌شود.
 
     این ترتیب تضمین می‌کند که هیچ معامله‌ای با اطلاعات از آینده انجام نشود.
+    
+    پارامترهای اختیاری:
+    - stop_loss_pct: درصد حد ضرر نسبت به قیمت ورود (مثلاً 0.05 = 5%). 
+      اگر None باشد، غیرفعال است.
+    - take_profit_pct: درصد حد سود نسبت به قیمت ورود (مثلاً 0.10 = 10%).
+      اگر None باشد، غیرفعال است.
+      
+    بررسی حد ضرر/حد سود درون‌کندلی:
+    برای هر کندلی که موقعیت باز وجود دارد، قبل از پردازش سیگنال جدید:
+    1. اگر low کندل به سطح stop_loss رسیده باشد، خروج در max(open, stop_loss_level)
+       با دلیل "stop_loss"
+    2. اگر high کندل به سطح take_profit رسیده باشد، خروج در min(open, take_profit_level)
+       با دلیل "take_profit"
+    3. اگر هیچ‌کدام فعال نشد، ادامه با منطق مبتنی بر سیگنال (اجرای سیگنال
+       کندل قبل در open این کندل)
     """
     validation_result = validate_ohlcv_data(df)
     if not validation_result["valid"]:
@@ -120,6 +137,66 @@ def run_backtest(
 
     for idx in range(n):
         row = df.loc[idx]
+
+        # ---- بررسی حد ضرر/حد سود درون‌کندلی (قبل از پردازش سیگنال جدید) ----
+        # این بررسی فقط زمانی انجام می‌شود که یک موقعیت باز وجود داشته باشد
+        if position_open and (stop_loss_pct is not None or take_profit_pct is not None):
+            this_open = row["open"]
+            this_high = row["high"]
+            this_low = row["low"]
+            this_timestamp = row.get("timestamp", idx)
+            
+            # محاسبه سطوح حد ضرر و حد سود بر اساس entry_price
+            stop_loss_level = entry_price * (1 - stop_loss_pct) if stop_loss_pct is not None else None
+            take_profit_level = entry_price * (1 + take_profit_pct) if take_profit_pct is not None else None
+            
+            exited = False
+            exit_reason = None
+            exit_price = None
+            
+            # اولویت 1: بررسی حد ضرر - اگر low کندل به stop_loss_level رسیده باشد
+            if stop_loss_level is not None and this_low <= stop_loss_level:
+                # خروج در max(open, stop_loss_level) - بدترین حالت برای خریدار
+                # اگر open پایین‌تر از stop_loss باشد، یعنی gap down داشته و در stop_loss پر شده
+                # اگر open بالاتر باشد، در open خارج می‌شویم (چون قیمت از open شروع به کاهش کرده)
+                exit_price = max(this_open, stop_loss_level)
+                # اعمال لغزش و کارمزد برای خروج
+                exit_price = exit_price * (1 - slippage_pct) * (1 - commission_pct)
+                exit_reason = "stop_loss"
+                exited = True
+            
+            # اولویت 2: بررسی حد سود - اگر high کندل به take_profit_level رسیده باشد
+            elif take_profit_level is not None and this_high >= take_profit_level:
+                # خروج در min(open, take_profit_level) - بهترین قیمت قابل دسترس
+                # اگر open بالاتر از take_profit باشد، یعنی gap up داشته و در take_profit پر شده
+                # اگر open پایین‌تر باشد، در open خارج می‌شویم
+                exit_price = min(this_open, take_profit_level)
+                # اعمال لغزش و کارمزد برای خروج
+                exit_price = exit_price * (1 - slippage_pct) * (1 - commission_pct)
+                exit_reason = "take_profit"
+                exited = True
+            
+            # اگر حد ضرر یا حد سود فعال شد، موقعیت را ببند
+            if exited:
+                pnl = units_held * exit_price - units_held * entry_price
+                capital += pnl
+                
+                trade_log.append({
+                    "entry_timestamp": entry_timestamp,
+                    "exit_timestamp": this_timestamp,
+                    "entry_price": entry_price,
+                    "exit_price": exit_price,
+                    "units": units_held,
+                    "pnl": pnl,
+                    "return_pct": (exit_price - entry_price) / entry_price * 100,
+                    "capital_after": capital,
+                    "exit_reason": exit_reason,
+                })
+                
+                position_open = False
+                units_held = 0.0
+                entry_price = 0.0
+                entry_timestamp = None
 
         # ---- اجرای سیگنالی که در ردیف قبلی (idx-1) تولید شده بود ----
         if idx > 0:
@@ -154,6 +231,7 @@ def run_backtest(
                         "pnl": pnl,
                         "return_pct": (exit_price - entry_price) / entry_price * 100,
                         "capital_after": capital,
+                        "exit_reason": "signal",
                     })
 
                     position_open = False
