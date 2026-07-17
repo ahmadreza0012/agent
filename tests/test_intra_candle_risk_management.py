@@ -80,14 +80,18 @@ def test_intra_candle_stop_loss_triggers_mid_candle():
     stop_loss_level = expected_entry_price * (1 - 0.05)  # ~95.33
     
     # Since low (94) <= stop_loss_level (95.33), stop triggers
-    # Exit price before slippage = max(open=100, stop_loss_level=95.33) = 100
-    expected_exit_price_before_fees = max(entry_open, stop_loss_level)
-    expected_exit_price = expected_exit_price_before_fees * (1 - 0.001) * (1 - 0.0025)  # ~99.65
+    # Exit price before slippage = min(open=100, stop_loss_level=95.33) = 95.33
+    # (price dropped from open=100 down to stop_loss_level, we exit at stop_loss)
+    expected_exit_price_before_fees = min(entry_open, stop_loss_level)
+    expected_exit_price = expected_exit_price_before_fees * (1 - 0.001) * (1 - 0.0025)  # ~95.08
     
     assert abs(trade["entry_price"] - expected_entry_price) < 0.01, \
         f"Entry price mismatch: expected {expected_entry_price}, got {trade['entry_price']}"
     assert abs(trade["exit_price"] - expected_exit_price) < 0.01, \
         f"Exit price mismatch: expected {expected_exit_price}, got {trade['exit_price']}"
+    
+    # Stop-loss must result in a loss
+    assert trade["pnl"] < 0, f"Stop-loss trade must be a loss, got pnl={trade['pnl']}"
     
     print(f"✓ Intra-candle stop-loss test PASSED")
     print(f"  Entry price: {trade['entry_price']:.2f}")
@@ -139,6 +143,27 @@ def test_intra_candle_take_profit_triggers_mid_candle():
     expected_exit_timestamp = df.loc[3, 'timestamp']
     assert trade["exit_timestamp"] == expected_exit_timestamp, \
         f"Expected exit at {expected_exit_timestamp}, got {trade['exit_timestamp']}"
+    
+    # Calculate expected values
+    entry_open = df.loc[2, 'open']  # 100 (entry happens at row 2's open due to row 1's signal)
+    expected_entry_price = entry_open * (1 + 0.001) * (1 + 0.0025)  # ~100.35
+    
+    # Take profit level
+    take_profit_level = expected_entry_price * (1 + 0.10)  # ~110.39
+    
+    # Since high (112) >= take_profit_level (110.39), take-profit triggers
+    # Exit price before slippage = max(open=100, take_profit_level=110.39) = 110.39
+    # (price rose from open=100 up to take_profit_level, we exit at take_profit)
+    expected_exit_price_before_fees = max(entry_open, take_profit_level)
+    expected_exit_price = expected_exit_price_before_fees * (1 - 0.001) * (1 - 0.0025)  # ~110.06
+    
+    assert abs(trade["entry_price"] - expected_entry_price) < 0.01, \
+        f"Entry price mismatch: expected {expected_entry_price}, got {trade['entry_price']}"
+    assert abs(trade["exit_price"] - expected_exit_price) < 0.01, \
+        f"Exit price mismatch: expected {expected_exit_price}, got {trade['exit_price']}"
+    
+    # Take-profit must result in a profit
+    assert trade["pnl"] > 0, f"Take-profit trade must be profitable, got pnl={trade['pnl']}"
     
     print(f"✓ Intra-candle take-profit test PASSED")
     print(f"  Entry price: {trade['entry_price']:.2f}")

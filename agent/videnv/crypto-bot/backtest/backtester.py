@@ -156,10 +156,10 @@ def run_backtest(
             
             # اولویت 1: بررسی حد ضرر - اگر low کندل به stop_loss_level رسیده باشد
             if stop_loss_level is not None and this_low <= stop_loss_level:
-                # خروج در max(open, stop_loss_level) - بدترین حالت برای خریدار
-                # اگر open پایین‌تر از stop_loss باشد، یعنی gap down داشته و در stop_loss پر شده
-                # اگر open بالاتر باشد، در open خارج می‌شویم (چون قیمت از open شروع به کاهش کرده)
-                exit_price = max(this_open, stop_loss_level)
+                # خروج در min(open, stop_loss_level) - بدترین حالت برای خریدار
+                # اگر open پایین‌تر از stop_loss باشد، یعنی gap down داشته و در open پر شده (بدتر)
+                # اگر open بالاتر باشد، قیمت از open شروع به کاهش کرده و در stop_loss خارج می‌شویم
+                exit_price = min(this_open, stop_loss_level)
                 # اعمال لغزش و کارمزد برای خروج
                 exit_price = exit_price * (1 - slippage_pct) * (1 - commission_pct)
                 exit_reason = "stop_loss"
@@ -167,10 +167,10 @@ def run_backtest(
             
             # اولویت 2: بررسی حد سود - اگر high کندل به take_profit_level رسیده باشد
             elif take_profit_level is not None and this_high >= take_profit_level:
-                # خروج در min(open, take_profit_level) - بهترین قیمت قابل دسترس
-                # اگر open بالاتر از take_profit باشد، یعنی gap up داشته و در take_profit پر شده
-                # اگر open پایین‌تر باشد، در open خارج می‌شویم
-                exit_price = min(this_open, take_profit_level)
+                # خروج در max(open, take_profit_level) - بهترین قیمت قابل دسترس
+                # اگر open بالاتر از take_profit باشد، یعنی gap up داشته و در open پر شده (بهتر)
+                # اگر open پایین‌تر باشد، قیمت از open شروع به افزایش کرده و در take_profit خارج می‌شویم
+                exit_price = max(this_open, take_profit_level)
                 # اعمال لغزش و کارمزد برای خروج
                 exit_price = exit_price * (1 - slippage_pct) * (1 - commission_pct)
                 exit_reason = "take_profit"
