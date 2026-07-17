@@ -6,12 +6,23 @@ __pycache__/
 # Virtual environments
 .venv/
 venv/
+node_modules/
 
-# Logs
+# Logs and temp files
 *.log
+*.tmp
+*.swp
 
 # Environment files
 .env
 .env.local
 *.env.*
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
 ```
