@@ -3,7 +3,7 @@
 *.pyc
 __pycache__/
 
-# Dependencies
+# Virtual environments
 .venv/
 venv/
 node_modules/
@@ -13,6 +13,10 @@ node_modules/
 *.tmp
 *.swp
 
+# Environment files
+.env
+.env.local
+*.env.*
 # Environment
 .env
 .env.local
