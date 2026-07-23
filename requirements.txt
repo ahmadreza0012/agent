@@ -1,4 +1,4 @@
-# Crypto Portfolio Optimization System - Requirements
+# Self-Improving Crypto Trading Agent - Requirements
 # Core dependencies
 ccxt>=4.0.0
 pandas>=2.0.0
@@ -8,17 +8,31 @@ scipy>=1.10.0
 # Portfolio Optimization
 PyPortfolioOpt>=1.5.5
 
-# Machine Learning
+# Machine Learning & RL
 xgboost>=2.0.0
 scikit-learn>=1.3.0
+stable-baselines3>=2.0.0
+gymnasium>=0.29.0
 
 # AI/LLM Integration
 requests>=2.31.0
 groq>=0.4.0
+google-generativeai>=0.3.0
 
-# Visualization (optional for analysis)
+# Vector Database for Memory
+chromadb>=0.4.0
+
+# Visualization
 matplotlib>=3.7.0
 
 # Logging & Utilities
 python-dateutil>=2.8.2
 pytz>=2023.3
+python-dotenv>=1.0.0
+
+# Regime Detection
+hmmlearn>=0.3.0
+
+# Technical Analysis
+ta-lib>=0.4.0
+pandas-ta>=0.3.0
