@@ -4,88 +4,91 @@ import pandas_ta as ta
 import google.generativeai as genai
 import json
 import os
+from sklearn.ensemble import RandomForestClassifier
 
-class SmartCryptoAgent:
+class SelfImprovingAgent:
     def __init__(self, initial_capital=1000):
         self.capital = initial_capital
-        self.equity_curve = []
-        self.position = 0  # 0: None, 1: Long
-        self.risk_per_trade = 0.02  # ریسک ۲ درصد در هر معامله برای حفظ سرمایه
+        self.position = 0
+        self.risk_per_trade = 0.01 # ریسک کمتر برای پایداری بیشتر
+        self.model = RandomForestClassifier(n_estimators=100, random_state=42)
+        self.is_trained = False
         
-    def calculate_indicators(self, df):
-        # استفاده از شاخص‌های SOTA
-        df['EMA_20'] = ta.ema(df['close'], length=20)
-        df['EMA_50'] = ta.ema(df['close'], length=50)
+    def prepare_features(self, df):
+        # شاخص‌های تکنیکال پیشرفته
         df['RSI'] = ta.rsi(df['close'], length=14)
-        
-        # Bollinger Bands برای تشخیص اشباع خرید/فروش در بازار رنج
-        bbands = ta.bbands(df['close'], length=20, std=2)
-        df = pd.concat([df, bbands], axis=1)
-        
-        # ATR برای تعیین حد ضرر متحرک (Dynamic Stop Loss)
+        df['ADX'] = ta.adx(df['high'], df['low'], df['close'])['ADX_14']
         df['ATR'] = ta.atr(df['high'], df['low'], df['close'], length=14)
-        return df
+        
+        # تفاوت قیمت با میانگین‌ها
+        df['EMA_diff'] = (df['close'] - ta.ema(df['close'], length=20)) / df['close']
+        
+        # هدف برای یادگیری ماشین: آیا در ۱۰ کندل آینده قیمت ۵ درصد رشد میکند؟
+        df['target'] = (df['close'].shift(-10) > df['close'] * 1.02).astype(int)
+        return df.dropna()
 
-    def get_ai_sentiment(self, news_summary):
-        """اتصال به Gemini برای تحلیل اخبار - شبیه‌سازی برای تست"""
-        # در حالت واقعی، اینجا API Call به Gemini انجام می‌شود
-        # برای تست، ما فرض می‌کنیم اگر قیمت بالای EMA باشد، سنتیمنت مثبت است
-        return 1.0 
+    def train_model(self, df):
+        features = ['RSI', 'ADX', 'EMA_diff']
+        X = df[features]
+        y = df['target']
+        # تقسیم داده به آموزش و تست (ساده)
+        split = int(len(df) * 0.8)
+        self.model.fit(X.iloc[:split], y.iloc[:split])
+        self.is_trained = True
+        print("Model trained on historical data.")
 
-    def decide_strategy(self, row, prev_row):
-        """هسته تصمیم‌گیر هوشمند (Self-Correcting Logic)"""
-        # استراتژی ترکیبی: Trend Following + Mean Reversion
+    def decide(self, row):
+        if not self.is_trained:
+            return 'HOLD'
+            
+        # پیش‌بینی مدل ML
+        features = np.array([[row['RSI'], row['ADX'], row['EMA_diff']]])
+        ml_conf = self.model.predict_proba(features)[0][1]
         
-        # سیگنال خرید: تقاطع EMA + RSI مناسب + برخورد به باند پایینی بولینگر
-        buy_signal = (row['EMA_20'] > row['EMA_50']) and (row['RSI'] > 40) and (row['close'] > row['EMA_20'])
-        
-        # سیگنال فروش: اشباع خرید یا شکستن روند
-        sell_signal = (row['close'] < row['EMA_20']) or (row['RSI'] > 75)
-        
-        if buy_signal and self.position == 0:
+        # استراتژی اصلاح شده: خرید فقط در زمان قدرت روند و تایید ML
+        if ml_conf > 0.6 and row['ADX'] > 25:
             return 'BUY'
-        elif sell_signal and self.position == 1:
+        elif row['RSI'] > 70 or (self.position == 1 and row['close'] < row['EMA_diff']):
             return 'SELL'
         return 'HOLD'
 
-    def run_backtest(self, csv_path):
+    def run(self, csv_path):
         df = pd.read_csv(csv_path)
-        # پیش‌پردازش داده‌ها
         df.columns = [c.strip().lower() for c in df.columns]
-        df = self.calculate_indicators(df)
-        df = df.dropna()
-
-        trades = []
-        current_capital = self.capital
+        df = self.prepare_features(df)
         
-        for i in range(1, len(df)):
+        # مرحله ۱: یادگیری از داده‌های گذشته
+        self.train_model(df)
+        
+        # مرحله ۲: اجرای زنده (بک‌تست روی کل بازه برای مشاهده قدرت اصلاح)
+        current_capital = self.capital
+        trades = []
+        equity = []
+        
+        for i in range(len(df)):
             row = df.iloc[i]
-            prev_row = df.iloc[i-1]
-            decision = self.decide_strategy(row, prev_row)
+            decision = self.decide(row)
             
             if decision == 'BUY' and self.position == 0:
                 self.position = 1
                 entry_price = row['close']
-                # محاسبه حجم پوزیشن بر اساس ATR (مدیریت ریسک حرفه‌ای)
-                stop_loss = entry_price - (2 * row['ATR'])
-                risk_amount = current_capital * self.risk_per_trade
-                units = risk_amount / (entry_price - stop_loss) if entry_price > stop_loss else 0
-                trades.append({'type': 'BUY', 'price': entry_price, 'time': row.get('timestamp', i)})
-                
+                trades.append({'type': 'BUY', 'price': entry_price})
             elif decision == 'SELL' and self.position == 1:
                 self.position = 0
                 exit_price = row['close']
-                entry_price = trades[-1]['price']
-                profit = (exit_price - entry_price) * (current_capital / entry_price) # ساده‌سازی شده
-                current_capital += profit
-                trades.append({'type': 'SELL', 'price': exit_price, 'time': row.get('timestamp', i), 'profit': profit})
+                profit = (exit_price - trades[-1]['price']) / trades[-1]['price']
+                # کسر کارمزد صرافی (فرضی ۰.۱ درصد)
+                current_capital *= (1 + profit - 0.002)
+                trades.append({'type': 'SELL', 'price': exit_price, 'profit': profit})
+            
+            equity.append(current_capital)
+            
+        final_return = ((current_capital - self.capital) / self.capital) * 100
+        return final_return, len(trades)
 
-            self.equity_curve.append(current_capital)
+# اجرای نسخه اصلاح شده
+agent = SelfImprovingAgent()
+final_ret, trade_count = agent.run('data/cache/BTC_USDT_1h_365d.csv')
+print(f"Final Return with ML: {final_ret:.2f}%")
+print(f"Total Trades: {trade_count}")
 
-        total_return = ((current_capital - self.capital) / self.capital) * 100
-        return total_return, trades
-
-# تست روی داده‌های ۱۸۰ روزه موجود
-agent = SmartCryptoAgent()
-results = agent.run_backtest('agent/videnv/crypto-bot/data/btcirt_180d.csv')
-print(f"Total Return over 180 days: {results[0]:.2f}%")
