@@ -41,18 +41,19 @@ class DataFetcher:
         self.api = CoinGeckoAPI()
         logger.info(f"Initialized DataFetcher for {len(self.symbols)} symbols using CoinGecko API")
 
-    def fetch_ohlcv(self, symbol: str, timeframe: str = '1h',
-                     since_days: int = 90) -> pd.DataFrame:
+    def fetch_ohlcv(self, symbol: str, timeframe: str = '1d',
+                     since_days: int = 365) -> pd.DataFrame:
         """
         Fetch OHLCV data for a single symbol from CoinGecko
 
         Args:
             symbol: Trading pair (e.g., 'BTC/USDT')
-            timeframe: Candle timeframe (default: '1h', only '1h' supported by CoinGecko API)
-            since_days: Number of days of historical data (max 90 for free API, or use 'max')
+            timeframe: Candle timeframe. Note: CoinGecko free API only supports daily ('1d') 
+                       for periods > 7 days. Hourly data is limited to ~7 days.
+            since_days: Number of days of historical data. Use 'max' or >= 365 for full history.
 
         Returns:
-            DataFrame with OHLCV data ['open', 'high', 'low', 'close', 'volume']
+            DataFrame with OHLCV data ['Open', 'High', 'Low', 'Close', 'Volume']
         """
         logger.info(f"Fetching {timeframe} data for {symbol} ({since_days} days)")
 
@@ -62,9 +63,11 @@ class DataFetcher:
             raise ValueError(f"Symbol {symbol} not mapped to CoinGecko ID. "
                              f"Available mappings: {list(SYMBOL_TO_COINGECKO_ID.keys())}")
 
-        # CoinGecko's get_coin_ohlc returns hourly candles
-        # Free API supports: 1, 14, 30, 90, or 'max' days
-        # We'll use 'max' for full history, but cap at 90 if user requests <= 90
+        # CoinGecko free API limitations:
+        # - get_coin_ohlc_by_id returns DAILY candles for any period > 7 days.
+        # - Hourly data is NOT available for long backtests on free tier.
+        # Strategy: Always fetch daily data for backtesting purposes.
+        
         max_retries = 3
         retry_delay = 60  # seconds to wait on rate limit (429)
         
@@ -72,11 +75,11 @@ class DataFetcher:
         for attempt in range(max_retries):
             try:
                 # Determine the 'days' parameter for CoinGecko API
-                if since_days >= 365 or since_days == 'max':
+                # Valid values: 1, 14, 30, 90, 'max'
+                if since_days == 'max' or since_days >= 365:
                     api_days = 'max'
                 elif since_days > 90:
-                    # For values between 91-364, use 'max' to get all available data
-                    api_days = 'max'
+                    api_days = 'max'  # Get all available if user wants > 90 days
                 elif since_days > 30:
                     api_days = 90
                 elif since_days > 14:
@@ -89,6 +92,7 @@ class DataFetcher:
                 logger.debug(f"Using CoinGecko days parameter: {api_days}")
                 
                 # get_coin_ohlc_by_id(coin_id, vs_currency, days) returns [timestamp, open, high, low, close]
+                # This endpoint RETURNS DAILY CANDLES for most values of 'days'
                 ohlc_data = self.api.get_coin_ohlc_by_id(coin_id, vs_currency='usd', days=api_days)
                 break  # Success, exit retry loop
                 
@@ -115,15 +119,15 @@ class DataFetcher:
                         raise ValueError(f"Failed to fetch data for {symbol} after {max_retries} attempts: {e}")
                     time.sleep(1)
         
-        if not ohlc_data:
-            raise ValueError(f"No data retrieved for {symbol}")
+        if not ohlc_data or len(ohlc_data) < 10:
+            raise ValueError(f"No sufficient data retrieved for {symbol} (got {len(ohlc_data) if ohlc_data else 0} candles)")
 
         # Convert to DataFrame
         # CoinGecko returns: [timestamp(ms), open, high, low, close]
         df = pd.DataFrame(ohlc_data, columns=['timestamp', 'open', 'high', 'low', 'close'])
         
-        # Add volume column (CoinGecko OHLC doesn't include volume, set to 0 or estimate)
-        # For portfolio optimization, volume is less critical, so we set it to a placeholder
+        # Add volume column (CoinGecko OHLC endpoint doesn't include volume in free tier)
+        # Set to 0.0 as placeholder; portfolio optimization primarily uses returns from Close prices
         df['volume'] = 0.0
         
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -131,13 +135,14 @@ class DataFetcher:
         df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low',
                             'close': 'Close', 'volume': 'Volume'}, inplace=True)
 
-        logger.info(f"Retrieved {len(df)} candles for {symbol}")
+        logger.info(f"✅ Retrieved {len(df)} DAILY candles for {symbol} (Range: {df.index.min()} to {df.index.max()})")
         return df
 
-    def fetch_all_symbols(self, timeframe: str = '1h',
+    def fetch_all_symbols(self, timeframe: str = '1d',
                            since_days: int = 365) -> Dict[str, pd.DataFrame]:
         """
-        Fetch OHLCV data for all symbols
+        Fetch OHLCV data for all symbols.
+        Note: Uses daily candles by default due to CoinGecko free API limitations.
 
         Returns:
             Dictionary mapping symbol to DataFrame
