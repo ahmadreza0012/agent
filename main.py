@@ -2,8 +2,7 @@
 Main Orchestrator (v2) - Crypto Portfolio Optimization System
 ================================================================
 Pipeline:
-1. Data fetching from Binance (real OHLCV, unchanged from v1 - this part
-   was already correct)
+1. Data fetching from CoinGecko (real OHLCV, free API, no authentication required)
 2. AI sentiment analysis from REAL news headlines (free RSS) + free LLM
    (Groq), with a clearly labeled offline fallback
 3. Portfolio optimization: MVO, Black-Litterman, Risk Parity, CVaR (bug
@@ -12,14 +11,19 @@ Pipeline:
    breaker, instead of a single 75/25 split
 5. Honest performance evaluation against the 5%/month target
 
-IMPORTANT, READ THIS: this script requires network access (Binance via
-ccxt, news RSS feeds, optionally Groq) that was NOT available in the
-sandbox this was built in. The logic in every module was verified with
+IMPORTANT, READ THIS: this script requires network access (CoinGecko API,
+news RSS feeds, optionally Groq) that was NOT available in the sandbox
+this was built in. The logic in every module was verified with
 synthetic/offline data (see each module's `if __name__ == "__main__"`
 block). You must run this yourself, with network access and (optionally)
 a free Groq API key exported as GROQ_API_KEY, to get real results on your
 machine. Do not trust any number here that you have not personally
 reproduced.
+
+DATA SOURCE: The default data source is CoinGecko (set via DATA_SOURCE
+environment variable or data_source parameter). CoinGecko provides free
+OHLCV data without requiring an API key for basic usage. For higher rate
+limits, get a free API key at https://www.coingecko.com/en/api
 """
 
 import logging
@@ -50,9 +54,10 @@ class CryptoPortfolioSystem:
     """Complete crypto portfolio optimization system with adaptive strategy selection."""
 
     def __init__(self, symbols: list = None, initial_capital: float = 100000,
-                 groq_api_key: Optional[str] = None):
+                 groq_api_key: Optional[str] = None, data_source: str = 'coingecko'):
         self.symbols = symbols or ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT']
         self.initial_capital = initial_capital
+        self.data_source = data_source
 
         self.data_fetcher = DataFetcher(self.symbols)
         # use_mock=None -> auto-detects: real news+LLM if GROQ_API_KEY is set, mock otherwise
@@ -71,7 +76,7 @@ class CryptoPortfolioSystem:
     # ------------------------------------------------------------------
     def fetch_data(self, timeframe: str = '1h', since_days: int = 365) -> tuple:
         logger.info("=" * 60)
-        logger.info("STEP 1: Fetching Historical Data (Binance, real OHLCV)")
+        logger.info(f"STEP 1: Fetching Historical Data ({self.data_source.upper()}, real OHLCV)")
         logger.info("=" * 60)
         raw_data = self.data_fetcher.fetch_all_symbols(timeframe=timeframe, since_days=since_days)
         prices = self.data_fetcher.align_data(raw_data)
