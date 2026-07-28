@@ -74,7 +74,7 @@ class CryptoPortfolioSystem:
         logger.info(f"CryptoPortfolioSystem initialized for {len(self.symbols)} symbols: {self.symbols}")
 
     # ------------------------------------------------------------------
-    def fetch_data(self, timeframe: str = '1h', since_days: int = 365) -> tuple:
+    def fetch_data(self, timeframe: str = '1h', since_days: int = 90) -> tuple:
         logger.info("=" * 60)
         logger.info(f"STEP 1: Fetching Historical Data ({self.data_source.upper()}, real OHLCV)")
         logger.info("=" * 60)
@@ -201,7 +201,7 @@ class CryptoPortfolioSystem:
         return evaluation
 
     # ------------------------------------------------------------------
-    def run_full_pipeline(self, since_days: int = 365, n_folds: int = 4,
+    def run_full_pipeline(self, since_days: int = 90, n_folds: int = 4,
                            use_auto_selection: bool = True) -> Dict:
         logger.info("=" * 60)
         logger.info("CRYPTO PORTFOLIO OPTIMIZATION SYSTEM (v2)")
@@ -260,7 +260,7 @@ def main():
         symbols=['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT'],
         initial_capital=100000,
     )
-    results = system.run_full_pipeline(since_days=365, n_folds=4, use_auto_selection=True)
+    results = system.run_full_pipeline(since_days=90, n_folds=4, use_auto_selection=True)
     print_final_summary(results['evaluation'])
     return results
 

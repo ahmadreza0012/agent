@@ -42,14 +42,14 @@ class DataFetcher:
         logger.info(f"Initialized DataFetcher for {len(self.symbols)} symbols using CoinGecko API")
 
     def fetch_ohlcv(self, symbol: str, timeframe: str = '1h',
-                     since_days: int = 365) -> pd.DataFrame:
+                     since_days: int = 90) -> pd.DataFrame:
         """
         Fetch OHLCV data for a single symbol from CoinGecko
 
         Args:
             symbol: Trading pair (e.g., 'BTC/USDT')
             timeframe: Candle timeframe (default: '1h', only '1h' supported by CoinGecko API)
-            since_days: Number of days of historical data
+            since_days: Number of days of historical data (max 90 for free API, or use 'max')
 
         Returns:
             DataFrame with OHLCV data ['open', 'high', 'low', 'close', 'volume']
@@ -62,30 +62,53 @@ class DataFetcher:
             raise ValueError(f"Symbol {symbol} not mapped to CoinGecko ID. "
                              f"Available mappings: {list(SYMBOL_TO_COINGECKO_ID.keys())}")
 
-        # CoinGecko's get_coin_ohlc returns hourly candles for the last <vs_currency> days
-        # We need to call it multiple times or use a large vs_currency value
-        # Note: CoinGecko free API has rate limits, so we implement retry logic
-        
+        # CoinGecko's get_coin_ohlc returns hourly candles
+        # Free API supports: 1, 14, 30, 90, or 'max' days
+        # We'll use 'max' for full history, but cap at 90 if user requests <= 90
         max_retries = 3
         retry_delay = 60  # seconds to wait on rate limit (429)
         
         ohlc_data = None
         for attempt in range(max_retries):
             try:
-                # get_coin_ohlc_by_id(coin_id, vs_currency, days) returns [timestamp, open, high, low, close]
-                # CoinGecko supports 1, 14, 30, 90, max days
-                api_days = min(since_days, 365)  # Cap at 365 for reasonable API response
-                if api_days > 90:
+                # Determine the 'days' parameter for CoinGecko API
+                if since_days >= 365 or since_days == 'max':
                     api_days = 'max'
+                elif since_days > 90:
+                    # For values between 91-364, use 'max' to get all available data
+                    api_days = 'max'
+                elif since_days > 30:
+                    api_days = 90
+                elif since_days > 14:
+                    api_days = 30
+                elif since_days > 1:
+                    api_days = 14
+                else:
+                    api_days = 1
                 
+                logger.debug(f"Using CoinGecko days parameter: {api_days}")
+                
+                # get_coin_ohlc_by_id(coin_id, vs_currency, days) returns [timestamp, open, high, low, close]
                 ohlc_data = self.api.get_coin_ohlc_by_id(coin_id, vs_currency='usd', days=api_days)
                 break  # Success, exit retry loop
                 
             except Exception as e:
                 error_str = str(e)
+                # Check for rate limit or time range errors
                 if '429' in error_str or 'rate limit' in error_str.lower():
                     logger.warning(f"Rate limit hit for {symbol}, waiting {retry_delay}s before retry {attempt+1}/{max_retries}")
                     time.sleep(retry_delay)
+                elif '10012' in error_str or 'time range' in error_str.lower():
+                    # Time range error - switch to 'max' and retry
+                    logger.warning(f"Time range error for {symbol}, switching to 'max' days")
+                    try:
+                        ohlc_data = self.api.get_coin_ohlc_by_id(coin_id, vs_currency='usd', days='max')
+                        break
+                    except Exception as e2:
+                        logger.warning(f"Error with 'max' days: {e2}")
+                        if attempt == max_retries - 1:
+                            raise ValueError(f"Failed to fetch data for {symbol}: {e2}")
+                        time.sleep(5)
                 else:
                     logger.warning(f"Error fetching {symbol}: {e}")
                     if attempt == max_retries - 1:
