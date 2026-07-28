@@ -260,7 +260,10 @@ def main():
         symbols=['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT'],
         initial_capital=100000,
     )
-    results = system.run_full_pipeline(since_days=90, n_folds=4, use_auto_selection=True)
+    # Note: CoinGecko free API returns DAILY candles for periods > 7 days.
+    # For walk-forward backtesting with n_folds=4, we need at least ~200 daily observations.
+    # Setting since_days=730 (2 years) to ensure sufficient data for all folds.
+    results = system.run_full_pipeline(since_days=730, n_folds=4, use_auto_selection=True)
     print_final_summary(results['evaluation'])
     return results
 
