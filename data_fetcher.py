@@ -1,6 +1,7 @@
 """
 Data Fetcher Module
 Fetches historical OHLCV data from CoinGecko using pycoingecko
+with fallback to yfinance
 """
 
 import pandas as pd
@@ -24,6 +25,15 @@ SYMBOL_TO_COINGECKO_ID = {
     'XRP/USDT': 'ripple',
 }
 
+# Mapping from trading pair symbols to yfinance ticker symbols
+SYMBOL_TO_YFINANCE_TICKER = {
+    'BTC/USDT': 'BTC-USD',
+    'ETH/USDT': 'ETH-USD',
+    'SOL/USDT': 'SOL-USD',
+    'BNB/USDT': 'BNB-USD',
+    'XRP/USDT': 'XRP-USD',
+}
+
 
 class DataFetcher:
     """Fetch and process cryptocurrency OHLCV data from CoinGecko"""
@@ -42,15 +52,18 @@ class DataFetcher:
         logger.info(f"Initialized DataFetcher for {len(self.symbols)} symbols using CoinGecko API")
 
     def fetch_ohlcv(self, symbol: str, timeframe: str = '1d',
-                     since_days: int = 365) -> pd.DataFrame:
+                     since_days: int = 90) -> pd.DataFrame:
         """
-        Fetch OHLCV data for a single symbol from CoinGecko
+        Fetch OHLCV data for a single symbol from CoinGecko with yfinance fallback
 
         Args:
             symbol: Trading pair (e.g., 'BTC/USDT')
-            timeframe: Candle timeframe. Note: CoinGecko free API only supports daily ('1d') 
+            timeframe: Candle timeframe ('1h' for hourly, '1d' for daily).
+                       Note: CoinGecko free API only supports daily ('1d') 
                        for periods > 7 days. Hourly data is limited to ~7 days.
-            since_days: Number of days of historical data. Use 'max' or >= 365 for full history.
+            since_days: Number of days of historical data.
+                        For hourly data: max 90 days
+                        For daily data: max 365 days
 
         Returns:
             DataFrame with OHLCV data ['Open', 'High', 'Low', 'Close', 'Volume']
@@ -63,6 +76,20 @@ class DataFetcher:
             raise ValueError(f"Symbol {symbol} not mapped to CoinGecko ID. "
                              f"Available mappings: {list(SYMBOL_TO_COINGECKO_ID.keys())}")
 
+        # Enforce maximum limits based on timeframe
+        if timeframe == '1h':
+            max_days = 90
+            if since_days > max_days:
+                logger.warning(f"Hourly data limited to {max_days} days on CoinGecko. "
+                              f"Reducing from {since_days} to {max_days} days.")
+                since_days = max_days
+        else:  # daily
+            max_days = 365
+            if since_days > max_days:
+                logger.warning(f"Daily data limited to {max_days} days on CoinGecko. "
+                              f"Reducing from {since_days} to {max_days} days.")
+                since_days = max_days
+        
         # CoinGecko free API limitations:
         # - get_coin_ohlc_by_id returns DAILY candles for any period > 7 days.
         # - Hourly data is NOT available for long backtests on free tier.
@@ -72,14 +99,15 @@ class DataFetcher:
         retry_delay = 60  # seconds to wait on rate limit (429)
         
         ohlc_data = None
+        use_yfinance_fallback = False
+        
         for attempt in range(max_retries):
             try:
                 # Determine the 'days' parameter for CoinGecko API
                 # Valid values: 1, 14, 30, 90, 'max'
-                if since_days == 'max' or since_days >= 365:
-                    api_days = 'max'
-                elif since_days > 90:
-                    api_days = 'max'  # Get all available if user wants > 90 days
+                # DO NOT use 'max' - use explicit numeric values only
+                if since_days > 90:
+                    api_days = 365  # Use largest explicit value
                 elif since_days > 30:
                     api_days = 90
                 elif since_days > 14:
@@ -103,21 +131,32 @@ class DataFetcher:
                     logger.warning(f"Rate limit hit for {symbol}, waiting {retry_delay}s before retry {attempt+1}/{max_retries}")
                     time.sleep(retry_delay)
                 elif '10012' in error_str or 'time range' in error_str.lower():
-                    # Time range error - switch to 'max' and retry
-                    logger.warning(f"Time range error for {symbol}, switching to 'max' days")
+                    # Time range error - reduce days and retry
+                    logger.warning(f"Time range error for {symbol}, reducing days parameter")
+                    api_days = min(api_days if isinstance(api_days, int) else 90, 90)
                     try:
-                        ohlc_data = self.api.get_coin_ohlc_by_id(coin_id, vs_currency='usd', days='max')
+                        ohlc_data = self.api.get_coin_ohlc_by_id(coin_id, vs_currency='usd', days=api_days)
                         break
                     except Exception as e2:
-                        logger.warning(f"Error with 'max' days: {e2}")
-                        if attempt == max_retries - 1:
-                            raise ValueError(f"Failed to fetch data for {symbol}: {e2}")
-                        time.sleep(5)
+                        logger.warning(f"Error with reduced days: {e2}")
+                        use_yfinance_fallback = True
+                        break
                 else:
                     logger.warning(f"Error fetching {symbol}: {e}")
                     if attempt == max_retries - 1:
-                        raise ValueError(f"Failed to fetch data for {symbol} after {max_retries} attempts: {e}")
-                    time.sleep(1)
+                        use_yfinance_fallback = True
+                    else:
+                        time.sleep(1)
+        
+        # Fallback to yfinance if CoinGecko fails
+        if use_yfinance_fallback or (ohlc_data is None or len(ohlc_data) < 10):
+            logger.info(f"Attempting yfinance fallback for {symbol}...")
+            try:
+                return self._fetch_from_yfinance(symbol, timeframe, since_days)
+            except Exception as yf_error:
+                logger.error(f"yfinance fallback also failed for {symbol}: {yf_error}")
+                if not ohlc_data or len(ohlc_data) < 10:
+                    raise ValueError(f"No sufficient data retrieved for {symbol} from any source")
         
         if not ohlc_data or len(ohlc_data) < 10:
             raise ValueError(f"No sufficient data retrieved for {symbol} (got {len(ohlc_data) if ohlc_data else 0} candles)")
@@ -138,8 +177,50 @@ class DataFetcher:
         logger.info(f"✅ Retrieved {len(df)} DAILY candles for {symbol} (Range: {df.index.min()} to {df.index.max()})")
         return df
 
+    def _fetch_from_yfinance(self, symbol: str, timeframe: str, since_days: int) -> pd.DataFrame:
+        """
+        Fetch OHLCV data from yfinance as fallback
+        
+        Args:
+            symbol: Trading pair (e.g., 'BTC/USDT')
+            timeframe: Candle timeframe ('1h' for hourly, '1d' for daily)
+            since_days: Number of days of historical data
+            
+        Returns:
+            DataFrame with OHLCV data ['Open', 'High', 'Low', 'Close', 'Volume']
+        """
+        import yfinance as yf
+        
+        ticker_symbol = SYMBOL_TO_YFINANCE_TICKER.get(symbol)
+        if ticker_symbol is None:
+            raise ValueError(f"Symbol {symbol} not mapped to yfinance ticker. "
+                           f"Available mappings: {list(SYMBOL_TO_YFINANCE_TICKER.keys())}")
+        
+        logger.info(f"Fetching {timeframe} data for {ticker_symbol} from yfinance ({since_days} days)")
+        
+        ticker = yf.Ticker(ticker_symbol)
+        
+        # Calculate date range
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=since_days)
+        
+        # Download data
+        df = ticker.history(start=start_date, end=end_date, interval=timeframe)
+        
+        if df.empty or len(df) < 10:
+            raise ValueError(f"No sufficient data retrieved from yfinance for {symbol}")
+        
+        # Ensure proper column names
+        df.rename(columns={
+            'Open': 'Open', 'High': 'High', 'Low': 'Low',
+            'Close': 'Close', 'Volume': 'Volume'
+        }, inplace=True)
+        
+        logger.info(f"✅ Retrieved {len(df)} candles for {symbol} from yfinance (Range: {df.index.min()} to {df.index.max()})")
+        return df[['Open', 'High', 'Low', 'Close', 'Volume']]
+
     def fetch_all_symbols(self, timeframe: str = '1d',
-                           since_days: int = 365) -> Dict[str, pd.DataFrame]:
+                           since_days: int = 90) -> Dict[str, pd.DataFrame]:
         """
         Fetch OHLCV data for all symbols.
         Note: Uses daily candles by default due to CoinGecko free API limitations.
@@ -196,8 +277,8 @@ def main():
     """Test data fetching"""
     fetcher = DataFetcher()
 
-    # Fetch 1 year of hourly data
-    data = fetcher.fetch_all_symbols(timeframe='1h', since_days=365)
+    # Fetch 90 days of daily data (within CoinGecko limits)
+    data = fetcher.fetch_all_symbols(timeframe='1d', since_days=90)
 
     # Align data
     prices = fetcher.align_data(data)

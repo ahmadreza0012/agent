@@ -131,7 +131,7 @@ class CryptoPortfolioSystem:
         return {m: self._build_strategy_fn(m) for m in CANDIDATE_METHODS}
 
     # ------------------------------------------------------------------
-    def run_walk_forward_backtest(self, prices: pd.DataFrame, n_folds: int = 4,
+    def run_walk_forward_backtest(self, prices: pd.DataFrame, n_folds: int = 2,
                                    rebalance_freq: str = 'W', use_auto_selection: bool = True) -> Dict:
         logger.info("=" * 60)
         logger.info(f"STEP 2: Walk-forward backtest ({n_folds} folds), "
@@ -201,7 +201,7 @@ class CryptoPortfolioSystem:
         return evaluation
 
     # ------------------------------------------------------------------
-    def run_full_pipeline(self, since_days: int = 90, n_folds: int = 4,
+    def run_full_pipeline(self, since_days: int = 90, n_folds: int = 2,
                            use_auto_selection: bool = True) -> Dict:
         logger.info("=" * 60)
         logger.info("CRYPTO PORTFOLIO OPTIMIZATION SYSTEM (v2)")
@@ -261,9 +261,8 @@ def main():
         initial_capital=100000,
     )
     # Note: CoinGecko free API returns DAILY candles for periods > 7 days.
-    # For walk-forward backtesting with n_folds=4, we need at least ~200 daily observations.
-    # Setting since_days=730 (2 years) to ensure sufficient data for all folds.
-    results = system.run_full_pipeline(since_days=730, n_folds=4, use_auto_selection=True)
+    # Using since_days=90 (max 90 days for hourly, max 365 for daily) and n_folds=2
+    results = system.run_full_pipeline(since_days=90, n_folds=2, use_auto_selection=True)
     print_final_summary(results['evaluation'])
     return results
 
