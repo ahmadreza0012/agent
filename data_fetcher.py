@@ -1,6 +1,6 @@
 """
 Data Fetcher Module
-Fetches historical OHLCV data from Binance using ccxt
+Fetches historical OHLCV data from CoinGecko using ccxt
 """
 
 import ccxt
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class DataFetcher:
-    """Fetch and process cryptocurrency OHLCV data from Binance"""
+    """Fetch and process cryptocurrency OHLCV data from CoinGecko"""
 
     def __init__(self, symbols: List[str] = None):
         """
@@ -28,11 +28,10 @@ class DataFetcher:
         self.symbols = symbols or [
             'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT'
         ]
-        self.exchange = ccxt.binance({
+        self.exchange = ccxt.coingecko({
             'enableRateLimit': True,
-            'options': {'defaultType': 'spot'}
         })
-        logger.info(f"Initialized DataFetcher for {len(self.symbols)} symbols")
+        logger.info(f"Initialized DataFetcher for {len(self.symbols)} symbols using CoinGecko")
 
     def fetch_ohlcv(self, symbol: str, timeframe: str = '1h',
                      since_days: int = 365) -> pd.DataFrame:
