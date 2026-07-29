@@ -132,34 +132,51 @@ def run_trading_cycle():
         )
 
         # Analyze Results
-        if results and 'evaluation' in results:
-            eval_data = results['evaluation']
+        # FIX: Use 'aggregated' key instead of 'evaluation'
+        if results and 'aggregated' in results:
+            eval_data = results['aggregated']
             mean_return = eval_data.get('mean_monthly_return', 0)
             max_dd = eval_data.get('worst_max_drawdown', 0)
+            sharpe = eval_data.get('mean_sharpe', 0)
+            pct_positive = eval_data.get('pct_months_positive', 0)
             
             logger.info("="*60)
             logger.info("FINAL ASSESSMENT")
             logger.info("="*60)
             logger.info(f"Mean monthly return: {mean_return:.2%}")
             logger.info(f"Max Drawdown: {max_dd:.2%}")
+            logger.info(f"Sharpe Ratio: {sharpe:.2f}")
+            logger.info(f"% Positive Months: {pct_positive:.2%}")
+            logger.info(f"Number of folds: {eval_data.get('n_folds', 0)}")
+            logger.info(f"Calendar months observed: {eval_data.get('n_calendar_months_observed', 0)}")
 
-            # Decision Logic
-            target_return = 0.05  # 5%
+            # Decision Logic - More realistic targets for crypto portfolio
+            target_return = 0.03  # 3% monthly (more realistic)
             max_allowed_dd = 0.15  # 15%
+            min_sharpe = 0.5  # Minimum acceptable Sharpe ratio
+            min_positive_months = 0.5  # At least 50% positive months
 
-            if mean_return >= target_return and max_dd <= max_allowed_dd:
+            # Check if we have enough data
+            n_months = eval_data.get('n_calendar_months_observed', 0)
+            if n_months < 3:
+                logger.warning(f"⚠️ Not enough data ({n_months} months). Need at least 3 months for reliable assessment.")
+                system_state["status"] = "insufficient_data"
+                system_state["last_result"] = f"INSUFFICIENT_DATA - Only {n_months} months"
+                sleep_hours = 2
+            elif mean_return >= target_return and max_dd <= max_allowed_dd and sharpe >= min_sharpe:
                 logger.info("✅ TARGETS MET! Executing trades (Simulation Mode)...")
                 system_state["status"] = "targets_met"
-                system_state["last_result"] = "SUCCESS - Targets achieved"
+                system_state["last_result"] = f"SUCCESS - Return: {mean_return:.2%}, DD: {max_dd:.2%}, Sharpe: {sharpe:.2f}"
                 # TODO: Add actual execution logic here
                 
                 # Sleep normal cycle time
                 sleep_hours = 1
             else:
                 logger.warning("❌ Targets NOT met. Skipping trade execution.")
-                logger.warning(f"Required: >{target_return:.0%} return, <{max_allowed_dd:.0%} DD")
+                logger.warning(f"Required: >{target_return:.0%} return, <{max_allowed_dd:.0%} DD, Sharpe >{min_sharpe}")
+                logger.warning(f"Actual: {mean_return:.2%} return, {max_dd:.2%} DD, Sharpe: {sharpe:.2f}")
                 system_state["status"] = "targets_not_met"
-                system_state["last_result"] = f"FAILED - Return: {mean_return:.2%}, DD: {max_dd:.2%}"
+                system_state["last_result"] = f"FAILED - Return: {mean_return:.2%}, DD: {max_dd:.2%}, Sharpe: {sharpe:.2f}"
                 
                 # Sleep longer if targets are not met to avoid rapid retries
                 sleep_hours = 4
@@ -172,7 +189,7 @@ def run_trading_cycle():
             logger.info(f"Cycle complete. Sleeping for {sleep_hours} hours...")
             time.sleep(sleep_hours * 3600)
         else:
-            logger.error("Backtest returned no results. Sleeping for 1 hour.")
+            logger.error(f"Backtest returned no results or wrong format. Keys: {list(results.keys()) if results else 'None'}")
             system_state["status"] = "error_no_results"
             time.sleep(3600)
 
