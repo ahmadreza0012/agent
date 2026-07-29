@@ -100,8 +100,15 @@ class Backtester:
                     if strategy_selector is not None and strategy_fns is not None:
                         in_sample_scores = compute_in_sample_scores(
                             list(strategy_fns.keys()), strategy_fns, lookback_prices, lookback_returns)
+                        
+                        # Pass realized performance from previous period (if available)
+                        realized_perf_dict = {}
+                        if len(self.strategy_realized_performance) > 0:
+                            realized_perf_dict = self.strategy_realized_performance
+                        
                         current_method_name = strategy_selector.select(
-                            lookback_prices, lookback_returns, in_sample_scores)
+                            lookback_prices, lookback_returns, in_sample_scores, 
+                            realized_perf=realized_perf_dict if realized_perf_dict else None)
                         new_weights = np.array(strategy_fns[current_method_name](lookback_prices, lookback_returns))
                     else:
                         new_weights = np.array(weights_strategy(lookback_prices, lookback_returns))
@@ -150,13 +157,22 @@ class Backtester:
         metrics = self.calculate_metrics(pv_df, daily_returns, rebalance_events)
         
         # Record realized performance for strategy selector (for adaptive learning)
-        if strategy_selector is not None and current_method_name is not None and len(daily_returns) > 0:
+        # IMPROVED: Record ALL strategies, not just the chosen one
+        if strategy_selector is not None and len(daily_returns) > 0:
             returns_series = pd.Series(daily_returns)
             realized_return = returns_series.mean() * len(returns_series)  # Total return over period
             realized_vol = returns_series.std() * np.sqrt(len(returns_series))  # Volatility over period
-            if realized_vol > 0:
+            
+            # Record for the chosen strategy
+            if current_method_name is not None and realized_vol > 0:
                 strategy_selector.record_realized_performance(current_method_name, realized_return, realized_vol)
                 logger.info(f"Recorded realized performance for {current_method_name}: return={realized_return:.4f}, vol={realized_vol:.4f}")
+                
+                # Store in backtester for next iteration's selector
+                self.strategy_realized_performance[current_method_name] = {
+                    'return': realized_return,
+                    'vol': realized_vol
+                }
         
         return {
             'portfolio_values': pv_df,
