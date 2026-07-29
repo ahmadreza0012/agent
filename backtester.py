@@ -61,6 +61,8 @@ class Backtester:
         self.max_dd_breaker = max_drawdown_circuit_breaker
         self.derisk_factor = circuit_breaker_derisk_factor
         self.rebalance_freq = f'{rebalance_frequency_weeks}W'
+        # Initialize dictionary to track realized performance of each strategy for adaptive learning
+        self.strategy_realized_performance = {}
         logger.info(f"Initialized backtester with ${initial_capital:,}, "
                     f"circuit breaker at {max_drawdown_circuit_breaker:.0%} drawdown, "
                     f"rebalancing every {rebalance_frequency_weeks} weeks")
