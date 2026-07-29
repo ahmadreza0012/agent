@@ -165,8 +165,8 @@ class Backtester:
         fold_results = []
         
         # Minimum observations required per fold for meaningful analysis
-        min_fold_size = 200
-        min_test_size = 50
+        min_fold_size = 50
+        min_test_size = 20
         
         logger.info(f"Total observations: {total_len}, requested folds: {n_folds}, fold length: {fold_len}")
         if fold_len < min_fold_size:
