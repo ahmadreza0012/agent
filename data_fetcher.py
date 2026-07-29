@@ -54,13 +54,12 @@ class DataFetcher:
     def fetch_ohlcv(self, symbol: str, timeframe: str = '1d',
                      since_days: int = 90) -> pd.DataFrame:
         """
-        Fetch OHLCV data for a single symbol from CoinGecko with yfinance fallback
+        Fetch OHLCV data for a single symbol.
+        Priority: yfinance for hourly data (reliable), CoinGecko for daily fallback.
 
         Args:
             symbol: Trading pair (e.g., 'BTC/USDT')
-            timeframe: Candle timeframe ('1h' for hourly, '1d' for daily).
-                       Note: CoinGecko free API only supports daily ('1d') 
-                       for periods > 7 days. Hourly data is limited to ~7 days.
+            timeframe: Candle timeframe ('1h' for hourly, '1d' for daily)
             since_days: Number of days of historical data.
                         For hourly data: max 90 days
                         For daily data: max 365 days
@@ -70,34 +69,46 @@ class DataFetcher:
         """
         logger.info(f"Fetching {timeframe} data for {symbol} ({since_days} days)")
 
-        # Map symbol to CoinGecko coin ID
-        coin_id = SYMBOL_TO_COINGECKO_ID.get(symbol)
-        if coin_id is None:
-            raise ValueError(f"Symbol {symbol} not mapped to CoinGecko ID. "
-                             f"Available mappings: {list(SYMBOL_TO_COINGECKO_ID.keys())}")
-
         # Enforce maximum limits based on timeframe
         if timeframe == '1h':
             max_days = 90
             if since_days > max_days:
-                logger.warning(f"Hourly data limited to {max_days} days on CoinGecko. "
+                logger.warning(f"Hourly data limited to {max_days} days. "
                               f"Reducing from {since_days} to {max_days} days.")
                 since_days = max_days
         else:  # daily
             max_days = 365
             if since_days > max_days:
-                logger.warning(f"Daily data limited to {max_days} days on CoinGecko. "
+                logger.warning(f"Daily data limited to {max_days} days. "
                               f"Reducing from {since_days} to {max_days} days.")
                 since_days = max_days
         
-        # CoinGecko free API limitations:
-        # - get_coin_ohlc_by_id returns DAILY candles for any period > 7 days.
-        # - Hourly data is NOT available for long backtests on free tier.
-        # Strategy: Always fetch daily data for backtesting purposes.
+        # For hourly data, use yfinance directly (CoinGecko free API doesn't support hourly for long periods)
+        if timeframe == '1h':
+            logger.info(f"Using yfinance for hourly data ({since_days} days)")
+            try:
+                return self._fetch_from_yfinance(symbol, timeframe, since_days)
+            except Exception as e:
+                logger.error(f"yfinance hourly fetch failed: {e}")
+                raise
+        
+        # For daily data, prefer yfinance for reliability (CoinGecko free API has limitations)
+        # Try yfinance first, fallback to CoinGecko only if yfinance fails
+        logger.info(f"Using yfinance for daily data ({since_days} days)")
+        try:
+            return self._fetch_from_yfinance(symbol, timeframe, since_days)
+        except Exception as e:
+            logger.warning(f"yfinance daily fetch failed ({e}), falling back to CoinGecko...")
+            # Fall through to CoinGecko code below
+            pass
+        
+        # CoinGecko fallback for daily data
+        coin_id = SYMBOL_TO_COINGECKO_ID.get(symbol)
+        if coin_id is None:
+            raise ValueError(f"Symbol {symbol} not mapped to CoinGecko ID.")
         
         max_retries = 3
-        retry_delay = 60  # seconds to wait on rate limit (429)
-        
+        retry_delay = 60
         ohlc_data = None
         use_yfinance_fallback = False
         
@@ -122,8 +133,15 @@ class DataFetcher:
                 # get_coin_ohlc_by_id(coin_id, vs_currency, days) returns [timestamp, open, high, low, close]
                 # This endpoint RETURNS DAILY CANDLES for most values of 'days'
                 ohlc_data = self.api.get_coin_ohlc_by_id(coin_id, vs_currency='usd', days=api_days)
-                break  # Success, exit retry loop
                 
+                # Check if we got enough data
+                if ohlc_data and len(ohlc_data) >= 10:
+                    break  # Success, exit retry loop
+                else:
+                    logger.warning(f"CoinGecko returned insufficient data ({len(ohlc_data) if ohlc_data else 0} candles)")
+                    use_yfinance_fallback = True
+                    break
+                    
             except Exception as e:
                 error_str = str(e)
                 # Check for rate limit or time range errors
@@ -136,11 +154,12 @@ class DataFetcher:
                     api_days = min(api_days if isinstance(api_days, int) else 90, 90)
                     try:
                         ohlc_data = self.api.get_coin_ohlc_by_id(coin_id, vs_currency='usd', days=api_days)
-                        break
+                        if ohlc_data and len(ohlc_data) >= 10:
+                            break
                     except Exception as e2:
                         logger.warning(f"Error with reduced days: {e2}")
-                        use_yfinance_fallback = True
-                        break
+                    use_yfinance_fallback = True
+                    break
                 else:
                     logger.warning(f"Error fetching {symbol}: {e}")
                     if attempt == max_retries - 1:
@@ -148,18 +167,14 @@ class DataFetcher:
                     else:
                         time.sleep(1)
         
-        # Fallback to yfinance if CoinGecko fails
+        # Fallback to yfinance if CoinGecko fails or returned insufficient data
         if use_yfinance_fallback or (ohlc_data is None or len(ohlc_data) < 10):
             logger.info(f"Attempting yfinance fallback for {symbol}...")
             try:
                 return self._fetch_from_yfinance(symbol, timeframe, since_days)
             except Exception as yf_error:
                 logger.error(f"yfinance fallback also failed for {symbol}: {yf_error}")
-                if not ohlc_data or len(ohlc_data) < 10:
-                    raise ValueError(f"No sufficient data retrieved for {symbol} from any source")
-        
-        if not ohlc_data or len(ohlc_data) < 10:
-            raise ValueError(f"No sufficient data retrieved for {symbol} (got {len(ohlc_data) if ohlc_data else 0} candles)")
+                raise ValueError(f"No sufficient data retrieved for {symbol} from any source")
 
         # Convert to DataFrame
         # CoinGecko returns: [timestamp(ms), open, high, low, close]

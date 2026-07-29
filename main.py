@@ -74,7 +74,7 @@ class CryptoPortfolioSystem:
         logger.info(f"CryptoPortfolioSystem initialized for {len(self.symbols)} symbols: {self.symbols}")
 
     # ------------------------------------------------------------------
-    def fetch_data(self, timeframe: str = '1h', since_days: int = 90) -> tuple:
+    def fetch_data(self, timeframe: str = '1d', since_days: int = 90) -> tuple:
         logger.info("=" * 60)
         logger.info(f"STEP 1: Fetching Historical Data ({self.data_source.upper()}, real OHLCV)")
         logger.info("=" * 60)
@@ -261,8 +261,9 @@ def main():
         initial_capital=100000,
     )
     # Note: CoinGecko free API returns DAILY candles for periods > 7 days.
-    # Using since_days=90 (max 90 days for hourly, max 365 for daily) and n_folds=2
-    results = system.run_full_pipeline(since_days=90, n_folds=2, use_auto_selection=True)
+    # Using since_days=365 (max for daily data) and n_folds=1
+    # Need at least 200 days per fold, so with 365 days we can only do 1 fold
+    results = system.run_full_pipeline(since_days=365, n_folds=1, use_auto_selection=True)
     print_final_summary(results['evaluation'])
     return results
 
