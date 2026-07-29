@@ -41,15 +41,18 @@ class Backtester:
     def __init__(self, initial_capital: float = 100000,
                  transaction_cost: float = 0.001,
                  slippage: float = 0.0005,
-                 max_drawdown_circuit_breaker: float = 0.15,
-                 circuit_breaker_derisk_factor: float = 0.5):
+                 max_drawdown_circuit_breaker: float = 0.12,
+                 circuit_breaker_derisk_factor: float = 0.4,
+                 rebalance_frequency_weeks: int = 2):
         """
         Args:
-            max_drawdown_circuit_breaker: drawdown level (e.g. 0.15 = 15%)
+            max_drawdown_circuit_breaker: drawdown level (e.g. 0.12 = 12%)
                 at which the portfolio automatically de-risks.
             circuit_breaker_derisk_factor: fraction of the normal weights
                 kept when de-risked (rest effectively sits in cash, i.e.
-                not reinvested that period). 0.5 = half exposure.
+                not reinvested that period). 0.4 = 40% exposure.
+            rebalance_frequency_weeks: how often to rebalance (default: every 2 weeks)
+                FIX: Reduced from weekly to bi-weekly to lower transaction costs
         """
         self.initial_capital = initial_capital
         self.transaction_cost = transaction_cost
@@ -57,13 +60,15 @@ class Backtester:
         self.total_cost_rate = transaction_cost + slippage
         self.max_dd_breaker = max_drawdown_circuit_breaker
         self.derisk_factor = circuit_breaker_derisk_factor
+        self.rebalance_freq = f'{rebalance_frequency_weeks}W'
         logger.info(f"Initialized backtester with ${initial_capital:,}, "
-                    f"circuit breaker at {max_drawdown_circuit_breaker:.0%} drawdown")
+                    f"circuit breaker at {max_drawdown_circuit_breaker:.0%} drawdown, "
+                    f"rebalancing every {rebalance_frequency_weeks} weeks")
 
     # ------------------------------------------------------------------
     def run_single_fold(self, prices: pd.DataFrame, test_prices: pd.DataFrame,
                          n_train: int, weights_strategy: Callable,
-                         rebalance_freq: str = 'W', lookback_hours: int = 168,
+                         rebalance_freq: str = None, lookback_hours: int = 168,
                          strategy_selector: Optional[StrategySelector] = None,
                          strategy_fns: Optional[Dict[str, Callable]] = None) -> Dict:
         """Run one walk-forward fold (one train window -> one test window)."""
@@ -77,6 +82,10 @@ class Backtester:
         daily_returns = []
         chosen_strategy_log = []
 
+        # Use instance rebalance_freq if not provided
+        if rebalance_freq is None:
+            rebalance_freq = self.rebalance_freq
+        
         rebalance_dates = test_prices.resample(rebalance_freq).first().index
         next_rebalance = rebalance_dates[0] if len(rebalance_dates) > 0 else test_prices.index[0]
         current_method_name = None
@@ -159,7 +168,7 @@ class Backtester:
 
     # ------------------------------------------------------------------
     def run_walk_forward(self, prices: pd.DataFrame, weights_strategy: Callable = None,
-                          rebalance_freq: str = 'W', lookback_hours: int = 168,
+                          rebalance_freq: str = None, lookback_hours: int = 168,
                           n_folds: int = 4, train_ratio: float = 0.7,
                           strategy_selector: Optional[StrategySelector] = None,
                           strategy_fns: Optional[Dict[str, Callable]] = None) -> Dict:

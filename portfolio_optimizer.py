@@ -52,7 +52,8 @@ class PortfolioOptimizer:
 
         if PYPORTFOLIO_OPT_AVAILABLE:
             try:
-                ef = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=(0, 1))
+                # Use tighter bounds to enforce diversification (max 40% per asset)
+                ef = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=(0.05, 0.4))
                 if method == 'max_sharpe':
                     weights = ef.max_sharpe(risk_free_rate=risk_free_rate)
                 elif method == 'min_volatility':
@@ -81,8 +82,8 @@ class PortfolioOptimizer:
             return 0 if vol == 0 else (ret - risk_free_rate) / vol
 
         constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
-        # Use bounds that allow some concentration but prevent extreme positions (0-70% per asset)
-        bounds = Bounds([0] * self.n_assets, [0.7] * self.n_assets)
+        # Use bounds that enforce diversification (min 5%, max 40% per asset)
+        bounds = Bounds([0.05] * self.n_assets, [0.4] * self.n_assets)
         w0 = np.ones(self.n_assets) / self.n_assets
 
         if method == 'max_sharpe':
@@ -102,7 +103,7 @@ class PortfolioOptimizer:
 
         if not result.success:
             logger.warning(f"Optimization warning: {result.message}")
-        weights = np.clip(result.x, 0, 0.7)
+        weights = np.clip(result.x, 0.05, 0.4)
         s = weights.sum()
         if s > 0:
             weights = weights / s
@@ -151,14 +152,14 @@ class PortfolioOptimizer:
             return np.sum((rc - target_rc) ** 2)
 
         constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
-        # Use tighter bounds to ensure diversification (min 5% per asset)
-        bounds = Bounds([0.05] * self.n_assets, [0.6] * self.n_assets)
+        # Use tighter bounds to ensure better diversification (min 10%, max 35% per asset)
+        bounds = Bounds([0.1] * self.n_assets, [0.35] * self.n_assets)
         w0 = np.ones(self.n_assets) / self.n_assets
         result = minimize(objective, w0, method='SLSQP', bounds=bounds, constraints=constraints,
                           options={'maxiter': 1000, 'ftol': 1e-9})
         if not result.success:
             logger.warning(f"Risk parity warning: {result.message}")
-        weights = np.clip(result.x, 0.05, 0.6)
+        weights = np.clip(result.x, 0.1, 0.35)
         weights = weights / weights.sum()
         logger.info(f"Risk Parity weights: {weights}")
         return weights

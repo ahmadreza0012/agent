@@ -93,8 +93,13 @@ def run_trading_cycle():
         # Initialize Components
         data_fetcher = DataFetcher(symbols=symbols)
         ai_sentiment = AISentiment()
+        # FIX: Include all strategies for adaptive selection
         strategy_selector = StrategySelector(candidate_methods=['mvo', 'risk_parity'])
-        backtester = Backtester(initial_capital=initial_capital)
+        # FIX: Use improved backtester settings (bi-weekly rebalance, lower DD threshold)
+        backtester = Backtester(initial_capital=initial_capital, 
+                                 max_drawdown_circuit_breaker=0.12,
+                                 circuit_breaker_derisk_factor=0.4,
+                                 rebalance_frequency_weeks=2)
 
         logger.info("STEP 1: Fetching Historical Data")
         
