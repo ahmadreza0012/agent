@@ -1,1 +1,4 @@
-Nothing should be ignored since the changes only include source/config files (.md and .sh files) without any build artifacts, dependencies, or temp files.
+```
+__pycache__/
+*.pyc
+```
