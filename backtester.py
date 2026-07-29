@@ -163,18 +163,29 @@ class Backtester:
         total_len = len(prices)
         fold_len = total_len // n_folds
         fold_results = []
+        
+        # Minimum observations required per fold for meaningful analysis
+        min_fold_size = 200
+        min_test_size = 50
+        
+        logger.info(f"Total observations: {total_len}, requested folds: {n_folds}, fold length: {fold_len}")
+        if fold_len < min_fold_size:
+            logger.warning(f"Fold length ({fold_len}) is too small (< {min_fold_size}). "
+                          f"Either increase since_days or reduce n_folds.")
 
         for fold in range(n_folds):
             start = fold * fold_len
             end = total_len if fold == n_folds - 1 else (fold + 1) * fold_len
             fold_prices = prices.iloc[start:end]
-            if len(fold_prices) < 200:  # too small to be meaningful
+            if len(fold_prices) < min_fold_size:
+                logger.warning(f"Fold {fold+1} has only {len(fold_prices)} observations (< {min_fold_size}), skipping")
                 continue
 
             n_train = int(len(fold_prices) * train_ratio)
             train_prices = fold_prices.iloc[:n_train]
             test_prices = fold_prices.iloc[n_train:]
-            if len(test_prices) < 50:
+            if len(test_prices) < min_test_size:
+                logger.warning(f"Fold {fold+1} test set has only {len(test_prices)} observations (< {min_test_size}), skipping")
                 continue
 
             logger.info(f"=== Walk-forward fold {fold + 1}/{n_folds}: "
