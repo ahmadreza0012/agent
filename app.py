@@ -380,11 +380,15 @@ def method_not_allowed(error):
 def main():
     """
     Main entry point for the Flask application.
+    Runs with gunicorn in production (Railway) or Flask dev server locally.
     """
     # Get port from environment variable (Railway sets this automatically)
     port = int(os.getenv('PORT', 8000))
     host = os.getenv('HOST', '0.0.0.0')
     debug = os.getenv('DEBUG', 'false').lower() == 'true'
+    
+    # Check if running on Railway (has RAILWAY_ environment variables)
+    is_railway = bool(os.getenv('RAILWAY_PROJECT_ID') or os.getenv('RAILWAY_SERVICE_NAME'))
     
     logger.info("=" * 60)
     logger.info("Starting Crypto Portfolio Optimization Web Server")
@@ -393,11 +397,57 @@ def main():
     logger.info(f"Port: {port}")
     logger.info(f"Debug mode: {debug}")
     logger.info(f"Sleep mode: {get_sleep_mode_enabled()}")
+    logger.info(f"Platform: {'Railway' if is_railway else 'Local/Other'}")
     logger.info("=" * 60)
     
-    # Run the Flask app
-    # Note: In production, use gunicorn instead of Flask's built-in server
-    app.run(host=host, port=port, debug=debug, threaded=True)
+    if is_railway or not debug:
+        # Production mode: Run with gunicorn programmatically
+        logger.info("Running in production mode with gunicorn...")
+        try:
+            from gunicorn.app.base import BaseApplication
+            
+            class GunicornApp(BaseApplication):
+                def __init__(self, app, options=None):
+                    self.options = options or {}
+                    self.application = app
+                    super().__init__()
+                
+                def load_config(self):
+                    config = {
+                        'bind': f"{host}:{port}",
+                        'workers': 1,  # Single worker for free tier
+                        'threads': 2,  # Multiple threads for concurrency
+                        'timeout': 120,  # Long timeout for pipeline execution
+                        'keepalive': 5,
+                        'accesslog': '-',  # stdout
+                        'errorlog': '-',   # stdout
+                        'loglevel': 'info',
+                        'capture_output': True,
+                        'enable_stdio_inheritance': True,
+                    }
+                    for key, value in self.options.items():
+                        if key in self.cfg.settings and value is not None:
+                            self.cfg.set(key.lower(), value)
+                    return config
+                
+                def load(self):
+                    return self.application
+            
+            # Run gunicorn
+            GunicornApp(app, {
+                'bind': f"{host}:{port}",
+                'workers': 1,
+                'threads': 2,
+                'timeout': 120,
+            }).run()
+            
+        except ImportError:
+            logger.warning("Gunicorn not available, falling back to Flask dev server")
+            app.run(host=host, port=port, debug=False, threaded=True)
+    else:
+        # Development mode: Use Flask's built-in server
+        logger.info("Running in development mode with Flask...")
+        app.run(host=host, port=port, debug=debug, threaded=True)
 
 
 if __name__ == "__main__":
