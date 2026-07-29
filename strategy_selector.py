@@ -93,14 +93,16 @@ class StrategySelector:
         return float(np.mean(rec))
 
     def select(self, prices: pd.DataFrame, returns: pd.DataFrame,
-               in_sample_scores: Dict[str, float]) -> str:
+               in_sample_scores: Dict[str, float], realized_perf: Optional[Dict] = None) -> str:
         """
         Pick the strategy to use for the NEXT period.
+        IMPROVED: Now considers realized performance heavily to avoid losing strategies.
 
         Args:
             prices, returns: recent lookback data (for regime detection)
             in_sample_scores: {method_name: sharpe_like_score} computed on
                 the lookback window for each candidate method (higher=better)
+            realized_perf: {method: {'return': float, 'vol': float}} from last period
 
         Returns:
             chosen method name
@@ -113,11 +115,33 @@ class StrategySelector:
             in_sample = in_sample_scores.get(m, 0.0)
             track = self._track_record_score(m)
             regime_mult = prior.get(m, 1.0)
-            # weight: 40% in-sample score, 60% realized track record, scaled by regime prior
-            # FIX: Give more weight to realized performance since in-sample is optimistic
-            combined[m] = (0.4 * in_sample + 0.6 * track) * regime_mult
+            
+            # NEW: If we have realized performance, use it as primary signal
+            if realized_perf and m in realized_perf:
+                ret = realized_perf[m].get('return', -999)
+                vol = realized_perf[m].get('vol', 1.0)
+                # Realized Sharpe-like metric (penalize losses heavily)
+                realized_score = ret / (vol + 0.01) if vol > 0 else -999
+                
+                # If strategy lost money, apply VERY heavy penalty (10x)
+                if ret < 0:
+                    realized_score *= 10.0  # Amplify negative signal strongly
+                
+                # Weight: 20% in-sample, 80% realized (realized dominates when available)
+                combined[m] = (0.2 * in_sample + 0.8 * realized_score) * regime_mult
+                logger.info(f"  {m}: in_sample={in_sample:.3f}, realized_ret={ret:.4f}, realized_score={realized_score:.3f}, combined={combined[m]:.3f}")
+            else:
+                # No realized data yet: use default weighting
+                combined[m] = (0.4 * in_sample + 0.6 * track) * regime_mult
 
         chosen = max(combined, key=combined.get)
+        
+        # SAFETY: If all scores are negative, force Risk Parity (safest option)
+        if all(v < 0 for v in combined.values()):
+            if 'risk_parity' in combined:
+                chosen = 'risk_parity'
+                logger.warning(f"All strategies negative! Forcing risk_parity for safety")
+        
         self.history.append({
             "regime": regime,
             "scores": combined,
