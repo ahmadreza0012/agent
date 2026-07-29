@@ -21,6 +21,10 @@ from ai_sentiment import AISentimentAnalyzer as AISentiment
 from backtester import Backtester
 from portfolio_optimizer import PortfolioOptimizer
 from strategy_selector import StrategySelector
+from auto_logger import get_logger
+
+# Initialize auto-logger
+auto_logger = get_logger()
 
 # Configure Logging
 logging.basicConfig(
@@ -65,9 +69,16 @@ def get_stats():
 def run_trading_cycle():
     """Main trading logic loop"""
     global system_state
+    start_time = time.time()
+    
+    # Get cycle number
+    cycle_number = system_state['cycles_run'] + 1
+    
+    # Log cycle start
+    auto_logger.log_cycle_start(cycle_number)
     
     logger.info("="*60)
-    logger.info(f"Starting trading cycle #{system_state['cycles_run'] + 1}")
+    logger.info(f"Starting trading cycle #{cycle_number}")
     logger.info("="*60)
     
     try:
@@ -90,6 +101,7 @@ def run_trading_cycle():
         df_prices = data_fetcher.fetch_all_symbols(timeframe='1d', since_days=since_days)
         if not df_prices:
             logger.error("Failed to fetch data. Sleeping for 1 hour.")
+            auto_logger.log_error("data_fetch_failed", "Failed to fetch price data", {"symbols": symbols})
             system_state["status"] = "error_no_data"
             time.sleep(3600)
             return
@@ -99,6 +111,12 @@ def run_trading_cycle():
         df_prices = df_prices_aligned
         
         logger.info(f"Data fetched: {df_prices.index[0]} to {df_prices.index[-1]}, {len(df_prices)} obs")
+        auto_logger.log_event("data_fetched", {
+            "start_date": str(df_prices.index[0]),
+            "end_date": str(df_prices.index[-1]),
+            "observations": len(df_prices),
+            "symbols": list(df_prices.columns)
+        })
 
         logger.info("STEP 2: Walk-forward backtest & Optimization")
 
@@ -149,6 +167,16 @@ def run_trading_cycle():
             logger.info(f"% Positive Months: {pct_positive:.2%}")
             logger.info(f"Number of folds: {eval_data.get('n_folds', 0)}")
             logger.info(f"Calendar months observed: {eval_data.get('n_calendar_months_observed', 0)}")
+            
+            # Log strategy performance
+            auto_logger.log_strategy_performance("portfolio", {
+                "mean_monthly_return": mean_return,
+                "max_drawdown": max_dd,
+                "sharpe_ratio": sharpe,
+                "pct_positive_months": pct_positive,
+                "n_folds": eval_data.get('n_folds', 0),
+                "n_months": eval_data.get('n_calendar_months_observed', 0)
+            })
 
             # Decision Logic - More realistic targets for crypto portfolio
             target_return = 0.03  # 3% monthly (more realistic)
@@ -160,11 +188,23 @@ def run_trading_cycle():
             n_months = eval_data.get('n_calendar_months_observed', 0)
             if n_months < 3:
                 logger.warning(f"⚠️ Not enough data ({n_months} months). Need at least 3 months for reliable assessment.")
+                auto_logger.log_decision("insufficient_data", f"Only {n_months} months of data", {
+                    "n_months": n_months,
+                    "required": 3
+                })
                 system_state["status"] = "insufficient_data"
                 system_state["last_result"] = f"INSUFFICIENT_DATA - Only {n_months} months"
                 sleep_hours = 2
             elif mean_return >= target_return and max_dd <= max_allowed_dd and sharpe >= min_sharpe:
                 logger.info("✅ TARGETS MET! Executing trades (Simulation Mode)...")
+                auto_logger.log_decision("execute_trade", "All targets met", {
+                    "return": mean_return,
+                    "drawdown": max_dd,
+                    "sharpe": sharpe,
+                    "target_return": target_return,
+                    "max_dd": max_allowed_dd,
+                    "min_sharpe": min_sharpe
+                })
                 system_state["status"] = "targets_met"
                 system_state["last_result"] = f"SUCCESS - Return: {mean_return:.2%}, DD: {max_dd:.2%}, Sharpe: {sharpe:.2f}"
                 # TODO: Add actual execution logic here
@@ -175,6 +215,14 @@ def run_trading_cycle():
                 logger.warning("❌ Targets NOT met. Skipping trade execution.")
                 logger.warning(f"Required: >{target_return:.0%} return, <{max_allowed_dd:.0%} DD, Sharpe >{min_sharpe}")
                 logger.warning(f"Actual: {mean_return:.2%} return, {max_dd:.2%} DD, Sharpe: {sharpe:.2f}")
+                auto_logger.log_decision("skip_trade", "Targets not met", {
+                    "actual_return": mean_return,
+                    "actual_dd": max_dd,
+                    "actual_sharpe": sharpe,
+                    "required_return": target_return,
+                    "required_dd": max_allowed_dd,
+                    "required_sharpe": min_sharpe
+                })
                 system_state["status"] = "targets_not_met"
                 system_state["last_result"] = f"FAILED - Return: {mean_return:.2%}, DD: {max_dd:.2%}, Sharpe: {sharpe:.2f}"
                 
@@ -186,15 +234,31 @@ def run_trading_cycle():
             system_state["cycles_run"] += 1
             system_state["last_cycle"] = datetime.now().isoformat()
             
+            # Calculate duration
+            duration = time.time() - start_time
+            
+            # Log cycle end with full results
+            cycle_results = {
+                "backtest_results": eval_data,
+                "decision": system_state["status"],
+                "sleep_hours": sleep_hours,
+                "duration_seconds": duration
+            }
+            auto_logger.log_cycle_end(cycle_number, cycle_results)
+            
             logger.info(f"Cycle complete. Sleeping for {sleep_hours} hours...")
             time.sleep(sleep_hours * 3600)
         else:
-            logger.error(f"Backtest returned no results or wrong format. Keys: {list(results.keys()) if results else 'None'}")
+            error_msg = f"Backtest returned no results or wrong format. Keys: {list(results.keys()) if results else 'None'}"
+            logger.error(error_msg)
+            auto_logger.log_error("backtest_no_results", error_msg, {"results_keys": list(results.keys()) if results else None})
             system_state["status"] = "error_no_results"
             time.sleep(3600)
 
     except Exception as e:
-        logger.exception(f"Error in trading cycle: {e}")
+        error_msg = f"Error in trading cycle: {e}"
+        logger.exception(error_msg)
+        auto_logger.log_error("cycle_exception", str(e), {"traceback": True})
         system_state["status"] = f"error: {str(e)}"
         system_state["last_result"] = f"ERROR: {str(e)}"
         logger.info("Sleeping for 30 minutes due to error...")
