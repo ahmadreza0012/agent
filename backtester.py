@@ -139,6 +139,16 @@ class Backtester:
 
         pv_df = pd.DataFrame(portfolio_values).set_index('timestamp')
         metrics = self.calculate_metrics(pv_df, daily_returns, rebalance_events)
+        
+        # Record realized performance for strategy selector (for adaptive learning)
+        if strategy_selector is not None and current_method_name is not None and len(daily_returns) > 0:
+            returns_series = pd.Series(daily_returns)
+            realized_return = returns_series.mean() * len(returns_series)  # Total return over period
+            realized_vol = returns_series.std() * np.sqrt(len(returns_series))  # Volatility over period
+            if realized_vol > 0:
+                strategy_selector.record_realized_performance(current_method_name, realized_return, realized_vol)
+                logger.info(f"Recorded realized performance for {current_method_name}: return={realized_return:.4f}, vol={realized_vol:.4f}")
+        
         return {
             'portfolio_values': pv_df,
             'metrics': metrics,

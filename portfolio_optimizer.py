@@ -81,25 +81,33 @@ class PortfolioOptimizer:
             return 0 if vol == 0 else (ret - risk_free_rate) / vol
 
         constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
-        bounds = Bounds([0] * self.n_assets, [1] * self.n_assets)
+        # Use bounds that allow some concentration but prevent extreme positions (0-70% per asset)
+        bounds = Bounds([0] * self.n_assets, [0.7] * self.n_assets)
         w0 = np.ones(self.n_assets) / self.n_assets
 
         if method == 'max_sharpe':
             result = minimize(lambda w: -sharpe_ratio(w), w0, method='SLSQP',
-                               bounds=bounds, constraints=constraints)
+                               bounds=bounds, constraints=constraints,
+                               options={'maxiter': 1000, 'ftol': 1e-9})
         elif method == 'min_volatility':
             result = minimize(portfolio_variance, w0, method='SLSQP',
-                               bounds=bounds, constraints=constraints)
+                               bounds=bounds, constraints=constraints,
+                               options={'maxiter': 1000, 'ftol': 1e-9})
         else:
             target = np.mean(expected_returns)
             constraints.append({'type': 'eq', 'fun': lambda w: portfolio_return(w) - target})
             result = minimize(portfolio_variance, w0, method='SLSQP',
-                               bounds=bounds, constraints=constraints)
+                               bounds=bounds, constraints=constraints,
+                               options={'maxiter': 1000, 'ftol': 1e-9})
 
         if not result.success:
             logger.warning(f"Optimization warning: {result.message}")
-        weights = np.clip(result.x, 0, 1)
-        weights = weights / weights.sum()
+        weights = np.clip(result.x, 0, 0.7)
+        s = weights.sum()
+        if s > 0:
+            weights = weights / s
+        else:
+            weights = np.ones(self.n_assets) / self.n_assets
         logger.info(f"Scipy MVO weights: {weights}")
         return weights
 
@@ -132,6 +140,8 @@ class PortfolioOptimizer:
 
         def risk_contribution(w):
             portfolio_vol = np.sqrt(w.T @ cov_matrix @ w)
+            if portfolio_vol == 0:
+                return np.zeros_like(w)
             marginal_risk = cov_matrix @ w / portfolio_vol
             return w * marginal_risk
 
@@ -141,12 +151,14 @@ class PortfolioOptimizer:
             return np.sum((rc - target_rc) ** 2)
 
         constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
-        bounds = Bounds([0.01] * self.n_assets, [1] * self.n_assets)
+        # Use tighter bounds to ensure diversification (min 5% per asset)
+        bounds = Bounds([0.05] * self.n_assets, [0.6] * self.n_assets)
         w0 = np.ones(self.n_assets) / self.n_assets
-        result = minimize(objective, w0, method='SLSQP', bounds=bounds, constraints=constraints)
+        result = minimize(objective, w0, method='SLSQP', bounds=bounds, constraints=constraints,
+                          options={'maxiter': 1000, 'ftol': 1e-9})
         if not result.success:
             logger.warning(f"Risk parity warning: {result.message}")
-        weights = np.clip(result.x, 0.01, 1)
+        weights = np.clip(result.x, 0.05, 0.6)
         weights = weights / weights.sum()
         logger.info(f"Risk Parity weights: {weights}")
         return weights
