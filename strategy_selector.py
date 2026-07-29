@@ -63,10 +63,11 @@ def detect_regime(returns: pd.DataFrame, window: int = 168) -> str:
 
 # Which strategies tend to be favored per regime (prior, not gospel --
 # combined with the realized track record below).
+# FIX: Stronger bias toward Risk Parity in high_vol regimes since it showed better resilience
 REGIME_PRIOR = {
-    "trending": {"black_litterman": 1.2, "mvo": 1.15, "ml": 1.1, "risk_parity": 0.9, "cvar": 0.9},
-    "mean_reverting": {"black_litterman": 1.1, "ml": 1.1, "risk_parity": 1.0, "mvo": 0.9, "cvar": 1.0},
-    "high_vol": {"risk_parity": 1.25, "cvar": 1.25, "black_litterman": 0.95, "mvo": 0.8, "ml": 0.9},
+    "trending": {"black_litterman": 1.2, "mvo": 1.15, "ml": 1.1, "risk_parity": 1.0, "cvar": 1.0},
+    "mean_reverting": {"black_litterman": 1.1, "ml": 1.1, "risk_parity": 1.1, "mvo": 0.95, "cvar": 1.0},
+    "high_vol": {"risk_parity": 1.5, "cvar": 1.3, "black_litterman": 1.0, "mvo": 0.6, "ml": 0.8},
 }
 
 
@@ -112,8 +113,9 @@ class StrategySelector:
             in_sample = in_sample_scores.get(m, 0.0)
             track = self._track_record_score(m)
             regime_mult = prior.get(m, 1.0)
-            # weight: 50% in-sample score, 50% realized track record, scaled by regime prior
-            combined[m] = (0.5 * in_sample + 0.5 * track) * regime_mult
+            # weight: 40% in-sample score, 60% realized track record, scaled by regime prior
+            # FIX: Give more weight to realized performance since in-sample is optimistic
+            combined[m] = (0.4 * in_sample + 0.6 * track) * regime_mult
 
         chosen = max(combined, key=combined.get)
         self.history.append({
