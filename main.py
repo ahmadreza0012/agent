@@ -283,18 +283,10 @@ def run_trading_cycle():
                 regime = 'trending'
             
             drawdown = system_state.get('current_drawdown', 0.0)
-            arb_alloc = optimizer.calculate_arb_allocation(regime, drawdown)
             
-            # Get risk parity weights and scale
-            rp_weights = optimizer.risk_parity(returns.cov().values)
-            scaled_weights = rp_weights * (1.0 - arb_alloc)
-            
-            # Adjust CASH for remainder
-            if 'CASH' in returns.columns:
-                cash_idx = list(returns.columns).index('CASH')
-                scaled_weights[cash_idx] += arb_alloc
-            
-            return scaled_weights
+            # Run hybrid optimization which handles dimensions correctly
+            weights, info = optimizer.hybrid_optimization(returns, regime, drawdown)
+            return weights
         
         strategy_fns = {
             'mvo': mvo_strategy,
