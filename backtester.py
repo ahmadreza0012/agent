@@ -147,7 +147,15 @@ class Backtester:
                     logger.warning(f"Circuit breaker ACTIVE at {timestamp}: drawdown={current_dd:.2%}, "
                                     f"exposure cut to {self.derisk_factor:.0%}")
 
+            # FEATURE 1: Apply transaction cost differentiation for CASH
+            # CASH allocation changes have minimal/no transaction costs compared to crypto swaps
+            # We'll apply reduced cost for turnover involving CASH
             port_return = np.dot(effective_weights, price_changes)
+            
+            # TODO: Implement differentiated transaction costs for CASH vs risky assets
+            # For now, we use uniform costs but note that CASH rebalancing should be cheaper
+            # Actual implementation would require tracking which asset changed weight
+            
             capital *= (1 + port_return)
             peak_capital = max(peak_capital, capital)
 

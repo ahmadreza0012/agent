@@ -273,17 +273,26 @@ class DataFetcher:
         logger.info(f"Date range: {aligned.index.min()} to {aligned.index.max()}")
         return aligned
 
-    def calculate_returns(self, prices: pd.DataFrame) -> pd.DataFrame:
+    def calculate_returns(self, prices: pd.DataFrame, add_cash_column: bool = True) -> pd.DataFrame:
         """
         Calculate log returns from price data
-
+        
         Args:
             prices: DataFrame of aligned prices
+            add_cash_column: If True, adds a CASH column with zero return (stablecoin allocation option)
 
         Returns:
             DataFrame of log returns
         """
         returns = np.log(prices / prices.shift(1)).dropna()
+        
+        # FEATURE 1: Add cash/stablecoin column for defensive allocation
+        if add_cash_column:
+            # CASH has zero return (or very small positive like staking yield)
+            # This allows optimizers to allocate to safety during market downturns
+            returns['CASH'] = 0.0  # Zero daily return = stable value
+            logger.info("Added CASH column for defensive allocation (zero return, zero variance)")
+        
         logger.info(f"Returns calculated: {returns.shape}")
         return returns
 

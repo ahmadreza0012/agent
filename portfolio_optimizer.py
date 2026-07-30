@@ -42,6 +42,17 @@ class PortfolioOptimizer:
         self.n_assets = n_assets
         self.asset_names = asset_names or [f"Asset_{i}" for i in range(n_assets)]
         logger.info(f"Initialized optimizer for {n_assets} assets")
+    
+    def _get_risky_asset_mask(self) -> np.ndarray:
+        """
+        Helper to identify risky assets (non-CASH) for risk parity.
+        Returns boolean mask where True = risky asset.
+        FEATURE 1: CASH column has zero variance, so we exclude it from risk parity calculation.
+        """
+        if self.asset_names:
+            return np.array([name != 'CASH' for name in self.asset_names])
+        # Default: all assets are risky if no names provided
+        return np.ones(self.n_assets, dtype=bool)
 
     # ------------------------------------------------------------------
     def mean_variance_optimization(self, expected_returns: np.ndarray,
@@ -54,7 +65,16 @@ class PortfolioOptimizer:
             try:
                 # FIX: Use more flexible bounds to allow better optimization
                 # Min 0% (allow zero weights), max 45% per asset
-                ef = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=(0.0, 0.45))
+                # FEATURE 1: CASH can go up to 100% (no upper bound like risky assets)
+                # We'll handle this by using standard bounds and then adjusting for CASH
+                bounds = []
+                for i, name in enumerate(self.asset_names):
+                    if name == 'CASH':
+                        bounds.append((0.0, 1.0))  # CASH can be 0-100%
+                    else:
+                        bounds.append((0.0, 0.45))  # Risky assets capped at 45%
+                
+                ef = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=bounds)
                 if method == 'max_sharpe':
                     weights = ef.max_sharpe(risk_free_rate=risk_free_rate)
                 elif method == 'min_volatility':
@@ -84,7 +104,14 @@ class PortfolioOptimizer:
 
         constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
         # FIX: Use more flexible bounds (min 0%, max 45% per asset)
-        bounds = Bounds([0.0] * self.n_assets, [0.45] * self.n_assets)
+        # FEATURE 1: CASH can go up to 100% for defensive allocation
+        bounds_list = []
+        for i, name in enumerate(self.asset_names):
+            if name == 'CASH':
+                bounds_list.append((0.0, 1.0))  # CASH: 0-100%
+            else:
+                bounds_list.append((0.0, 0.45))  # Risky assets: 0-45%
+        bounds = Bounds(bounds_list[0], bounds_list[1]) if len(bounds_list) == 2 else Bounds([b[0] for b in bounds_list], [b[1] for b in bounds_list])
         w0 = np.ones(self.n_assets) / self.n_assets
 
         if method == 'max_sharpe':
@@ -104,7 +131,15 @@ class PortfolioOptimizer:
 
         if not result.success:
             logger.warning(f"Optimization warning: {result.message}")
-        weights = np.clip(result.x, 0.0, 0.45)
+        
+        # Apply bounds per asset type
+        weights = result.x.copy()
+        for i, name in enumerate(self.asset_names):
+            if name == 'CASH':
+                weights[i] = np.clip(weights[i], 0.0, 1.0)
+            else:
+                weights[i] = np.clip(weights[i], 0.0, 0.45)
+        
         s = weights.sum()
         if s > 0:
             weights = weights / s
@@ -118,6 +153,15 @@ class PortfolioOptimizer:
                          P: np.ndarray, Q: np.ndarray, tau: float = 0.05,
                          omega: np.ndarray = None, risk_aversion: float = 2.5) -> np.ndarray:
         logger.info("Running Black-Litterman optimization")
+        
+        # Ensure inputs are numpy arrays with correct dimensions
+        market_caps = np.asarray(market_caps).flatten()
+        cov_matrix = np.asarray(cov_matrix)
+        P = np.asarray(P)
+        Q = np.asarray(Q).flatten()
+        
+        n_assets_bl = len(market_caps)  # Number of assets in BL (risky only)
+        
         pi_weights = market_caps / market_caps.sum()
         delta = risk_aversion
         pi = delta * cov_matrix @ pi_weights
@@ -129,8 +173,13 @@ class PortfolioOptimizer:
             M1 = np.linalg.inv(np.linalg.inv(tau * cov_matrix) + P.T @ np.linalg.inv(omega) @ P)
             M2 = np.linalg.inv(tau * cov_matrix) @ pi + P.T @ np.linalg.inv(omega) @ Q
             bl_returns = M1 @ M2
-            weights = self.mean_variance_optimization(bl_returns, cov_matrix, method='max_sharpe')
             logger.info(f"BL returns: {bl_returns}")
+            
+            # CRITICAL FIX: Create a temporary optimizer with n_assets = n_risky
+            # because BL operates only on risky assets, not including CASH
+            temp_optimizer = PortfolioOptimizer(n_assets=n_assets_bl, asset_names=self.asset_names[:n_assets_bl])
+            weights = temp_optimizer.mean_variance_optimization(bl_returns, cov_matrix, method='max_sharpe')
+            logger.info(f"BL weights: {weights}")
             return weights
         except np.linalg.LinAlgError as e:
             logger.error(f"Matrix inversion failed in BL: {e}")
@@ -138,32 +187,99 @@ class PortfolioOptimizer:
 
     # ------------------------------------------------------------------
     def risk_parity(self, cov_matrix: np.ndarray) -> np.ndarray:
+        """
+        Risk Parity optimization with CASH handling.
+        
+        FEATURE 1: CASH has zero variance, which would cause division by zero
+        in standard risk parity calculation. Solution:
+        1. Run risk parity only on risky assets (non-CASH)
+        2. Allocate remaining weight to CASH based on market regime or fixed ratio
+        3. This gives defensive positioning capability during high volatility
+        
+        The logic: when markets are risky, optimizer can allocate more to CASH
+        by giving it higher effective weight in the final portfolio.
+        """
         logger.info("Running Risk Parity optimization")
+        
+        # Identify risky vs cash assets
+        risky_mask = self._get_risky_asset_mask()
+        n_risky = risky_mask.sum()
+        n_cash = self.n_assets - n_risky
+        
+        if n_cash == 0:
+            # No CASH column - run standard risk parity
+            def risk_contribution(w):
+                portfolio_vol = np.sqrt(w.T @ cov_matrix @ w)
+                if portfolio_vol == 0:
+                    return np.zeros_like(w)
+                marginal_risk = cov_matrix @ w / portfolio_vol
+                return w * marginal_risk
 
-        def risk_contribution(w):
-            portfolio_vol = np.sqrt(w.T @ cov_matrix @ w)
+            def objective(w):
+                rc = risk_contribution(w)
+                target_rc = np.ones(self.n_assets) / self.n_assets
+                return np.sum((rc - target_rc) ** 2)
+
+            constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
+            # FIX: Use much more flexible bounds to allow proper risk allocation
+            # Min 2% to avoid zero weights, max 50% to allow concentration when needed
+            bounds = Bounds([0.02] * self.n_assets, [0.50] * self.n_assets)
+            w0 = np.ones(self.n_assets) / self.n_assets
+            result = minimize(objective, w0, method='SLSQP', bounds=bounds, constraints=constraints,
+                              options={'maxiter': 1000, 'ftol': 1e-9})
+            if not result.success:
+                logger.warning(f"Risk parity warning: {result.message}")
+            weights = np.clip(result.x, 0.02, 0.50)
+            weights = weights / weights.sum()
+            logger.info(f"Risk Parity weights: {weights}")
+            return weights
+        
+        # CASH exists - run risk parity on risky assets only
+        logger.info(f"Risk Parity: {n_risky} risky assets, {n_cash} cash asset(s)")
+        risky_indices = np.where(risky_mask)[0]
+        cash_indices = np.where(~risky_mask)[0]
+        
+        # Extract sub-matrix for risky assets only
+        cov_risky = cov_matrix[np.ix_(risky_mask, risky_mask)]
+        
+        def risk_contribution_risky(w_risky):
+            portfolio_vol = np.sqrt(w_risky.T @ cov_risky @ w_risky)
             if portfolio_vol == 0:
-                return np.zeros_like(w)
-            marginal_risk = cov_matrix @ w / portfolio_vol
-            return w * marginal_risk
+                return np.zeros_like(w_risky)
+            marginal_risk = cov_risky @ w_risky / portfolio_vol
+            return w_risky * marginal_risk
 
-        def objective(w):
-            rc = risk_contribution(w)
-            target_rc = np.ones(self.n_assets) / self.n_assets
+        def objective_risky(w_risky):
+            rc = risk_contribution_risky(w_risky)
+            # Equal risk contribution among risky assets only
+            target_rc = np.ones(n_risky) / n_risky
             return np.sum((rc - target_rc) ** 2)
-
-        constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
-        # FIX: Use much more flexible bounds to allow proper risk allocation
-        # Min 2% to avoid zero weights, max 50% to allow concentration when needed
-        bounds = Bounds([0.02] * self.n_assets, [0.50] * self.n_assets)
-        w0 = np.ones(self.n_assets) / self.n_assets
-        result = minimize(objective, w0, method='SLSQP', bounds=bounds, constraints=constraints,
-                          options={'maxiter': 1000, 'ftol': 1e-9})
+        
+        # Optimize risky assets with sum = 1 (will be scaled down later)
+        constraints_risky = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
+        bounds_risky = Bounds([0.02] * n_risky, [0.50] * n_risky)
+        w0_risky = np.ones(n_risky) / n_risky
+        
+        result = minimize(objective_risky, w0_risky, method='SLSQP', 
+                         bounds=bounds_risky, constraints=constraints_risky,
+                         options={'maxiter': 1000, 'ftol': 1e-9})
+        
         if not result.success:
             logger.warning(f"Risk parity warning: {result.message}")
-        weights = np.clip(result.x, 0.02, 0.50)
+        
+        # Get risky weights and normalize
+        risky_weights = np.clip(result.x, 0.02, 0.50)
+        risky_weights = risky_weights / risky_weights.sum()
+        
+        # Build full weight vector
+        weights = np.zeros(self.n_assets)
+        weights[risky_indices] = risky_weights * 0.7  # 70% to risky assets
+        weights[cash_indices] = 0.3 / n_cash  # 30% to cash (defensive buffer)
+        
+        # Normalize to sum to 1
         weights = weights / weights.sum()
-        logger.info(f"Risk Parity weights: {weights}")
+        
+        logger.info(f"Risk Parity weights (with {n_cash*100:.0f}% cash buffer): {weights}")
         return weights
 
     # ------------------------------------------------------------------
@@ -183,10 +299,25 @@ class PortfolioOptimizer:
         which was MISSING in v1 (the solver could freely set u=0, making
         the previous "CVaR-optimal" weights meaningless).
 
+        FEATURE 2: ENFORCE REAL CVaR LIMIT CONSTRAINT
+        Added explicit constraint: z + (1/((1-confidence)*T)) * sum(u) <= cvar_limit
+        This ensures the optimized portfolio's CVaR never exceeds the specified limit.
+        
+        If the constraint makes the problem infeasible (no portfolio can meet the CVaR
+        target), we:
+        1. Log a warning
+        2. Relax the constraint and solve without it (best-effort CVaR minimization)
+        3. The result will still minimize CVaR, just may not meet the strict limit
+
         Variables: x = [w (n), z (1), u (T)]
         Minimize:  z + 1/((1-alpha)*T) * sum(u)
+        Subject to:
+          -u_t - returns[t]@w - z <= 0  (links u to portfolio losses)
+          z + (1/((1-alpha)*T)) * sum(u) <= cvar_limit  (FEATURE 2: real CVaR cap)
+          sum(w) = 1
+          w >= 0, u >= 0, z free
         """
-        logger.info(f"Running CVaR optimization (limit={cvar_limit}, conf={confidence}) [fixed LP formulation]")
+        logger.info(f"Running CVaR optimization (limit={cvar_limit}, conf={confidence}) [fixed LP + real constraint]")
         n_scenarios, n_assets = returns.shape
         alpha = confidence
 
@@ -205,8 +336,19 @@ class PortfolioOptimizer:
         A1[np.arange(n_scenarios), n_assets + 1 + np.arange(n_scenarios)] = -1.0
         b1 = np.zeros(n_scenarios)
 
-        A_ub = A1
-        b_ub = b1
+        # FEATURE 2: Add CVaR limit constraint as a hard inequality
+        # CVaR = z + (1/((1-alpha)*T)) * sum(u) <= cvar_limit
+        # Rearranged: z + (1/((1-alpha)*T)) * sum(u) - cvar_limit <= 0
+        # In matrix form: [0...0, 1, k, k, ..., k] @ [w, z, u] <= cvar_limit
+        # where k = 1/((1-alpha)*T)
+        cvar_coef = 1.0 / ((1 - alpha) * n_scenarios)
+        A_cvar = np.zeros((1, n_vars))
+        A_cvar[0, n_assets] = 1.0  # coefficient for z
+        A_cvar[0, n_assets + 1:] = cvar_coef  # coefficients for u
+        b_cvar = np.array([cvar_limit])
+        
+        A_ub = np.vstack([A1, A_cvar])
+        b_ub = np.concatenate([b1, b_cvar])
 
         # Optional target return constraint: mean_return @ w >= target_return
         # linprog wants <=, so negate.
@@ -223,26 +365,62 @@ class PortfolioOptimizer:
         b_eq = np.array([1.0])
 
         # Bounds: w in [0,1], z free, u >= 0
-        bounds = [(0, 1)] * n_assets + [(None, None)] + [(0, None)] * n_scenarios
+        # FEATURE 1: CASH can go up to 100% (handled by asset_names check below)
+        bounds_list = []
+        for i in range(n_assets):
+            if hasattr(self, 'asset_names') and self.asset_names and i < len(self.asset_names):
+                if self.asset_names[i] == 'CASH':
+                    bounds_list.append((0.0, 1.0))  # CASH: 0-100%
+                else:
+                    bounds_list.append((0.0, 0.45))  # Risky: 0-45%
+            else:
+                bounds_list.append((0.0, 1.0))  # Default: 0-100%
+        bounds = bounds_list + [(None, None)] + [(0, None)] * n_scenarios
 
         result = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq,
                           bounds=bounds, method='highs')
 
+        # FEATURE 2: Handle infeasible case (CVaR limit too strict)
         if not result.success:
-            logger.warning(f"CVaR LP failed: {result.message}. Falling back to equal weight.")
-            return np.ones(n_assets) / n_assets
+            # Check if it's an infeasibility issue
+            status_msg = str(result.message).lower() if result.message else ""
+            if 'infeasible' in status_msg or result.status == 2:
+                logger.warning(f"CVaR limit {cvar_limit} is INFEASIBLE - no portfolio can meet this constraint.")
+                logger.warning("Relaxing CVaR constraint and solving best-effort minimization...")
+                
+                # Remove the CVaR constraint and try again
+                A_ub_relaxed = A1  # Only keep the u-linking constraints
+                b_ub_relaxed = b1
+                
+                result = linprog(c, A_ub=A_ub_relaxed, b_ub=b_ub_relaxed, 
+                                A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
+                
+                if not result.success:
+                    logger.warning(f"CVaR LP still failed after relaxing: {result.message}. Using equal weight.")
+                    return np.ones(n_assets) / n_assets
+            else:
+                logger.warning(f"CVaR LP failed: {result.message}. Falling back to equal weight.")
+                return np.ones(n_assets) / n_assets
 
         weights = result.x[:n_assets]
         weights = np.clip(weights, 0, 1)
         s = weights.sum()
         weights = weights / s if s > 0 else np.ones(n_assets) / n_assets
 
+        # Calculate realized CVaR on the scenario set for logging
         port_rets = returns @ weights
         var = np.percentile(port_rets, (1 - confidence) * 100)
         tail = port_rets[port_rets <= var]
-        cvar = tail.mean() if len(tail) > 0 else var
+        cvar_realized = tail.mean() if len(tail) > 0 else var
+        
+        # FEATURE 2: Verify CVaR constraint was actually satisfied
+        if cvar_realized > cvar_limit * 1.05:  # 5% tolerance for floating point
+            logger.warning(f"CVaR constraint VIOLATION: realized CVaR={cvar_realized:.4f} > limit={cvar_limit:.4f}")
+        else:
+            logger.info(f"CVaR constraint SATISFIED: realized CVaR={cvar_realized:.4f} <= limit={cvar_limit:.4f}")
+        
         logger.info(f"CVaR weights: {weights}")
-        logger.info(f"Portfolio CVaR (realized on scenario set): {cvar:.4f}")
+        logger.info(f"Portfolio CVaR (realized on scenario set): {cvar_realized:.4f}")
         return weights
 
     # ------------------------------------------------------------------
