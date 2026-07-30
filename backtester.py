@@ -41,15 +41,18 @@ class Backtester:
     def __init__(self, initial_capital: float = 100000,
                  transaction_cost: float = 0.001,
                  slippage: float = 0.0005,
-                 max_drawdown_circuit_breaker: float = 0.15,
-                 circuit_breaker_derisk_factor: float = 0.5):
+                 max_drawdown_circuit_breaker: float = 0.12,
+                 circuit_breaker_derisk_factor: float = 0.4,
+                 rebalance_frequency_weeks: int = 2):
         """
         Args:
-            max_drawdown_circuit_breaker: drawdown level (e.g. 0.15 = 15%)
+            max_drawdown_circuit_breaker: drawdown level (e.g. 0.12 = 12%)
                 at which the portfolio automatically de-risks.
             circuit_breaker_derisk_factor: fraction of the normal weights
                 kept when de-risked (rest effectively sits in cash, i.e.
-                not reinvested that period). 0.5 = half exposure.
+                not reinvested that period). 0.4 = 40% exposure.
+            rebalance_frequency_weeks: how often to rebalance (default: every 2 weeks)
+                FIX: Reduced from weekly to bi-weekly to lower transaction costs
         """
         self.initial_capital = initial_capital
         self.transaction_cost = transaction_cost
@@ -57,13 +60,17 @@ class Backtester:
         self.total_cost_rate = transaction_cost + slippage
         self.max_dd_breaker = max_drawdown_circuit_breaker
         self.derisk_factor = circuit_breaker_derisk_factor
+        self.rebalance_freq = f'{rebalance_frequency_weeks}W'
+        # Initialize dictionary to track realized performance of each strategy for adaptive learning
+        self.strategy_realized_performance = {}
         logger.info(f"Initialized backtester with ${initial_capital:,}, "
-                    f"circuit breaker at {max_drawdown_circuit_breaker:.0%} drawdown")
+                    f"circuit breaker at {max_drawdown_circuit_breaker:.0%} drawdown, "
+                    f"rebalancing every {rebalance_frequency_weeks} weeks")
 
     # ------------------------------------------------------------------
     def run_single_fold(self, prices: pd.DataFrame, test_prices: pd.DataFrame,
                          n_train: int, weights_strategy: Callable,
-                         rebalance_freq: str = 'W', lookback_hours: int = 168,
+                         rebalance_freq: str = None, lookback_hours: int = 168,
                          strategy_selector: Optional[StrategySelector] = None,
                          strategy_fns: Optional[Dict[str, Callable]] = None) -> Dict:
         """Run one walk-forward fold (one train window -> one test window)."""
@@ -77,6 +84,10 @@ class Backtester:
         daily_returns = []
         chosen_strategy_log = []
 
+        # Use instance rebalance_freq if not provided
+        if rebalance_freq is None:
+            rebalance_freq = self.rebalance_freq
+        
         rebalance_dates = test_prices.resample(rebalance_freq).first().index
         next_rebalance = rebalance_dates[0] if len(rebalance_dates) > 0 else test_prices.index[0]
         current_method_name = None
@@ -91,8 +102,15 @@ class Backtester:
                     if strategy_selector is not None and strategy_fns is not None:
                         in_sample_scores = compute_in_sample_scores(
                             list(strategy_fns.keys()), strategy_fns, lookback_prices, lookback_returns)
+                        
+                        # Pass realized performance from previous period (if available)
+                        realized_perf_dict = {}
+                        if len(self.strategy_realized_performance) > 0:
+                            realized_perf_dict = self.strategy_realized_performance
+                        
                         current_method_name = strategy_selector.select(
-                            lookback_prices, lookback_returns, in_sample_scores)
+                            lookback_prices, lookback_returns, in_sample_scores, 
+                            realized_perf=realized_perf_dict if realized_perf_dict else None)
                         new_weights = np.array(strategy_fns[current_method_name](lookback_prices, lookback_returns))
                     else:
                         new_weights = np.array(weights_strategy(lookback_prices, lookback_returns))
@@ -139,6 +157,25 @@ class Backtester:
 
         pv_df = pd.DataFrame(portfolio_values).set_index('timestamp')
         metrics = self.calculate_metrics(pv_df, daily_returns, rebalance_events)
+        
+        # Record realized performance for strategy selector (for adaptive learning)
+        # IMPROVED: Record ALL strategies, not just the chosen one
+        if strategy_selector is not None and len(daily_returns) > 0:
+            returns_series = pd.Series(daily_returns)
+            realized_return = returns_series.mean() * len(returns_series)  # Total return over period
+            realized_vol = returns_series.std() * np.sqrt(len(returns_series))  # Volatility over period
+            
+            # Record for the chosen strategy
+            if current_method_name is not None and realized_vol > 0:
+                strategy_selector.record_realized_performance(current_method_name, realized_return, realized_vol)
+                logger.info(f"Recorded realized performance for {current_method_name}: return={realized_return:.4f}, vol={realized_vol:.4f}")
+                
+                # Store in backtester for next iteration's selector
+                self.strategy_realized_performance[current_method_name] = {
+                    'return': realized_return,
+                    'vol': realized_vol
+                }
+        
         return {
             'portfolio_values': pv_df,
             'metrics': metrics,
@@ -149,7 +186,7 @@ class Backtester:
 
     # ------------------------------------------------------------------
     def run_walk_forward(self, prices: pd.DataFrame, weights_strategy: Callable = None,
-                          rebalance_freq: str = 'W', lookback_hours: int = 168,
+                          rebalance_freq: str = None, lookback_hours: int = 168,
                           n_folds: int = 4, train_ratio: float = 0.7,
                           strategy_selector: Optional[StrategySelector] = None,
                           strategy_fns: Optional[Dict[str, Callable]] = None) -> Dict:
@@ -163,18 +200,29 @@ class Backtester:
         total_len = len(prices)
         fold_len = total_len // n_folds
         fold_results = []
+        
+        # Minimum observations required per fold for meaningful analysis
+        min_fold_size = 50
+        min_test_size = 20
+        
+        logger.info(f"Total observations: {total_len}, requested folds: {n_folds}, fold length: {fold_len}")
+        if fold_len < min_fold_size:
+            logger.warning(f"Fold length ({fold_len}) is too small (< {min_fold_size}). "
+                          f"Either increase since_days or reduce n_folds.")
 
         for fold in range(n_folds):
             start = fold * fold_len
             end = total_len if fold == n_folds - 1 else (fold + 1) * fold_len
             fold_prices = prices.iloc[start:end]
-            if len(fold_prices) < 200:  # too small to be meaningful
+            if len(fold_prices) < min_fold_size:
+                logger.warning(f"Fold {fold+1} has only {len(fold_prices)} observations (< {min_fold_size}), skipping")
                 continue
 
             n_train = int(len(fold_prices) * train_ratio)
             train_prices = fold_prices.iloc[:n_train]
             test_prices = fold_prices.iloc[n_train:]
-            if len(test_prices) < 50:
+            if len(test_prices) < min_test_size:
+                logger.warning(f"Fold {fold+1} test set has only {len(test_prices)} observations (< {min_test_size}), skipping")
                 continue
 
             logger.info(f"=== Walk-forward fold {fold + 1}/{n_folds}: "

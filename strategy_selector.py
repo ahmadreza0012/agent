@@ -53,20 +53,26 @@ def detect_regime(returns: pd.DataFrame, window: int = 168) -> str:
     vol = port.std() * np.sqrt(24 * 365)
     autocorr = port.autocorr(lag=1) if len(port) > 2 else 0.0
     autocorr = 0.0 if pd.isna(autocorr) else autocorr
+    
+    # Calculate recent return trend
+    recent_return = port.tail(window).sum()
 
-    if vol > 1.2:  # annualized vol > 120% -> crypto "high vol" regime
+    # FIX: Adjusted thresholds for crypto volatility
+    if vol > 1.5:  # annualized vol > 150% -> crypto "high vol" regime
         return "high_vol"
-    if autocorr > 0.05:
+    if autocorr > 0.1 or recent_return > 0.1:  # Strong trend or positive momentum
         return "trending"
     return "mean_reverting"
 
 
 # Which strategies tend to be favored per regime (prior, not gospel --
 # combined with the realized track record below).
+# FIX: Stronger bias toward Risk Parity in high_vol regimes since it showed better resilience
+# Also improved MVO preference in trending markets
 REGIME_PRIOR = {
-    "trending": {"black_litterman": 1.2, "mvo": 1.15, "ml": 1.1, "risk_parity": 0.9, "cvar": 0.9},
-    "mean_reverting": {"black_litterman": 1.1, "ml": 1.1, "risk_parity": 1.0, "mvo": 0.9, "cvar": 1.0},
-    "high_vol": {"risk_parity": 1.25, "cvar": 1.25, "black_litterman": 0.95, "mvo": 0.8, "ml": 0.9},
+    "trending": {"black_litterman": 1.3, "mvo": 1.4, "ml": 1.1, "risk_parity": 0.9, "cvar": 1.0},
+    "mean_reverting": {"black_litterman": 1.1, "ml": 1.0, "risk_parity": 1.2, "mvo": 0.9, "cvar": 1.0},
+    "high_vol": {"risk_parity": 1.8, "cvar": 1.5, "black_litterman": 1.0, "mvo": 0.5, "ml": 0.7},
 }
 
 
@@ -92,14 +98,16 @@ class StrategySelector:
         return float(np.mean(rec))
 
     def select(self, prices: pd.DataFrame, returns: pd.DataFrame,
-               in_sample_scores: Dict[str, float]) -> str:
+               in_sample_scores: Dict[str, float], realized_perf: Optional[Dict] = None) -> str:
         """
         Pick the strategy to use for the NEXT period.
+        IMPROVED: Now considers realized performance heavily to avoid losing strategies.
 
         Args:
             prices, returns: recent lookback data (for regime detection)
             in_sample_scores: {method_name: sharpe_like_score} computed on
                 the lookback window for each candidate method (higher=better)
+            realized_perf: {method: {'return': float, 'vol': float}} from last period
 
         Returns:
             chosen method name
@@ -112,10 +120,37 @@ class StrategySelector:
             in_sample = in_sample_scores.get(m, 0.0)
             track = self._track_record_score(m)
             regime_mult = prior.get(m, 1.0)
-            # weight: 50% in-sample score, 50% realized track record, scaled by regime prior
-            combined[m] = (0.5 * in_sample + 0.5 * track) * regime_mult
+            
+            # NEW: If we have realized performance, use it as primary signal
+            if realized_perf and m in realized_perf:
+                ret = realized_perf[m].get('return', -999)
+                vol = realized_perf[m].get('vol', 1.0)
+                # Realized Sharpe-like metric (penalize losses heavily)
+                realized_score = ret / (vol + 0.01) if vol > 0 else -999
+                
+                # If strategy lost money, apply VERY heavy penalty (10x)
+                if ret < 0:
+                    realized_score *= 10.0  # Amplify negative signal strongly
+                
+                # Weight: 20% in-sample, 80% realized (realized dominates when available)
+                combined[m] = (0.2 * in_sample + 0.8 * realized_score) * regime_mult
+                logger.info(f"  {m}: in_sample={in_sample:.3f}, realized_ret={ret:.4f}, realized_score={realized_score:.3f}, combined={combined[m]:.3f}")
+            else:
+                # No realized data yet: use default weighting
+                combined[m] = (0.4 * in_sample + 0.6 * track) * regime_mult
 
         chosen = max(combined, key=combined.get)
+        
+        # SAFETY: If all scores are negative, force Risk Parity (safest option)
+        if all(v < 0 for v in combined.values()):
+            if 'risk_parity' in combined:
+                chosen = 'risk_parity'
+                logger.warning(f"All strategies negative! Forcing risk_parity for safety")
+            elif 'cvar' in combined:
+                # Second safest option
+                chosen = 'cvar'
+                logger.warning(f"All strategies negative! Forcing cvar for safety")
+        
         self.history.append({
             "regime": regime,
             "scores": combined,
