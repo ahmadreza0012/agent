@@ -98,22 +98,37 @@ class StrategySelector:
         return float(np.mean(rec))
 
     def select(self, prices: pd.DataFrame, returns: pd.DataFrame,
-               in_sample_scores: Dict[str, float], realized_perf: Optional[Dict] = None) -> str:
+               in_sample_scores: Dict[str, float], realized_perf: Optional[Dict] = None,
+               current_drawdown: float = 0.0) -> str:
         """
         Pick the strategy to use for the NEXT period.
         IMPROVED: Now considers realized performance heavily to avoid losing strategies.
+        NEW: Forces hybrid strategies in high_vol regime or during drawdowns.
 
         Args:
             prices, returns: recent lookback data (for regime detection)
             in_sample_scores: {method_name: sharpe_like_score} computed on
                 the lookback window for each candidate method (higher=better)
             realized_perf: {method: {'return': float, 'vol': float}} from last period
+            current_drawdown: current portfolio drawdown (0.0 = no drawdown)
 
         Returns:
             chosen method name
         """
         regime = detect_regime(returns)
         prior = REGIME_PRIOR.get(regime, {m: 1.0 for m in self.candidate_methods})
+
+        # CRITICAL: Force hybrid strategy in high_vol regime or significant drawdown
+        # This ensures we get the 60% arb allocation when markets are risky
+        has_hybrid = any('hybrid' in m for m in self.candidate_methods)
+        if has_hybrid and (regime == 'high_vol' or current_drawdown > 0.05):
+            # Prefer hybrid_risk_parity_arb as it's more stable than hybrid_mvo_arb
+            if 'hybrid_risk_parity_arb' in self.candidate_methods:
+                logger.info(f"Forcing hybrid_risk_parity_arb due to regime={regime}, drawdown={current_drawdown:.2%}")
+                return 'hybrid_risk_parity_arb'
+            elif 'hybrid_mvo_arb' in self.candidate_methods:
+                logger.info(f"Forcing hybrid_mvo_arb due to regime={regime}, drawdown={current_drawdown:.2%}")
+                return 'hybrid_mvo_arb'
 
         combined = {}
         for m in self.candidate_methods:
@@ -150,6 +165,10 @@ class StrategySelector:
                 # Second safest option
                 chosen = 'cvar'
                 logger.warning(f"All strategies negative! Forcing cvar for safety")
+            elif any('hybrid' in m for m in combined):
+                # Fallback to hybrid if available (has arb buffer)
+                chosen = next(m for m in combined.keys() if 'hybrid' in m)
+                logger.warning(f"All strategies negative! Forcing {chosen} for arb buffer")
         
         self.history.append({
             "regime": regime,
