@@ -126,12 +126,14 @@ def run_trading_cycle():
 
         logger.info("STEP 2: Walk-forward backtest & Optimization")
 
-        # Calculate returns for the optimizer
-        returns = data_fetcher.calculate_returns(df_prices)
+        # Calculate returns for the optimizer (includes CASH column by default)
+        returns = data_fetcher.calculate_returns(df_prices, add_cash_column=True)
         
-        # Initialize optimizer with correct parameters AFTER we have data
-        n_assets = len(df_prices.columns)
-        optimizer = PortfolioOptimizer(n_assets=n_assets, asset_names=list(df_prices.columns))
+        # FIX: Initialize optimizer with correct parameters AFTER we have data
+        # IMPORTANT: Use returns.columns (which includes CASH) not df_prices.columns
+        # to avoid dimension mismatch between optimizer and actual data
+        n_assets = len(returns.columns)
+        optimizer = PortfolioOptimizer(n_assets=n_assets, asset_names=list(returns.columns))
         
         # Create strategy functions dictionary for the backtester
         from strategy_selector import compute_in_sample_scores
