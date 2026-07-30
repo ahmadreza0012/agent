@@ -110,8 +110,8 @@ def run_trading_cycle():
             logger.warning("Add GROQ_API_KEY to Railway environment variables for real AI sentiment.")
             logger.warning("="*60)
         
-        # FIX: Include all strategies for adaptive selection (added cvar, black_litterman, ml, hybrid_arb)
-        candidate_methods = ['mvo', 'risk_parity', 'cvar', 'black_litterman', 'ml', 'hybrid_mvo_arb', 'hybrid_risk_parity_arb']
+        # FIX: Include all strategies for adaptive selection (hybrid_arb disabled due to dimension mismatch)
+        candidate_methods = ['mvo', 'risk_parity', 'cvar', 'black_litterman', 'ml']
         strategy_selector = StrategySelector(candidate_methods=candidate_methods)
         # FIX: Use improved backtester settings (bi-weekly rebalance, lower DD threshold)
         # IMPROVED: Even more conservative risk management (tighter controls based on testing)
