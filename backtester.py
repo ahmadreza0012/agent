@@ -61,6 +61,8 @@ class Backtester:
         self.max_dd_breaker = max_drawdown_circuit_breaker
         self.derisk_factor = circuit_breaker_derisk_factor
         self.rebalance_freq = f'{rebalance_frequency_weeks}W'
+        # Initialize dictionary to track realized performance of each strategy for adaptive learning
+        self.strategy_realized_performance = {}
         logger.info(f"Initialized backtester with ${initial_capital:,}, "
                     f"circuit breaker at {max_drawdown_circuit_breaker:.0%} drawdown, "
                     f"rebalancing every {rebalance_frequency_weeks} weeks")
@@ -109,7 +111,14 @@ class Backtester:
                         current_method_name = strategy_selector.select(
                             lookback_prices, lookback_returns, in_sample_scores, 
                             realized_perf=realized_perf_dict if realized_perf_dict else None)
-                        new_weights = np.array(strategy_fns[current_method_name](lookback_prices, lookback_returns))
+                        
+                        # NEW: Handle 'cash' decision - set weights to zero
+                        if current_method_name == 'cash':
+                            new_weights = np.zeros(n_assets)
+                            logger.info(f"Going 100% CASH at {timestamp}")
+                        else:
+                            new_weights = np.array(strategy_fns[current_method_name](lookback_prices, lookback_returns))
+
                     else:
                         new_weights = np.array(weights_strategy(lookback_prices, lookback_returns))
 
@@ -126,8 +135,8 @@ class Backtester:
 
                     capital -= cost
                     weights = new_weights
-                    logger.info(f"Rebalanced at {timestamp}: method={current_method_name}, "
-                                f"turnover={turnover:.2%}, cost=${cost:.2f}")
+                    method_str = f"method={current_method_name}, " if current_method_name else ""
+                    logger.info(f"Rebalanced at {timestamp}: {method_str}turnover={turnover:.2%}, cost=${cost:.2f}")
 
                     future_dates = [d for d in rebalance_dates if d > timestamp]
                     next_rebalance = future_dates[0] if future_dates else test_prices.index[-1] + timedelta(hours=1)

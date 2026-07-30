@@ -142,6 +142,14 @@ class StrategySelector:
                 chosen = 'risk_parity'
                 logger.warning(f"All strategies negative! Forcing risk_parity for safety")
         
+        # NEW: CASH OPTION - If even the best strategy has a very negative score, go to cash
+        # Threshold: If best combined score < -2.0, expected loss is too high
+        CASH_THRESHOLD = -2.0
+        if combined[chosen] < CASH_THRESHOLD:
+            logger.warning(f"Best strategy {chosen} has score {combined[chosen]:.3f} < {CASH_THRESHOLD}. Going 100% CASH to preserve capital.")
+            # Return special 'cash' marker - backtester will handle 0% exposure
+            return 'cash'
+        
         self.history.append({
             "regime": regime,
             "scores": combined,
