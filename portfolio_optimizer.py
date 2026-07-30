@@ -112,9 +112,12 @@ class PortfolioOptimizer:
         risky_returns = returns.loc[:, risky_mask]
         risky_cov = risky_returns.cov().values * 24 * 365
         risky_exp_ret = risky_returns.mean().values * 24 * 365
+        risky_asset_names = [self.asset_names[i] for i in range(len(self.asset_names)) if risky_mask[i]]
         
         if len(risky_exp_ret) > 0:
-            directional_weights_risky = self.mean_variance_optimization(
+            # Create a temporary optimizer for risky assets only
+            temp_optimizer = PortfolioOptimizer(len(risky_exp_ret), risky_asset_names)
+            directional_weights_risky = temp_optimizer.mean_variance_optimization(
                 risky_exp_ret, risky_cov, risk_free_rate=0.02
             )
         else:
