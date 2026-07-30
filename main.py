@@ -93,13 +93,13 @@ def run_trading_cycle():
         # Initialize Components
         data_fetcher = DataFetcher(symbols=symbols)
         ai_sentiment = AISentiment()
-        # FIX: Include all strategies for adaptive selection
-        strategy_selector = StrategySelector(candidate_methods=['mvo', 'risk_parity'])
+        # FIX: Include all strategies for adaptive selection (added cvar for high-vol protection)
+        strategy_selector = StrategySelector(candidate_methods=['mvo', 'risk_parity', 'cvar'])
         # FIX: Use improved backtester settings (bi-weekly rebalance, lower DD threshold)
-        # IMPROVED: Even more conservative risk management
+        # IMPROVED: Even more conservative risk management (tighter controls based on testing)
         backtester = Backtester(initial_capital=initial_capital, 
-                                 max_drawdown_circuit_breaker=0.10,  # Trigger earlier at 10% DD
-                                 circuit_breaker_derisk_factor=0.3,  # Cut to 30% exposure when triggered
+                                 max_drawdown_circuit_breaker=0.08,  # Trigger earlier at 8% DD
+                                 circuit_breaker_derisk_factor=0.2,  # Cut to 20% exposure when triggered
                                  rebalance_frequency_weeks=2)
 
         logger.info("STEP 1: Fetching Historical Data")
@@ -142,9 +142,15 @@ def run_trading_cycle():
         def risk_parity_strategy(prices, returns):
             return optimizer.risk_parity(returns.cov().values)
         
+        def cvar_strategy(prices, returns):
+            # CVaR optimization - good for high volatility regimes
+            # Use tighter CVaR limit (3%) for better downside protection
+            return optimizer.cvar_optimization(returns.values, cvar_limit=0.03, confidence=0.95)
+        
         strategy_fns = {
             'mvo': mvo_strategy,
-            'risk_parity': risk_parity_strategy
+            'risk_parity': risk_parity_strategy,
+            'cvar': cvar_strategy
         }
 
         # Run Backtest & Optimization Logic
