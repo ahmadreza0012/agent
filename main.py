@@ -126,8 +126,15 @@ def run_trading_cycle():
 
         logger.info("STEP 2: Walk-forward backtest & Optimization")
 
-        # Calculate returns for the optimizer (includes CASH column by default)
-        returns = data_fetcher.calculate_returns(df_prices, add_cash_column=True)
+        # FEATURE 1: Add CASH column to prices (not just returns) so it flows through the entire backtest
+        # This ensures that when backtester does prices.pct_change(), CASH is included with ~0 return
+        # We add a synthetic CASH asset with constant price (1.0) - zero return, zero variance
+        df_prices_with_cash = df_prices.copy()
+        df_prices_with_cash['CASH'] = 1.0  # Constant price = zero return
+        logger.info("Added CASH column to prices for defensive allocation (constant price=1.0)")
+        
+        # Calculate returns for the optimizer (includes CASH column)
+        returns = data_fetcher.calculate_returns(df_prices_with_cash, add_cash_column=True)
         
         # FIX: Initialize optimizer with correct parameters AFTER we have data
         # IMPORTANT: Use returns.columns (which includes CASH) not df_prices.columns
@@ -157,7 +164,7 @@ def run_trading_cycle():
 
         # Run Backtest & Optimization Logic
         results = backtester.run_walk_forward(
-            prices=df_prices,
+            prices=df_prices_with_cash,  # Use prices WITH CASH column so it flows into internal return calculations
             n_folds=n_folds,
             strategy_selector=strategy_selector,
             strategy_fns=strategy_fns

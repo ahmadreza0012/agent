@@ -168,12 +168,27 @@ def compute_in_sample_scores(candidate_methods: List[str], strategy_fns: Dict[st
     window (in-sample). This is only used as one signal among several in
     StrategySelector.select, precisely because in-sample scores overstate
     quality -- the realized track record term corrects for that over time.
+    
+    FIX: Added dimension mismatch check - if weights don't match returns columns,
+    this is a structural bug (not just a scoring failure) and should log ERROR.
     """
     scores = {}
+    n_expected_assets = len(returns.columns)
+    
     for method in candidate_methods:
         try:
             weights = strategy_fns[method](prices, returns)
-            port_ret = returns.values @ np.array(weights)
+            weights_array = np.array(weights)
+            
+            # CRITICAL CHECK: Ensure weights dimension matches returns columns
+            if len(weights_array) != n_expected_assets:
+                logger.error(f"CRITICAL MISMATCH for {method}: expected {n_expected_assets} weights "
+                           f"(columns: {list(returns.columns)}), got {len(weights_array)}. "
+                           f"This indicates a structural bug in optimizer/strategy function.")
+                scores[method] = -999.0
+                continue
+            
+            port_ret = returns.values @ weights_array
             mean_r = port_ret.mean() * 24 * 365
             vol_r = port_ret.std() * np.sqrt(24 * 365)
             scores[method] = (mean_r - 0.02) / vol_r if vol_r > 0 else 0.0
