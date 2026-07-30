@@ -153,6 +153,15 @@ class PortfolioOptimizer:
                          P: np.ndarray, Q: np.ndarray, tau: float = 0.05,
                          omega: np.ndarray = None, risk_aversion: float = 2.5) -> np.ndarray:
         logger.info("Running Black-Litterman optimization")
+        
+        # Ensure inputs are numpy arrays with correct dimensions
+        market_caps = np.asarray(market_caps).flatten()
+        cov_matrix = np.asarray(cov_matrix)
+        P = np.asarray(P)
+        Q = np.asarray(Q).flatten()
+        
+        n_assets_bl = len(market_caps)  # Number of assets in BL (risky only)
+        
         pi_weights = market_caps / market_caps.sum()
         delta = risk_aversion
         pi = delta * cov_matrix @ pi_weights
@@ -164,8 +173,13 @@ class PortfolioOptimizer:
             M1 = np.linalg.inv(np.linalg.inv(tau * cov_matrix) + P.T @ np.linalg.inv(omega) @ P)
             M2 = np.linalg.inv(tau * cov_matrix) @ pi + P.T @ np.linalg.inv(omega) @ Q
             bl_returns = M1 @ M2
-            weights = self.mean_variance_optimization(bl_returns, cov_matrix, method='max_sharpe')
             logger.info(f"BL returns: {bl_returns}")
+            
+            # CRITICAL FIX: Create a temporary optimizer with n_assets = n_risky
+            # because BL operates only on risky assets, not including CASH
+            temp_optimizer = PortfolioOptimizer(n_assets=n_assets_bl, asset_names=self.asset_names[:n_assets_bl])
+            weights = temp_optimizer.mean_variance_optimization(bl_returns, cov_matrix, method='max_sharpe')
+            logger.info(f"BL weights: {weights}")
             return weights
         except np.linalg.LinAlgError as e:
             logger.error(f"Matrix inversion failed in BL: {e}")

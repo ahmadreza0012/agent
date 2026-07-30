@@ -90,11 +90,29 @@ def run_trading_cycle():
         since_days = 365
         n_folds = 1
         
+        # TARGET: 3% monthly return (updated from 2%)
+        target_return = 0.03  # 3% monthly target
+        max_allowed_dd = 0.18  # 18% (slightly higher to avoid constant rejections)
+        min_sharpe = 0.3  # Lower threshold to allow some volatility
+        min_positive_months = 0.4  # At least 40% positive months
+        
         # Initialize Components
         data_fetcher = DataFetcher(symbols=symbols)
         ai_sentiment = AISentiment()
-        # FIX: Include all strategies for adaptive selection (added cvar for high-vol protection)
-        strategy_selector = StrategySelector(candidate_methods=['mvo', 'risk_parity', 'cvar'])
+        
+        # Check if GROQ_API_KEY is available and warn if not
+        import os
+        groq_key = os.environ.get("GROQ_API_KEY")
+        if not groq_key:
+            logger.warning("="*60)
+            logger.warning("WARNING: GROQ_API_KEY not found in environment variables!")
+            logger.warning("Black-Litterman will run with MOCK sentiment (momentum-based, not AI/news).")
+            logger.warning("Add GROQ_API_KEY to Railway environment variables for real AI sentiment.")
+            logger.warning("="*60)
+        
+        # FIX: Include all strategies for adaptive selection (added cvar, black_litterman, ml)
+        candidate_methods = ['mvo', 'risk_parity', 'cvar', 'black_litterman', 'ml']
+        strategy_selector = StrategySelector(candidate_methods=candidate_methods)
         # FIX: Use improved backtester settings (bi-weekly rebalance, lower DD threshold)
         # IMPROVED: Even more conservative risk management (tighter controls based on testing)
         backtester = Backtester(initial_capital=initial_capital, 
@@ -156,10 +174,85 @@ def run_trading_cycle():
             # Use tighter CVaR limit (3%) for better downside protection
             return optimizer.cvar_optimization(returns.values, cvar_limit=0.03, confidence=0.95)
         
+        def black_litterman_strategy(prices, returns):
+            """
+            Black-Litterman optimization with AI/News-based views.
+            
+            FEATURE 1: Uses Groq LLM + news headlines to generate market views.
+            Falls back to momentum-based pseudo-sentiment if GROQ_API_KEY is not set.
+            
+            CASH handling: CASH asset is excluded from views (Q=0 for CASH),
+            as AI sentiment applies only to risky crypto assets.
+            """
+            # Get expected returns from historical mean (prior)
+            # Exclude CASH column from expected returns calculation
+            if 'CASH' in returns.columns:
+                returns_risky = returns.drop(columns=['CASH'])
+            else:
+                returns_risky = returns
+            expected_returns_hist = returns_risky.mean().values
+            
+            # Generate AI views (P, Q matrices)
+            # Note: ai_sentiment.generate_views expects symbols without 'CASH'
+            risky_symbols = [s for s in returns.columns if s != 'CASH']
+            
+            # Get prices without CASH for sentiment generation
+            if 'CASH' in prices.columns:
+                prices_risky = prices.drop(columns=['CASH'])
+            else:
+                prices_risky = prices
+            
+            P, Q = ai_sentiment.generate_views(prices_risky, expected_returns_hist, risky_symbols)
+            
+            # Get covariance matrix (risky assets only) - use .values to get numpy array
+            cov_risky = returns_risky.cov().values
+            
+            # Use equal-weight market cap prior (simplified - no real market cap data)
+            n_risky = len(risky_symbols)
+            market_caps = np.ones(n_risky)  # Equal weight prior
+            
+            # Get confidence matrix (omega) from AI analyzer
+            omega = ai_sentiment.get_confidence_matrix(n_risky, risky_symbols, base_confidence=0.05)
+            
+            # Run Black-Litterman on risky assets
+            bl_weights_risky = optimizer.black_litterman(market_caps, cov_risky, P, Q, tau=0.05, omega=omega)
+            
+            # Build full weights including CASH
+            # CASH gets defensive allocation (15% buffer)
+            if 'CASH' in returns.columns:
+                cash_idx = list(returns.columns).index('CASH')
+                full_weights = np.zeros(n_assets)
+                risky_indices = [i for i in range(n_assets) if i != cash_idx]
+                # Ensure bl_weights_risky has correct length
+                assert len(bl_weights_risky) == n_risky, f"BL weights length {len(bl_weights_risky)} != n_risky {n_risky}"
+                full_weights[risky_indices] = bl_weights_risky * 0.85  # 85% to risky, 15% buffer to CASH
+                full_weights[cash_idx] = 0.15
+                return full_weights
+            else:
+                return bl_weights_risky
+        
+        def ml_strategy(prices, returns):
+            """
+            ML-based return forecasting using Random Forest.
+            
+            FEATURE 4: Uses sklearn RandomForestRegressor to forecast returns
+            based on lag features, moving averages, and momentum indicators.
+            """
+            # Get ML return forecasts
+            ml_expected_returns = optimizer.ml_forecast_returns(returns, lookback=168, forecast_horizon=24)
+            
+            # Get covariance matrix
+            cov_matrix = returns.cov().values
+            
+            # Run MVO with ML-based expected returns
+            return optimizer.mean_variance_optimization(ml_expected_returns, cov_matrix, method='max_sharpe')
+        
         strategy_fns = {
             'mvo': mvo_strategy,
             'risk_parity': risk_parity_strategy,
-            'cvar': cvar_strategy
+            'cvar': cvar_strategy,
+            'black_litterman': black_litterman_strategy,
+            'ml': ml_strategy
         }
 
         # Run Backtest & Optimization Logic
