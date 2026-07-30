@@ -110,8 +110,8 @@ def run_trading_cycle():
             logger.warning("Add GROQ_API_KEY to Railway environment variables for real AI sentiment.")
             logger.warning("="*60)
         
-        # FIX: Include all strategies for adaptive selection (added cvar, black_litterman, ml)
-        candidate_methods = ['mvo', 'risk_parity', 'cvar', 'black_litterman', 'ml']
+        # FIX: Include all strategies for adaptive selection (added cvar, black_litterman, ml, hybrid_arb)
+        candidate_methods = ['mvo', 'risk_parity', 'cvar', 'black_litterman', 'ml', 'hybrid_mvo_arb', 'hybrid_risk_parity_arb']
         strategy_selector = StrategySelector(candidate_methods=candidate_methods)
         # FIX: Use improved backtester settings (bi-weekly rebalance, lower DD threshold)
         # IMPROVED: Even more conservative risk management (tighter controls based on testing)
@@ -247,12 +247,63 @@ def run_trading_cycle():
             # Run MVO with ML-based expected returns
             return optimizer.mean_variance_optimization(ml_expected_returns, cov_matrix, method='max_sharpe')
         
+        def hybrid_mvo_arb_strategy(prices, returns):
+            """
+            Hybrid MVO + Funding Rate Arbitrage (v3).
+            
+            FEATURE 5: Combines directional MVO with market-neutral funding rate arb.
+            Dynamically adjusts arb allocation based on market regime.
+            """
+            # Determine regime from volatility
+            vol = returns.std().mean() * np.sqrt(24 * 365)
+            if vol > 0.60:
+                regime = 'high_vol'
+            elif vol > 0.30:
+                regime = 'normal'
+            else:
+                regime = 'trending'
+            
+            # Get current drawdown
+            drawdown = system_state.get('current_drawdown', 0.0)
+            
+            # Run hybrid optimization
+            weights, info = optimizer.hybrid_optimization(returns, regime, drawdown)
+            return weights
+        
+        def hybrid_risk_parity_arb_strategy(prices, returns):
+            """
+            Hybrid Risk Parity + Funding Rate Arbitrage (v3).
+            """
+            vol = returns.std().mean() * np.sqrt(24 * 365)
+            if vol > 0.60:
+                regime = 'high_vol'
+            elif vol > 0.30:
+                regime = 'normal'
+            else:
+                regime = 'trending'
+            
+            drawdown = system_state.get('current_drawdown', 0.0)
+            arb_alloc = optimizer.calculate_arb_allocation(regime, drawdown)
+            
+            # Get risk parity weights and scale
+            rp_weights = optimizer.risk_parity(returns.cov().values)
+            scaled_weights = rp_weights * (1.0 - arb_alloc)
+            
+            # Adjust CASH for remainder
+            if 'CASH' in returns.columns:
+                cash_idx = list(returns.columns).index('CASH')
+                scaled_weights[cash_idx] += arb_alloc
+            
+            return scaled_weights
+        
         strategy_fns = {
             'mvo': mvo_strategy,
             'risk_parity': risk_parity_strategy,
             'cvar': cvar_strategy,
             'black_litterman': black_litterman_strategy,
-            'ml': ml_strategy
+            'ml': ml_strategy,
+            'hybrid_mvo_arb': hybrid_mvo_arb_strategy,
+            'hybrid_risk_parity_arb': hybrid_risk_parity_arb_strategy
         }
 
         # Run Backtest & Optimization Logic
