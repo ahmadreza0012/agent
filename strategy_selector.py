@@ -53,10 +53,14 @@ def detect_regime(returns: pd.DataFrame, window: int = 168) -> str:
     vol = port.std() * np.sqrt(24 * 365)
     autocorr = port.autocorr(lag=1) if len(port) > 2 else 0.0
     autocorr = 0.0 if pd.isna(autocorr) else autocorr
+    
+    # Calculate recent return trend
+    recent_return = port.tail(window).sum()
 
-    if vol > 1.2:  # annualized vol > 120% -> crypto "high vol" regime
+    # FIX: Adjusted thresholds for crypto volatility
+    if vol > 1.5:  # annualized vol > 150% -> crypto "high vol" regime
         return "high_vol"
-    if autocorr > 0.05:
+    if autocorr > 0.1 or recent_return > 0.1:  # Strong trend or positive momentum
         return "trending"
     return "mean_reverting"
 
@@ -64,10 +68,11 @@ def detect_regime(returns: pd.DataFrame, window: int = 168) -> str:
 # Which strategies tend to be favored per regime (prior, not gospel --
 # combined with the realized track record below).
 # FIX: Stronger bias toward Risk Parity in high_vol regimes since it showed better resilience
+# Also improved MVO preference in trending markets
 REGIME_PRIOR = {
-    "trending": {"black_litterman": 1.2, "mvo": 1.15, "ml": 1.1, "risk_parity": 1.0, "cvar": 1.0},
-    "mean_reverting": {"black_litterman": 1.1, "ml": 1.1, "risk_parity": 1.1, "mvo": 0.95, "cvar": 1.0},
-    "high_vol": {"risk_parity": 1.5, "cvar": 1.3, "black_litterman": 1.0, "mvo": 0.6, "ml": 0.8},
+    "trending": {"black_litterman": 1.3, "mvo": 1.4, "ml": 1.1, "risk_parity": 0.9, "cvar": 1.0},
+    "mean_reverting": {"black_litterman": 1.1, "ml": 1.0, "risk_parity": 1.2, "mvo": 0.9, "cvar": 1.0},
+    "high_vol": {"risk_parity": 1.8, "cvar": 1.5, "black_litterman": 1.0, "mvo": 0.5, "ml": 0.7},
 }
 
 
@@ -141,6 +146,10 @@ class StrategySelector:
             if 'risk_parity' in combined:
                 chosen = 'risk_parity'
                 logger.warning(f"All strategies negative! Forcing risk_parity for safety")
+            elif 'cvar' in combined:
+                # Second safest option
+                chosen = 'cvar'
+                logger.warning(f"All strategies negative! Forcing cvar for safety")
         
         self.history.append({
             "regime": regime,
