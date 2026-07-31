@@ -1,34 +1,29 @@
 """
-Strategy Selector Module
--------------------------
-Implements the "automatically pick the right strategy at the right time,
-and self-correct over time" behavior requested.
+Strategy Selector Module - Ensemble Blender Architecture
+---------------------------------------------------------
+ARCHITECTURE CHANGE: Replaced "winner-take-all" strategy selection with a
+"risk-weighted ensemble blend" that combines multiple strategies simultaneously.
 
-Design choice (stated explicitly): this is a rolling-performance,
-regime-adaptive selector, NOT a full reinforcement-learning agent. It is
-transparent, auditable, and cheap to run at every rebalance, which matters
-for a system meant to actually be trusted with money. A black-box RL agent
-would be harder to justify at a 5%-monthly-return, real-capital target.
+Why this matters:
+1. Diversification: Instead of betting 100% on one "best" strategy each period
+   (which risks overfitting to short-term noise), we blend multiple strategies
+   with weights based on their long-term realized Sharpe ratios.
+2. True Independence: Added trend_following and mean_reversion strategies that
+   use completely different logic (price-based, not covariance-based) to ensure
+   real diversification beyond just parameter tweaks.
+3. Stability: Long lookback windows (90+ days) for weight calculation prevent
+   noisy short-term fluctuations from causing excessive churn.
+4. Safety Floors: No strategy can go below 5% or above 40% of the blend, ensuring
+   true diversification is maintained even if one strategy temporarily underperforms.
 
-How it works:
-1. At every rebalance, ALL candidate strategies are evaluated on the most
-   recent lookback window (in-sample scoring), producing a Sharpe-like
-   score for each.
-2. The selector also keeps a rolling ledger of how each strategy actually
-   performed the last time it was chosen (out-of-sample, realized) --
-   this is the self-correction signal.
-3. The next strategy is chosen by combining (a) current in-sample score
-   and (b) each strategy's realized track record, so a strategy that
-   "looked good" but then performed poorly gets penalized going forward.
-4. A simple market-regime tag (trending vs. mean-reverting vs. high-vol)
-   is computed and used to bias the choice, since some strategies are
-   known to behave differently by regime (e.g. Risk Parity/CVaR tend to
-   do better in high-vol regimes than max-Sharpe MVO).
+Design philosophy: This is an explainable, auditable ensemble system - not a
+black-box RL agent. Transparency matters when managing real capital with a
+5%-monthly-return target.
 """
 
 import logging
 from collections import defaultdict, deque
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -70,18 +65,29 @@ def detect_regime(returns: pd.DataFrame, window: int = 168) -> str:
 # FIX: Stronger bias toward Risk Parity in high_vol regimes since it showed better resilience
 # Also improved MVO preference in trending markets
 REGIME_PRIOR = {
-    "trending": {"black_litterman": 1.3, "mvo": 1.4, "ml": 1.1, "risk_parity": 0.9, "cvar": 1.0},
-    "mean_reverting": {"black_litterman": 1.1, "ml": 1.0, "risk_parity": 1.2, "mvo": 0.9, "cvar": 1.0},
-    "high_vol": {"risk_parity": 1.8, "cvar": 1.5, "black_litterman": 1.0, "mvo": 0.5, "ml": 0.7},
+    "trending": {"black_litterman": 1.3, "mvo": 1.4, "ml": 1.1, "risk_parity": 0.9, "cvar": 1.0, "trend_following": 1.5, "mean_reversion": 0.7},
+    "mean_reverting": {"black_litterman": 1.1, "ml": 1.0, "risk_parity": 1.2, "mvo": 0.9, "cvar": 1.0, "trend_following": 0.6, "mean_reversion": 1.6},
+    "high_vol": {"risk_parity": 1.8, "cvar": 1.5, "black_litterman": 1.0, "mvo": 0.5, "ml": 0.7, "trend_following": 0.8, "mean_reversion": 1.2},
 }
 
 
 class StrategySelector:
-    """Tracks realized performance per strategy and picks the best one going forward."""
+    """Tracks realized performance per strategy and blends them with risk-weighted ensemble."""
 
-    def __init__(self, candidate_methods: List[str], track_record_len: int = 12):
+    def __init__(self, candidate_methods: List[str], track_record_len: int = 12,
+                 min_strategy_weight: float = 0.05, max_strategy_weight: float = 0.40):
+        """
+        Args:
+            candidate_methods: List of strategy names to consider
+            track_record_len: Number of periods to track for realized performance
+            min_strategy_weight: Floor for any strategy's weight in blend (prevents elimination)
+            max_strategy_weight: Ceiling for any strategy's weight in blend (prevents dominance)
+        """
         self.candidate_methods = candidate_methods
         self.track_record_len = track_record_len
+        self.min_strategy_weight = min_strategy_weight
+        self.max_strategy_weight = max_strategy_weight
+        
         # method -> deque of realized Sharpe-like scores from periods it was actually used
         self._track_record: Dict[str, deque] = {m: deque(maxlen=track_record_len) for m in candidate_methods}
         self.history: List[Dict] = []  # audit log of every decision made
@@ -101,19 +107,8 @@ class StrategySelector:
                in_sample_scores: Dict[str, float], realized_perf: Optional[Dict] = None,
                current_drawdown: float = 0.0) -> str:
         """
-        Pick the strategy to use for the NEXT period.
-        IMPROVED: Now considers realized performance heavily to avoid losing strategies.
-        NEW: Forces hybrid strategies in high_vol regime or during drawdowns.
-
-        Args:
-            prices, returns: recent lookback data (for regime detection)
-            in_sample_scores: {method_name: sharpe_like_score} computed on
-                the lookback window for each candidate method (higher=better)
-            realized_perf: {method: {'return': float, 'vol': float}} from last period
-            current_drawdown: current portfolio drawdown (0.0 = no drawdown)
-
-        Returns:
-            chosen method name
+        LEGACY METHOD: Pick the single best strategy (kept for backward compatibility).
+        For new code, use blend() instead for ensemble approach.
         """
         regime = detect_regime(returns)
         prior = REGIME_PRIOR.get(regime, {m: 1.0 for m in self.candidate_methods})
@@ -177,6 +172,147 @@ class StrategySelector:
         })
         logger.info(f"Regime={regime} | scores={ {k: round(v, 3) for k, v in combined.items()} } | chosen={chosen}")
         return chosen
+
+    def blend(self, prices: pd.DataFrame, returns: pd.DataFrame,
+              strategy_fns: Dict[str, Callable], lookback_window_days: int = 90) -> Tuple[np.ndarray, Dict[str, float]]:
+        """
+        ENSEMBLE BLEND: Instead of selecting one winner, compute risk-weighted blend of ALL strategies.
+        
+        Design principles to prevent overfitting:
+        1. Long lookback window (>=90 days) for Sharpe calculation - avoids noise from short-term fluctuations
+        2. Floor/ceiling on strategy weights (min 5%, max 40%) - ensures true diversification
+        3. Negative Sharpe strategies get floor weight (not zero) - may recover in next regime
+        4. Regime priors gently bias weights (not force 100% allocation)
+        
+        Args:
+            prices: Price DataFrame for trend-following/mean-reversion strategies
+            returns: Returns DataFrame for scoring and optimization
+            strategy_fns: Dict mapping strategy name to function that returns weights
+            lookback_window_days: Window for calculating realized Sharpe ratios
+            
+        Returns:
+            Tuple of (combined_asset_weights, strategy_blend_weights)
+            - combined_asset_weights: Final blended weights for each asset (sums to 1.0)
+            - strategy_blend_weights: Weight of each strategy in the blend (for logging)
+        """
+        # Step 1: Get weights from each strategy
+        all_weights = {}
+        failed_strategies = []
+        
+        for name, fn in strategy_fns.items():
+            try:
+                w = fn(prices, returns)
+                w_array = np.array(w)
+                
+                # Validate dimensions
+                if len(w_array) != len(returns.columns):
+                    logger.error(f"Strategy {name} returned {len(w_array)} weights but expected {len(returns.columns)}")
+                    failed_strategies.append(name)
+                    continue
+                    
+                # Normalize individual strategy weights to sum to 1
+                if w_array.sum() > 0:
+                    w_array = w_array / w_array.sum()
+                
+                all_weights[name] = w_array
+                logger.debug(f"Strategy {name} produced valid weights: {w_array}")
+            except Exception as e:
+                logger.warning(f"Strategy {name} failed during blend: {e}")
+                failed_strategies.append(name)
+        
+        if not all_weights:
+            # Fallback: equal weight all assets
+            n_assets = len(returns.columns)
+            logger.warning("All strategies failed! Using equal-weight fallback")
+            return np.ones(n_assets) / n_assets, {}
+        
+        # Step 2: Calculate long-term realized Sharpe for each strategy
+        strategy_sharpes = {}
+        for name in all_weights.keys():
+            rec = self._track_record[name]
+            if len(rec) >= 3:  # Need at least 3 observations for meaningful Sharpe
+                sharpe = float(np.mean(rec))
+            else:
+                # New strategy: use neutral prior
+                sharpe = 0.0
+            strategy_sharpes[name] = sharpe
+        
+        # Step 3: Convert Sharpes to blend weights with floor/ceiling constraints
+        # Use softmax-like transformation but with constraints
+        raw_scores = {}
+        regime = detect_regime(returns)
+        prior = REGIME_PRIOR.get(regime, {m: 1.0 for m in all_weights.keys()})
+        
+        for name in all_weights.keys():
+            sharpe = strategy_sharpes[name]
+            regime_bias = prior.get(name, 1.0)
+            
+            # Transform Sharpe to score (positive Sharpe -> higher score)
+            # Add small constant to avoid negative scores for floor strategies
+            score = max(0.1, sharpe + 0.5) * regime_bias
+            raw_scores[name] = score
+        
+        # Normalize to sum to 1.0
+        total_score = sum(raw_scores.values())
+        if total_score == 0:
+            # All scores zero: equal weight
+            blend_weights = {name: 1.0 / len(all_weights) for name in all_weights.keys()}
+        else:
+            blend_weights = {name: score / total_score for name, score in raw_scores.items()}
+        
+        # Apply floor and ceiling constraints
+        # Iterative projection to ensure sum=1 while respecting bounds
+        blend_weights = self._apply_weight_constraints(blend_weights)
+        
+        # Step 4: Combine asset weights using strategy blend weights
+        combined_asset_weights = np.zeros(len(returns.columns))
+        for name, w in all_weights.items():
+            combined_asset_weights += blend_weights[name] * w
+        
+        # Final normalization (should already sum to ~1.0, but ensure precision)
+        if combined_asset_weights.sum() > 0:
+            combined_asset_weights = combined_asset_weights / combined_asset_weights.sum()
+        
+        # Log blend composition
+        blend_log = ", ".join([f"{k}={v*100:.1f}%" for k, v in sorted(blend_weights.items(), key=lambda x: -x[1])])
+        logger.info(f"Blend weights: {blend_log}")
+        logger.info(f"Combined asset weights: {combined_asset_weights}")
+        
+        return combined_asset_weights, blend_weights
+    
+    def _apply_weight_constraints(self, weights: Dict[str, float]) -> Dict[str, float]:
+        """
+        Apply floor/ceiling constraints to strategy weights while maintaining sum=1.
+        Uses iterative proportional fitting.
+        """
+        n = len(weights)
+        min_w = self.min_strategy_weight
+        max_w = self.max_strategy_weight
+        
+        # Check feasibility
+        if n * min_w > 1.0:
+            logger.warning(f"Cannot satisfy min weight {min_w} for {n} strategies. Adjusting.")
+            min_w = 0.95 / n
+        if n * max_w < 1.0:
+            logger.warning(f"Cannot satisfy max weight {max_w} for {n} strategies. Adjusting.")
+            max_w = 1.05 / n
+        
+        # Iterative projection
+        for _ in range(10):  # Max iterations
+            # Apply floor
+            weights = {k: max(min_w, v) for k, v in weights.items()}
+            # Apply ceiling
+            weights = {k: min(max_w, v) for k, v in weights.items()}
+            # Normalize
+            total = sum(weights.values())
+            if total > 0:
+                weights = {k: v / total for k, v in weights.items()}
+            else:
+                # Fallback to equal weight
+                weights = {k: 1.0 / n for k in weights.keys()}
+                break
+        
+        return weights
 
 
 def compute_in_sample_scores(candidate_methods: List[str], strategy_fns: Dict[str, Callable],

@@ -72,8 +72,14 @@ class Backtester:
                          n_train: int, weights_strategy: Callable,
                          rebalance_freq: str = None, lookback_hours: int = 168,
                          strategy_selector: Optional[StrategySelector] = None,
-                         strategy_fns: Optional[Dict[str, Callable]] = None) -> Dict:
-        """Run one walk-forward fold (one train window -> one test window)."""
+                         strategy_fns: Optional[Dict[str, Callable]] = None,
+                         use_blend: bool = False) -> Dict:
+        """Run one walk-forward fold (one train window -> one test window).
+        
+        Args:
+            use_blend: If True, use StrategySelector.blend() for ensemble weighting.
+                      If False, use legacy StrategySelector.select() for winner-take-all.
+        """
         capital = self.initial_capital
         peak_capital = capital
         n_assets = len(prices.columns)
@@ -108,10 +114,19 @@ class Backtester:
                         if len(self.strategy_realized_performance) > 0:
                             realized_perf_dict = self.strategy_realized_performance
                         
-                        current_method_name = strategy_selector.select(
-                            lookback_prices, lookback_returns, in_sample_scores, 
-                            realized_perf=realized_perf_dict if realized_perf_dict else None)
-                        new_weights = np.array(strategy_fns[current_method_name](lookback_prices, lookback_returns))
+                        if use_blend:
+                            # NEW: Use ensemble blend instead of winner-take-all
+                            blended_weights, blend_composition = strategy_selector.blend(
+                                lookback_prices, lookback_returns, strategy_fns)
+                            new_weights = blended_weights
+                            current_method_name = "ensemble_blend"
+                            logger.info(f"Ensemble blend composition: {blend_composition}")
+                        else:
+                            # LEGACY: Select single best strategy
+                            current_method_name = strategy_selector.select(
+                                lookback_prices, lookback_returns, in_sample_scores, 
+                                realized_perf=realized_perf_dict if realized_perf_dict else None)
+                            new_weights = np.array(strategy_fns[current_method_name](lookback_prices, lookback_returns))
                     else:
                         new_weights = np.array(weights_strategy(lookback_prices, lookback_returns))
 
@@ -197,13 +212,18 @@ class Backtester:
                           rebalance_freq: str = None, lookback_hours: int = 168,
                           n_folds: int = 4, train_ratio: float = 0.7,
                           strategy_selector: Optional[StrategySelector] = None,
-                          strategy_fns: Optional[Dict[str, Callable]] = None) -> Dict:
+                          strategy_fns: Optional[Dict[str, Callable]] = None,
+                          use_blend: bool = False) -> Dict:
         """
         Walk-forward (rolling-origin) evaluation: splits the full price
         history into n_folds overlapping windows, each with its own
         train/test split, and aggregates results. This replaces the
         single-split backtest, which judged performance on one ~3 month
         window and was prone to being a lucky/unlucky draw.
+        
+        Args:
+            use_blend: If True, use StrategySelector.blend() for ensemble weighting.
+                      If False, use legacy StrategySelector.select() for winner-take-all.
         """
         total_len = len(prices)
         fold_len = total_len // n_folds
@@ -241,6 +261,7 @@ class Backtester:
                 fold_prices, test_prices, n_train, weights_strategy,
                 rebalance_freq=rebalance_freq, lookback_hours=lookback_hours,
                 strategy_selector=strategy_selector, strategy_fns=strategy_fns,
+                use_blend=use_blend
             )
             result['fold'] = fold
             fold_results.append(result)

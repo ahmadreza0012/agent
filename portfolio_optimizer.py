@@ -606,6 +606,194 @@ class PortfolioOptimizer:
         }
 
 
+def trend_following_strategy(prices: pd.DataFrame, returns: pd.DataFrame, 
+                               short_window: int = 20, long_window: int = 100) -> np.ndarray:
+    """
+    Trend-following strategy based on moving average crossovers.
+    
+    Logic:
+    - For each risky asset (not CASH), calculate 20-day and 100-day simple moving averages
+    - If MA20 > MA100: asset is in uptrend -> assign weight proportional to trend strength
+    - If MA20 <= MA100: asset is in downtrend -> assign near-zero weight
+    - If no assets are in uptrend: allocate heavily to CASH (60%+)
+    
+    This strategy uses ONLY raw price data - no covariance or expected returns -
+    ensuring true independence from covariance-based methods.
+    
+    Args:
+        prices: Price DataFrame (columns: asset names including CASH)
+        returns: Returns DataFrame (same columns)
+        short_window: Short-term MA window (default 20 days/periods)
+        long_window: Long-term MA window (default 100 days/periods)
+        
+    Returns:
+        Array of weights for each asset (including CASH)
+    """
+    n_assets = len(returns.columns)
+    weights = np.zeros(n_assets)
+    
+    # Identify CASH column (if exists) - typically last column or named 'CASH'
+    cash_col_idx = None
+    if 'CASH' in returns.columns:
+        cash_col_idx = returns.columns.get_loc('CASH')
+    elif prices.columns[-1] == 'CASH':
+        cash_col_idx = n_assets - 1
+    
+    # Calculate moving averages for each asset
+    trend_strengths = {}
+    for i, col in enumerate(returns.columns):
+        if i == cash_col_idx:
+            continue  # Skip CASH
+            
+        if len(prices[col]) < long_window:
+            # Not enough data: neutral
+            trend_strengths[i] = 0.0
+            continue
+            
+        ma_short = prices[col].rolling(window=short_window).mean().iloc[-1]
+        ma_long = prices[col].rolling(window=long_window).mean().iloc[-1]
+        
+        if ma_long > 0:
+            # Trend strength = percentage above long MA
+            strength = (ma_short / ma_long) - 1.0
+            # Only consider positive trends
+            if strength > 0:
+                trend_strengths[i] = strength
+            else:
+                trend_strengths[i] = 0.0
+        else:
+            trend_strengths[i] = 0.0
+    
+    # Check if any asset has positive trend
+    total_strength = sum(trend_strengths.values())
+    
+    if total_strength > 0 and len(trend_strengths) > 0:
+        # Allocate to trending assets proportionally to strength
+        for idx, strength in trend_strengths.items():
+            if strength > 0:
+                weights[idx] = strength / total_strength
+        
+        # Scale to leave some cash buffer (max 80% to risky assets)
+        risky_allocation = min(0.8, total_strength * 2.0)
+        weights = weights * risky_allocation
+        
+        # Remainder to CASH
+        if cash_col_idx is not None:
+            weights[cash_col_idx] = 1.0 - weights.sum()
+        else:
+            # No CASH column: normalize to sum to 1
+            if weights.sum() > 0:
+                weights = weights / weights.sum()
+    else:
+        # No trends detected: go heavily to cash
+        logger.info("Trend-following: No uptrends detected, allocating 70% to CASH")
+        if cash_col_idx is not None:
+            weights[cash_col_idx] = 0.70
+            # Distribute remaining 30% equally among risky assets
+            risky_mask = np.ones(n_assets, dtype=bool)
+            if cash_col_idx is not None:
+                risky_mask[cash_col_idx] = False
+            if risky_mask.sum() > 0:
+                weights[risky_mask] = 0.30 / risky_mask.sum()
+        else:
+            # No CASH: equal weight
+            weights = np.ones(n_assets) / n_assets
+    
+    return weights
+
+
+def mean_reversion_strategy(prices: pd.DataFrame, returns: pd.DataFrame,
+                             lookback_window: int = 50, z_score_threshold: float = 1.5) -> np.ndarray:
+    """
+    Mean-reversion strategy based on z-score of price deviation from moving average.
+    
+    Logic:
+    - For each asset, calculate z-score of current price vs 50-day moving average
+    - Oversold (z < -threshold): buy signal -> higher weight
+    - Overbought (z > +threshold): sell signal -> lower weight
+    - Neutral (|z| < threshold): moderate weight
+    
+    This strategy is independent of covariance-based methods - uses only price statistics.
+    
+    Args:
+        prices: Price DataFrame
+        returns: Returns DataFrame
+        lookback_window: Window for calculating mean and std (default 50)
+        z_score_threshold: Threshold for oversold/overbought signals
+        
+    Returns:
+        Array of weights for each asset
+    """
+    n_assets = len(returns.columns)
+    weights = np.zeros(n_assets)
+    scores = []
+    
+    # Identify CASH column
+    cash_col_idx = None
+    if 'CASH' in returns.columns:
+        cash_col_idx = returns.columns.get_loc('CASH')
+    
+    for i, col in enumerate(returns.columns):
+        if i == cash_col_idx:
+            scores.append(0.0)  # CASH gets neutral score
+            continue
+        
+        if len(prices[col]) < lookback_window:
+            scores.append(0.0)
+            continue
+        
+        # Calculate z-score
+        ma = prices[col].rolling(window=lookback_window).mean().iloc[-1]
+        std = prices[col].rolling(window=lookback_window).std().iloc[-1]
+        current_price = prices[col].iloc[-1]
+        
+        if std > 0:
+            z_score = (current_price - ma) / std
+        else:
+            z_score = 0.0
+        
+        # Convert z-score to allocation score (inverse relationship)
+        # Negative z (oversold) -> positive score (buy)
+        # Positive z (overbought) -> negative score (sell/avoid)
+        if z_score < -z_score_threshold:
+            # Oversold: strong buy signal
+            score = abs(z_score)  # More oversold = higher score
+        elif z_score > z_score_threshold:
+            # Overbought: avoid or underweight
+            score = 0.1  # Minimal weight
+        else:
+            # Neutral zone: moderate weight inversely proportional to z
+            score = max(0.2, 1.0 - abs(z_score))
+        
+        scores.append(score)
+    
+    # Convert scores to weights
+    total_score = sum(scores)
+    
+    if total_score > 0:
+        score_idx = 0
+        for i in range(n_assets):
+            if i == cash_col_idx:
+                continue
+            weights[i] = scores[score_idx] / total_score
+            score_idx += 1
+        
+        # Leave 20% cash buffer
+        weights = weights * 0.80
+        
+        if cash_col_idx is not None:
+            weights[cash_col_idx] = 1.0 - weights.sum()
+    else:
+        # All scores zero: equal weight
+        weights = np.ones(n_assets) / n_assets
+    
+    return weights
+
+
+# Add new strategies to module exports
+__all__ = ['PortfolioOptimizer', 'trend_following_strategy', 'mean_reversion_strategy']
+
+
 def main():
     """Self-test: verifies the CVaR fix actually links u to portfolio losses."""
     np.random.seed(42)
