@@ -114,6 +114,21 @@ class Backtester:
                             new_weights = blended_weights
                             current_method_name = "ensemble_blend"
                             logger.info(f"Ensemble blend composition: {blend_composition}")
+                            
+                            # CRITICAL FIX: Store individual strategy weights for later performance attribution
+                            # We need these to calculate hypothetical returns for each strategy at period end
+                            all_individual_weights = {}
+                            for name, fn in strategy_fns.items():
+                                try:
+                                    w = fn(lookback_prices, lookback_returns)
+                                    w_array = np.array(w)
+                                    if len(w_array) == len(lookback_returns.columns):
+                                        if w_array.sum() > 0:
+                                            w_array = w_array / w_array.sum()
+                                        all_individual_weights[name] = w_array
+                                except Exception as e:
+                                    logger.warning(f"Failed to get weights for {name} during blend setup: {e}")
+                            rebalance_events[-1]['individual_weights'] = all_individual_weights
                         else:
                             # LEGACY: Select single best strategy
                             in_sample_scores = compute_in_sample_scores(
@@ -183,22 +198,56 @@ class Backtester:
         metrics = self.calculate_metrics(pv_df, daily_returns, rebalance_events)
         
         # Record realized performance for strategy selector (for adaptive learning)
-        # IMPROVED: Record ALL strategies, not just the chosen one
+        # CRITICAL FIX: In ensemble blend mode, record performance for EACH strategy individually
+        # so the self-correcting feedback loop actually works (not just recording "ensemble_blend")
         if strategy_selector is not None and len(daily_returns) > 0:
             returns_series = pd.Series(daily_returns)
-            realized_return = returns_series.mean() * len(returns_series)  # Total return over period
-            realized_vol = returns_series.std() * np.sqrt(len(returns_series))  # Volatility over period
             
-            # Record for the chosen strategy
-            if current_method_name is not None and realized_vol > 0:
-                strategy_selector.record_realized_performance(current_method_name, realized_return, realized_vol)
-                logger.info(f"Recorded realized performance for {current_method_name}: return={realized_return:.4f}, vol={realized_vol:.4f}")
+            if use_blend and len(rebalance_events) > 0 and 'individual_weights' in rebalance_events[-1]:
+                # ENSEMBLE MODE: Calculate hypothetical performance for each strategy
+                individual_weights_dict = rebalance_events[-1]['individual_weights']
                 
-                # Store in backtester for next iteration's selector
-                self.strategy_realized_performance[current_method_name] = {
+                for name, ind_weights in individual_weights_dict.items():
+                    # Calculate what return this strategy would have achieved if used alone
+                    hypothetical_daily_returns = np.dot(returns_series.values.reshape(-1, 1), ind_weights.reshape(-1, 1)).flatten()
+                    hyp_returns_series = pd.Series(hypothetical_daily_returns)
+                    
+                    hypothetical_realized_return = hyp_returns_series.mean() * len(hyp_returns_series)
+                    hypothetical_realized_vol = hyp_returns_series.std() * np.sqrt(len(hyp_returns_series))
+                    
+                    if hypothetical_realized_vol > 0:
+                        strategy_selector.record_realized_performance(name, hypothetical_realized_return, hypothetical_realized_vol)
+                        logger.info(f"[BLEND] Recorded hypothetical performance for {name}: return={hypothetical_realized_return:.4f}, vol={hypothetical_realized_vol:.4f}")
+                        
+                        # Store in backtester for next iteration's selector
+                        self.strategy_realized_performance[name] = {
+                            'return': hypothetical_realized_return,
+                            'vol': hypothetical_realized_vol
+                        }
+                
+                # Also record the actual ensemble blend performance
+                realized_return = returns_series.mean() * len(returns_series)
+                realized_vol = returns_series.std() * np.sqrt(len(returns_series))
+                strategy_selector.record_realized_performance("ensemble_blend", realized_return, realized_vol)
+                logger.info(f"Recorded actual ensemble blend performance: return={realized_return:.4f}, vol={realized_vol:.4f}")
+                self.strategy_realized_performance["ensemble_blend"] = {
                     'return': realized_return,
                     'vol': realized_vol
                 }
+            else:
+                # LEGACY MODE (winner-take-all): Record only for the chosen strategy
+                realized_return = returns_series.mean() * len(returns_series)
+                realized_vol = returns_series.std() * np.sqrt(len(returns_series))
+                
+                if current_method_name is not None and realized_vol > 0:
+                    strategy_selector.record_realized_performance(current_method_name, realized_return, realized_vol)
+                    logger.info(f"Recorded realized performance for {current_method_name}: return={realized_return:.4f}, vol={realized_vol:.4f}")
+                    
+                    # Store in backtester for next iteration's selector
+                    self.strategy_realized_performance[current_method_name] = {
+                        'return': realized_return,
+                        'vol': realized_vol
+                    }
         
         return {
             'portfolio_values': pv_df,
