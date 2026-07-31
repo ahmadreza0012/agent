@@ -100,10 +100,21 @@ def run_trading_cycle():
         data_fetcher = DataFetcher(symbols=symbols)
         ai_sentiment = AISentiment()
         
+        # Fetch price data and add CASH column
+        raw_data = data_fetcher.fetch_all_symbols(since_days=since_days)
+        df_prices = data_fetcher.align_data(raw_data)
+        # Add CASH column (constant value = 1.0, representing stable asset)
+        import pandas as pd
+        cash_column = pd.DataFrame([1.0] * len(df_prices), index=df_prices.index, columns=['CASH'])
+        df_prices_with_cash = pd.concat([df_prices, cash_column], axis=1)
+        
         # FIX: Define strategy functions FIRST, then build candidate_methods from them,
         # then construct StrategySelector with the complete list to avoid KeyError in blend()
         # Import new strategies
         from portfolio_optimizer import trend_following_strategy, mean_reversion_strategy
+        
+        n_assets = len(df_prices_with_cash.columns)  # Includes CASH
+        optimizer = PortfolioOptimizer(n_assets=n_assets)
         
         def mvo_strategy(prices, returns):
             return optimizer.mean_variance_optimization(np.array([0.1]*n_assets), returns.cov().values)
