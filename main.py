@@ -100,76 +100,10 @@ def run_trading_cycle():
         data_fetcher = DataFetcher(symbols=symbols)
         ai_sentiment = AISentiment()
         
-        # Check if GROQ_API_KEY is available and warn if not
-        import os
-        groq_key = os.environ.get("GROQ_API_KEY")
-        if not groq_key:
-            logger.warning("="*60)
-            logger.warning("WARNING: GROQ_API_KEY not found in environment variables!")
-            logger.warning("Black-Litterman will run with MOCK sentiment (momentum-based, not AI/news).")
-            logger.warning("Add GROQ_API_KEY to Railway environment variables for real AI sentiment.")
-            logger.warning("="*60)
-        
-        # FIX: Include all strategies for adaptive selection (including hybrid arb strategies)
-        candidate_methods = [
-            'mvo', 
-            'risk_parity', 
-            'cvar', 
-            'black_litterman', 
-            'ml',
-            'hybrid_mvo_arb',      # MVO + Funding Rate Arbitrage
-            'hybrid_risk_parity_arb'  # Risk Parity + Funding Rate Arbitrage
-        ]
-        strategy_selector = StrategySelector(candidate_methods=candidate_methods)
-        # FIX: Use improved backtester settings (bi-weekly rebalance, lower DD threshold)
-        # IMPROVED: Even more conservative risk management (tighter controls based on testing)
-        backtester = Backtester(initial_capital=initial_capital, 
-                                 max_drawdown_circuit_breaker=0.08,  # Trigger earlier at 8% DD
-                                 circuit_breaker_derisk_factor=0.2,  # Cut to 20% exposure when triggered
-                                 rebalance_frequency_weeks=2)
-
-        logger.info("STEP 1: Fetching Historical Data")
-        
-        df_prices = data_fetcher.fetch_all_symbols(timeframe='1d', since_days=since_days)
-        if not df_prices:
-            logger.error("Failed to fetch data. Sleeping for 1 hour.")
-            auto_logger.log_error("data_fetch_failed", "Failed to fetch price data", {"symbols": symbols})
-            system_state["status"] = "error_no_data"
-            time.sleep(3600)
-            return
-        
-        # Align the data
-        df_prices_aligned = data_fetcher.align_data(df_prices)
-        df_prices = df_prices_aligned
-        
-        logger.info(f"Data fetched: {df_prices.index[0]} to {df_prices.index[-1]}, {len(df_prices)} obs")
-        auto_logger.log_event("data_fetched", {
-            "start_date": str(df_prices.index[0]),
-            "end_date": str(df_prices.index[-1]),
-            "observations": len(df_prices),
-            "symbols": list(df_prices.columns)
-        })
-
-        logger.info("STEP 2: Walk-forward backtest & Optimization")
-
-        # FEATURE 1: Add CASH column to prices (not just returns) so it flows through the entire backtest
-        # This ensures that when backtester does prices.pct_change(), CASH is included with ~0 return
-        # We add a synthetic CASH asset with constant price (1.0) - zero return, zero variance
-        df_prices_with_cash = df_prices.copy()
-        df_prices_with_cash['CASH'] = 1.0  # Constant price = zero return
-        logger.info("Added CASH column to prices for defensive allocation (constant price=1.0)")
-        
-        # Calculate returns for the optimizer (includes CASH column)
-        returns = data_fetcher.calculate_returns(df_prices_with_cash, add_cash_column=True)
-        
-        # FIX: Initialize optimizer with correct parameters AFTER we have data
-        # IMPORTANT: Use returns.columns (which includes CASH) not df_prices.columns
-        # to avoid dimension mismatch between optimizer and actual data
-        n_assets = len(returns.columns)
-        optimizer = PortfolioOptimizer(n_assets=n_assets, asset_names=list(returns.columns))
-        
-        # Create strategy functions dictionary for the backtester
-        from strategy_selector import compute_in_sample_scores
+        # FIX: Define strategy functions FIRST, then build candidate_methods from them,
+        # then construct StrategySelector with the complete list to avoid KeyError in blend()
+        # Import new strategies
+        from portfolio_optimizer import trend_following_strategy, mean_reversion_strategy
         
         def mvo_strategy(prices, returns):
             return optimizer.mean_variance_optimization(np.array([0.1]*n_assets), returns.cov().values)
@@ -255,9 +189,6 @@ def run_trading_cycle():
             # Run MVO with ML-based expected returns
             return optimizer.mean_variance_optimization(ml_expected_returns, cov_matrix, method='max_sharpe')
         
-        # Import new strategies
-        from portfolio_optimizer import trend_following_strategy, mean_reversion_strategy
-        
         strategy_fns = {
             'mvo': mvo_strategy,
             'risk_parity': risk_parity_strategy,
@@ -268,7 +199,10 @@ def run_trading_cycle():
             'mean_reversion': mean_reversion_strategy
         }
         
+        # FIX: Build candidate_methods from strategy_fns.keys() AFTER all strategies are defined
         candidate_methods = list(strategy_fns.keys())
+        # FIX: Construct StrategySelector AFTER strategy_fns is complete to avoid KeyError
+        strategy_selector = StrategySelector(candidate_methods=candidate_methods)
 
         # Run Backtest & Optimization Logic
         results = backtester.run_walk_forward(
