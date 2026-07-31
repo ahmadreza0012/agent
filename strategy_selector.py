@@ -227,9 +227,11 @@ class StrategySelector:
             return np.ones(n_assets) / n_assets, {}
         
         # Step 2: Calculate long-term realized Sharpe for each strategy
+        # FIX: Use .setdefault() to auto-create deque for strategies not in original candidate_methods
+        # This prevents KeyError when strategy_fns has more strategies than initial candidate_methods
         strategy_sharpes = {}
         for name in all_weights.keys():
-            rec = self._track_record[name]
+            rec = self._track_record.setdefault(name, deque(maxlen=self.track_record_len))
             if len(rec) >= 3:  # Need at least 3 observations for meaningful Sharpe
                 sharpe = float(np.mean(rec))
             else:
