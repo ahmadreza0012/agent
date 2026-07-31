@@ -204,8 +204,8 @@ def run_trading_cycle():
         # FIX: Construct StrategySelector AFTER strategy_fns is complete to avoid KeyError
         strategy_selector = StrategySelector(candidate_methods=candidate_methods)
 
-        # FIX: Instantiate Backtester before using it
-        backtester = Backtester(initial_capital=initial_capital, n_folds=n_folds)
+        # FIX: Instantiate Backtester (n_folds is for run_walk_forward, not __init__)
+        backtester = Backtester(initial_capital=initial_capital)
 
         # Run Backtest & Optimization Logic
         results = backtester.run_walk_forward(
