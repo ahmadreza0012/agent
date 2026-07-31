@@ -204,6 +204,9 @@ def run_trading_cycle():
         # FIX: Construct StrategySelector AFTER strategy_fns is complete to avoid KeyError
         strategy_selector = StrategySelector(candidate_methods=candidate_methods)
 
+        # FIX: Instantiate Backtester before using it
+        backtester = Backtester(initial_capital=initial_capital, n_folds=n_folds)
+
         # Run Backtest & Optimization Logic
         results = backtester.run_walk_forward(
             prices=df_prices_with_cash,  # Use prices WITH CASH column so it flows into internal return calculations
