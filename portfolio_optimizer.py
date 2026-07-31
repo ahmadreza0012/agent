@@ -35,13 +35,122 @@ class PortfolioOptimizer:
     """
     Multi-strategy portfolio optimizer.
     Supports: Mean-Variance (Markowitz), Black-Litterman with AI views,
-    Risk Parity, CVaR-constrained optimization (fixed), ML-based forecasting.
+    Risk Parity, CVaR-constrained optimization (fixed), ML-based forecasting,
+    and Funding Rate Arbitrage (v3).
     """
 
     def __init__(self, n_assets: int, asset_names: List[str] = None):
         self.n_assets = n_assets
         self.asset_names = asset_names or [f"Asset_{i}" for i in range(n_assets)]
         logger.info(f"Initialized optimizer for {n_assets} assets")
+    
+    def simulate_arb_returns(self, n_days: int = 30, base_rate: float = 0.0003) -> np.ndarray:
+        """
+        Simulate daily funding rate arbitrage returns.
+        Returns: array of daily returns (market-neutral strategy)
+        
+        Typical funding rates: 0.01-0.03% per day (0.0001-0.0003)
+        In high volatility regimes: can reach 0.05-0.1% per day
+        """
+        np.random.seed(42)  # For reproducibility in backtests
+        # Base return + volatility
+        daily_returns = np.random.normal(base_rate, base_rate * 0.5, n_days)
+        # Ensure positive skew (funding rates typically positive in crypto)
+        daily_returns = np.abs(daily_returns) * np.sign(np.random.randn(n_days) + 2)
+        return daily_returns
+    
+    def calculate_arb_allocation(self, regime: str, drawdown: float = 0.0, 
+                                  vol_target: float = 0.15) -> float:
+        """
+        Calculate optimal allocation to funding rate arbitrage based on market regime.
+        
+        Args:
+            regime: Market regime ('high_vol', 'trending', 'normal')
+            drawdown: Current portfolio drawdown (0.0 = no drawdown)
+            vol_target: Target portfolio volatility
+        
+        Returns:
+            Allocation percentage to arb (0.0 to 0.7)
+        """
+        # Base allocation
+        base_alloc = 0.30  # 30% default to arb
+        
+        if regime == 'high_vol':
+            # High volatility: increase hedge via arb
+            alloc = min(0.70, base_alloc + 0.30)
+        elif regime == 'trending':
+            # Strong trend: reduce hedge, maximize directional exposure
+            alloc = max(0.10, base_alloc - 0.20)
+        else:  # normal
+            alloc = base_alloc
+        
+        # Override if in drawdown crisis
+        if drawdown > 0.08:  # >8% drawdown
+            alloc = 0.70  # Maximum hedge
+        
+        logger.info(f"Arb allocation: {alloc:.1%} (regime={regime}, drawdown={drawdown:.2%})")
+        return alloc
+    
+    def hybrid_optimization(self, returns: pd.DataFrame, regime: str,
+                            drawdown: float = 0.0, vol_target: float = 0.15) -> Tuple[np.ndarray, dict]:
+        """
+        Hybrid optimization: combines directional strategies with funding rate arbitrage.
+        
+        Returns:
+            weights: Combined portfolio weights (risky assets + cash + arb)
+            info: Dictionary with allocation breakdown
+        """
+        # Step 1: Calculate arb allocation based on regime
+        arb_alloc = self.calculate_arb_allocation(regime, drawdown, vol_target)
+        
+        # Step 2: Get directional weights (use MVO as base)
+        cov_matrix = returns.cov().values * 24 * 365
+        expected_returns = returns.mean().values * 24 * 365
+        
+        # Run MVO on risky assets only (exclude CASH column if present)
+        risky_mask = self._get_risky_asset_mask()
+        risky_returns = returns.loc[:, risky_mask]
+        risky_cov = risky_returns.cov().values * 24 * 365
+        risky_exp_ret = risky_returns.mean().values * 24 * 365
+        risky_asset_names = [self.asset_names[i] for i in range(len(self.asset_names)) if risky_mask[i]]
+        
+        if len(risky_exp_ret) > 0:
+            # Create a temporary optimizer for risky assets only
+            temp_optimizer = PortfolioOptimizer(len(risky_exp_ret), risky_asset_names)
+            directional_weights_risky = temp_optimizer.mean_variance_optimization(
+                risky_exp_ret, risky_cov, risk_free_rate=0.02
+            )
+        else:
+            directional_weights_risky = np.ones(len(risky_mask)) / len(risky_mask)
+        
+        # Step 3: Scale directional weights by (1 - arb_alloc)
+        remaining_alloc = 1.0 - arb_alloc
+        scaled_directional = directional_weights_risky * remaining_alloc
+        
+        # Step 4: Construct final weights
+        # We need to insert arb as a separate "asset" conceptually
+        # For simplicity, we treat arb as generating alpha without capital占用
+        # In practice, arb uses capital but is market-neutral
+        
+        # Final weights: directional only (arb is overlay)
+        final_weights = np.zeros(self.n_assets)
+        final_weights[risky_mask] = scaled_directional
+        
+        # If CASH exists, it gets the remainder
+        cash_mask = ~risky_mask
+        if cash_mask.any():
+            final_weights[cash_mask] = remaining_alloc - scaled_directional.sum()
+        
+        info = {
+            'arb_allocation': arb_alloc,
+            'directional_allocation': remaining_alloc,
+            'regime': regime,
+            'expected_arb_return': np.mean(self.simulate_arb_returns(30)) * 24 * 30,  # Monthly
+            'strategy': 'hybrid_mvo_arb'
+        }
+        
+        logger.info(f"Hybrid optimization: {info}")
+        return final_weights, info
     
     def _get_risky_asset_mask(self) -> np.ndarray:
         """
