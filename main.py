@@ -247,20 +247,28 @@ def run_trading_cycle():
             # Run MVO with ML-based expected returns
             return optimizer.mean_variance_optimization(ml_expected_returns, cov_matrix, method='max_sharpe')
         
+        # Import new strategies
+        from portfolio_optimizer import trend_following_strategy, mean_reversion_strategy
+        
         strategy_fns = {
             'mvo': mvo_strategy,
             'risk_parity': risk_parity_strategy,
             'cvar': cvar_strategy,
             'black_litterman': black_litterman_strategy,
-            'ml': ml_strategy
+            'ml': ml_strategy,
+            'trend_following': trend_following_strategy,
+            'mean_reversion': mean_reversion_strategy
         }
+        
+        candidate_methods = list(strategy_fns.keys())
 
         # Run Backtest & Optimization Logic
         results = backtester.run_walk_forward(
             prices=df_prices_with_cash,  # Use prices WITH CASH column so it flows into internal return calculations
             n_folds=n_folds,
             strategy_selector=strategy_selector,
-            strategy_fns=strategy_fns
+            strategy_fns=strategy_fns,
+            use_blend=True  # NEW: Use ensemble blend instead of winner-take-all selection
         )
 
         # Analyze Results
