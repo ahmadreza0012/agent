@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import re
+import time
 from collections import deque
 from typing import Dict, List, Optional, Tuple
 
@@ -211,16 +212,40 @@ No explanation, just the number.
                         symbols: List[str]) -> Tuple[np.ndarray, np.ndarray]:
         logger.info(f"Generating Black-Litterman views (mode={'MOCK' if self.use_mock else 'REAL news+LLM'})")
 
+        # Rate limiting cache: track which symbols have already been processed
+        # in this trading cycle to avoid duplicate Groq calls
+        if not hasattr(self, '_sentiment_cache'):
+            self._sentiment_cache = {}
+        
         if self.use_mock:
             sentiment = self.generate_mock_sentiment(prices)
             latest_sentiment = sentiment.iloc[-1].values
         else:
             all_headlines = self.news_fetcher.fetch_all()
-            latest_sentiment = np.array([
-                self.generate_real_sentiment(sym, self.news_fetcher.get_headlines_for_symbol(
-                    self._normalize_symbol(sym), all_headlines))
-                for sym in symbols
-            ])
+            latest_sentiment = []
+            
+            for sym in symbols:
+                # Check cache first - if we've already analyzed this symbol in this cycle, reuse
+                if sym in self._sentiment_cache:
+                    logger.info(f"[CACHE HIT] Reusing cached sentiment for {sym}")
+                    latest_sentiment.append(self._sentiment_cache[sym])
+                    continue
+                
+                # Generate real sentiment with rate limiting
+                sentiment_score = self.generate_real_sentiment(
+                    sym, self.news_fetcher.get_headlines_for_symbol(
+                        self._normalize_symbol(sym), all_headlines))
+                
+                # Cache the result for this symbol
+                self._sentiment_cache[sym] = sentiment_score
+                latest_sentiment.append(sentiment_score)
+                
+                # Add rate limiting delay between Groq API calls to prevent 429 errors
+                # This is critical when processing multiple symbols (BTC, ETH, XRP, etc.)
+                # as each one makes a separate Groq call
+                time.sleep(1.5)  # 1.5 second delay between consecutive API calls
+            
+            latest_sentiment = np.array(latest_sentiment)
 
         n_assets = len(symbols)
         P = np.eye(n_assets)

@@ -106,16 +106,9 @@ class Backtester:
 
                 try:
                     if strategy_selector is not None and strategy_fns is not None:
-                        in_sample_scores = compute_in_sample_scores(
-                            list(strategy_fns.keys()), strategy_fns, lookback_prices, lookback_returns)
-                        
-                        # Pass realized performance from previous period (if available)
-                        realized_perf_dict = {}
-                        if len(self.strategy_realized_performance) > 0:
-                            realized_perf_dict = self.strategy_realized_performance
-                        
                         if use_blend:
                             # NEW: Use ensemble blend instead of winner-take-all
+                            # No need to compute in_sample_scores for blending
                             blended_weights, blend_composition = strategy_selector.blend(
                                 lookback_prices, lookback_returns, strategy_fns)
                             new_weights = blended_weights
@@ -123,6 +116,14 @@ class Backtester:
                             logger.info(f"Ensemble blend composition: {blend_composition}")
                         else:
                             # LEGACY: Select single best strategy
+                            in_sample_scores = compute_in_sample_scores(
+                                list(strategy_fns.keys()), strategy_fns, lookback_prices, lookback_returns)
+                            
+                            # Pass realized performance from previous period (if available)
+                            realized_perf_dict = {}
+                            if len(self.strategy_realized_performance) > 0:
+                                realized_perf_dict = self.strategy_realized_performance
+                            
                             current_method_name = strategy_selector.select(
                                 lookback_prices, lookback_returns, in_sample_scores, 
                                 realized_perf=realized_perf_dict if realized_perf_dict else None)
