@@ -94,8 +94,10 @@ class StrategySelector:
 
     def record_realized_performance(self, method: str, realized_return: float, realized_vol: float):
         """Call this after a rebalance period ends, with what actually happened."""
+        # FIX: Use .setdefault() to auto-create deque for methods not in original candidate_methods
+        # This prevents KeyError when recording performance for 'ensemble_blend' or new strategies
         score = realized_return / realized_vol if realized_vol > 0 else 0.0
-        self._track_record[method].append(score)
+        self._track_record.setdefault(method, deque(maxlen=self.track_record_len)).append(score)
 
     def _track_record_score(self, method: str) -> float:
         rec = self._track_record[method]

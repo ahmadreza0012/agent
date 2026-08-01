@@ -165,7 +165,7 @@ class Backtester:
                     future_dates = [d for d in rebalance_dates if d > timestamp]
                     next_rebalance = future_dates[0] if future_dates else test_prices.index[-1] + timedelta(hours=1)
                 except Exception as e:
-                    logger.error(f"Rebalancing failed at {timestamp}: {e}")
+                    logger.error(f"Rebalancing failed at {timestamp}: {e}", exc_info=True)
 
             price_changes = row / test_prices.iloc[i - 1] - 1 if i > 0 else np.zeros(len(row))
 
