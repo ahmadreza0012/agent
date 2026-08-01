@@ -128,7 +128,6 @@ class Backtester:
                                         all_individual_weights[name] = w_array
                                 except Exception as e:
                                     logger.warning(f"Failed to get weights for {name} during blend setup: {e}")
-                            rebalance_events[-1]['individual_weights'] = all_individual_weights
                         else:
                             # LEGACY: Select single best strategy
                             in_sample_scores = compute_in_sample_scores(
@@ -154,6 +153,7 @@ class Backtester:
                         'new_weights': new_weights.copy(), 'turnover': turnover,
                         'cost': cost, 'capital_before': capital,
                         'method': current_method_name,
+                        'individual_weights': all_individual_weights if use_blend else None,
                     })
                     chosen_strategy_log.append((timestamp, current_method_name))
 
