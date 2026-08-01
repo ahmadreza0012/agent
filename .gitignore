@@ -1,15 +1,34 @@
-```gitignore
-# Python cache
+```
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
+# Test files (if they follow common patterns)
+*.test.py
+test_*.py
+
 # Logs
 *.log
 
-# Environment variables
+# Environment
 .env
 .env.local
 *.env.*
+
+# Dependencies
+.venv/
+venv/
+pip-log.txt
+pipenv.lock
+
+# Coverage reports
+.coverage
+htmlcov/
+.coverage.*
+.nox/
+
+# Pytest cache
+.pytest_cache/
 ```

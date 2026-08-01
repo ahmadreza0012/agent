@@ -90,6 +90,10 @@ class Backtester:
         daily_returns = []
         chosen_strategy_log = []
 
+        # Pre-compute per-asset returns for the entire test period (for hypothetical performance calculation later)
+        # This is needed to correctly calculate what each strategy would have earned if used alone
+        test_asset_returns = test_prices.pct_change().dropna()
+
         # Use instance rebalance_freq if not provided
         if rebalance_freq is None:
             rebalance_freq = self.rebalance_freq
@@ -207,10 +211,21 @@ class Backtester:
                 # ENSEMBLE MODE: Calculate hypothetical performance for each strategy
                 individual_weights_dict = rebalance_events[-1]['individual_weights']
                 
+                # Align test_asset_returns with daily_returns index (both should have same length after dropna)
+                # test_asset_returns has one less row than test_prices due to pct_change().dropna()
+                # daily_returns also has one less entry (starts from i=1), so indices should match
+                common_index = test_asset_returns.index.intersection(returns_series.index)
+                aligned_asset_returns = test_asset_returns.loc[common_index]
+                aligned_returns_idx = returns_series.loc[common_index].index
+                
                 for name, ind_weights in individual_weights_dict.items():
                     # Calculate what return this strategy would have achieved if used alone
-                    hypothetical_daily_returns = np.dot(returns_series.values.reshape(-1, 1), ind_weights.reshape(-1, 1)).flatten()
-                    hyp_returns_series = pd.Series(hypothetical_daily_returns)
+                    # Use per-asset returns matrix dotted with strategy's weights vector
+                    # ind_weights should have length = n_assets (e.g., 6 including CASH)
+                    # aligned_asset_returns.values shape: [n_days, n_assets]
+                    # Result: hypothetical_daily_returns shape: [n_days]
+                    hypothetical_daily_returns = aligned_asset_returns.values @ ind_weights
+                    hyp_returns_series = pd.Series(hypothetical_daily_returns, index=aligned_returns_idx)
                     
                     hypothetical_realized_return = hyp_returns_series.mean() * len(hyp_returns_series)
                     hypothetical_realized_vol = hyp_returns_series.std() * np.sqrt(len(hyp_returns_series))
