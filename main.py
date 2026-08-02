@@ -124,8 +124,8 @@ def run_trading_cycle():
         
         def cvar_strategy(prices, returns):
             # CVaR optimization - good for high volatility regimes
-            # Use tighter CVaR limit (3%) for better downside protection
-            return optimizer.cvar_optimization(returns.values, cvar_limit=0.03, confidence=0.95)
+            # Use relaxed CVaR limit (5%) since 3% was infeasible in nearly every rebalance with real crypto volatility
+            return optimizer.cvar_optimization(returns.values, cvar_limit=0.05, confidence=0.95)
         
         def black_litterman_strategy(prices, returns):
             """

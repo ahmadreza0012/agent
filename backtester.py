@@ -109,6 +109,9 @@ class Backtester:
                 lookback_returns = lookback_prices.pct_change().dropna()
 
                 try:
+                    # Initialize all_individual_weights at the start of each rebalance block
+                    all_individual_weights = None
+                    
                     if strategy_selector is not None and strategy_fns is not None:
                         if use_blend:
                             # NEW: Use ensemble blend instead of winner-take-all
@@ -132,6 +135,8 @@ class Backtester:
                                         all_individual_weights[name] = w_array
                                 except Exception as e:
                                     logger.warning(f"Failed to get weights for {name} during blend setup: {e}")
+                            # DEBUG: Log what we captured
+                            logger.info(f"[DEBUG] Captured individual_weights for {len(all_individual_weights)} strategies: {list(all_individual_weights.keys())}")
                         else:
                             # LEGACY: Select single best strategy
                             in_sample_scores = compute_in_sample_scores(
