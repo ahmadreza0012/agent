@@ -210,50 +210,53 @@ class Backtester:
         # CRITICAL FIX: In ensemble blend mode, record performance for EACH strategy individually
         # so the self-correcting feedback loop actually works (not just recording "ensemble_blend")
         if strategy_selector is not None and len(daily_returns) > 0:
-            returns_series = pd.Series(daily_returns)
+            # FIX: returns_series must use the same datetime index as test_asset_returns
+            # daily_returns[i] corresponds to test_prices.index[i+1], which equals test_asset_returns.index[i]
+            returns_series = pd.Series(daily_returns, index=test_asset_returns.index)
             
-            if use_blend and len(rebalance_events) > 0 and 'individual_weights' in rebalance_events[-1]:
-                # ENSEMBLE MODE: Calculate hypothetical performance for each strategy
-                individual_weights_dict = rebalance_events[-1]['individual_weights']
+            if use_blend and len(rebalance_events) > 0:
+                last_rebalance = rebalance_events[-1]
+                logger.info(f"[DEBUG] Last rebalance keys: {last_rebalance.keys()}")
                 
-                # Align test_asset_returns with daily_returns index (both should have same length after dropna)
-                # test_asset_returns has one less row than test_prices due to pct_change().dropna()
-                # daily_returns also has one less entry (starts from i=1), so indices should match
-                common_index = test_asset_returns.index.intersection(returns_series.index)
-                aligned_asset_returns = test_asset_returns.loc[common_index]
-                aligned_returns_idx = returns_series.loc[common_index].index
-                
-                for name, ind_weights in individual_weights_dict.items():
-                    # Calculate what return this strategy would have achieved if used alone
-                    # Use per-asset returns matrix dotted with strategy's weights vector
-                    # ind_weights should have length = n_assets (e.g., 6 including CASH)
-                    # aligned_asset_returns.values shape: [n_days, n_assets]
-                    # Result: hypothetical_daily_returns shape: [n_days]
-                    hypothetical_daily_returns = aligned_asset_returns.values @ ind_weights
-                    hyp_returns_series = pd.Series(hypothetical_daily_returns, index=aligned_returns_idx)
+                if 'individual_weights' in last_rebalance and last_rebalance['individual_weights'] is not None:
+                    # ENSEMBLE MODE: Calculate hypothetical performance for each strategy
+                    individual_weights_dict = last_rebalance['individual_weights']
+                    logger.info(f"[DEBUG] individual_weights_dict keys: {list(individual_weights_dict.keys())}")
                     
-                    hypothetical_realized_return = hyp_returns_series.mean() * len(hyp_returns_series)
-                    hypothetical_realized_vol = hyp_returns_series.std() * np.sqrt(len(hyp_returns_series))
-                    
-                    if hypothetical_realized_vol > 0:
-                        strategy_selector.record_realized_performance(name, hypothetical_realized_return, hypothetical_realized_vol)
-                        logger.info(f"[BLEND] Recorded hypothetical performance for {name}: return={hypothetical_realized_return:.4f}, vol={hypothetical_realized_vol:.4f}")
+                    # No need for complex index alignment now - both have the same index
+                    for name, ind_weights in individual_weights_dict.items():
+                        # Calculate what return this strategy would have achieved if used alone
+                        # Use per-asset returns matrix dotted with strategy's weights vector
+                        # ind_weights should have length = n_assets (e.g., 6 including CASH)
+                        # test_asset_returns.values shape: [n_days, n_assets]
+                        # Result: hypothetical_daily_returns shape: [n_days]
+                        hypothetical_daily_returns = test_asset_returns.values @ ind_weights
+                        hyp_returns_series = pd.Series(hypothetical_daily_returns, index=test_asset_returns.index)
                         
-                        # Store in backtester for next iteration's selector
-                        self.strategy_realized_performance[name] = {
-                            'return': hypothetical_realized_return,
-                            'vol': hypothetical_realized_vol
-                        }
-                
-                # Also record the actual ensemble blend performance
-                realized_return = returns_series.mean() * len(returns_series)
-                realized_vol = returns_series.std() * np.sqrt(len(returns_series))
-                strategy_selector.record_realized_performance("ensemble_blend", realized_return, realized_vol)
-                logger.info(f"Recorded actual ensemble blend performance: return={realized_return:.4f}, vol={realized_vol:.4f}")
-                self.strategy_realized_performance["ensemble_blend"] = {
-                    'return': realized_return,
-                    'vol': realized_vol
-                }
+                        hypothetical_realized_return = hyp_returns_series.mean() * len(hyp_returns_series)
+                        hypothetical_realized_vol = hyp_returns_series.std() * np.sqrt(len(hyp_returns_series))
+                        
+                        if hypothetical_realized_vol > 0:
+                            strategy_selector.record_realized_performance(name, hypothetical_realized_return, hypothetical_realized_vol)
+                            logger.info(f"[BLEND] Recorded hypothetical performance for {name}: return={hypothetical_realized_return:.4f}, vol={hypothetical_realized_vol:.4f}")
+                            
+                            # Store in backtester for next iteration's selector
+                            self.strategy_realized_performance[name] = {
+                                'return': hypothetical_realized_return,
+                                'vol': hypothetical_realized_vol
+                            }
+                    
+                    # Also record the actual ensemble blend performance
+                    realized_return = returns_series.mean() * len(returns_series)
+                    realized_vol = returns_series.std() * np.sqrt(len(returns_series))
+                    strategy_selector.record_realized_performance("ensemble_blend", realized_return, realized_vol)
+                    logger.info(f"Recorded actual ensemble blend performance: return={realized_return:.4f}, vol={realized_vol:.4f}")
+                    self.strategy_realized_performance["ensemble_blend"] = {
+                        'return': realized_return,
+                        'vol': realized_vol
+                    }
+                else:
+                    logger.warning("[BLEND] individual_weights not found in last rebalance event!")
             else:
                 # LEGACY MODE (winner-take-all): Record only for the chosen strategy
                 realized_return = returns_series.mean() * len(returns_series)
