@@ -45,6 +45,10 @@ system_state = {
     "cycles_run": 0
 }
 
+# FIX: Module-level StrategySelector instance to persist track record across trading cycles
+# This ensures learning accumulates over the bot's actual runtime, not just within a single cycle
+_global_strategy_selector = None
+
 @app.get("/")
 def read_root():
     return {
@@ -212,8 +216,22 @@ def run_trading_cycle():
         
         # FIX: Build candidate_methods from strategy_fns.keys() AFTER all strategies are defined
         candidate_methods = list(strategy_fns.keys())
-        # FIX: Construct StrategySelector AFTER strategy_fns is complete to avoid KeyError
-        strategy_selector = StrategySelector(candidate_methods=candidate_methods)
+        
+        # FIX: Reuse global StrategySelector instance across cycles to preserve track record
+        # Only create a new one on first cycle; subsequent cycles reuse the same instance
+        global _global_strategy_selector
+        if _global_strategy_selector is None:
+            logger.info(f"Creating new StrategySelector instance with methods: {candidate_methods}")
+            _global_strategy_selector = StrategySelector(candidate_methods=candidate_methods)
+        else:
+            logger.info(f"Reusing existing StrategySelector instance (track records preserved)")
+        
+        strategy_selector = _global_strategy_selector
+        
+        # Log track record sizes to verify persistence across cycles
+        track_record_sizes = {method: len(_global_strategy_selector._track_record[method]) 
+                              for method in candidate_methods}
+        logger.info(f"Track record sizes at start of cycle #{cycle_number}: {track_record_sizes}")
 
         # FIX: Instantiate Backtester (n_folds is for run_walk_forward, not __init__)
         backtester = Backtester(initial_capital=initial_capital)
