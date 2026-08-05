@@ -251,9 +251,13 @@ class StrategySelector:
             sharpe = strategy_sharpes[name]
             regime_bias = prior.get(name, 1.0)
             
-            # Transform Sharpe to score (positive Sharpe -> higher score)
-            # Add small constant to avoid negative scores for floor strategies
-            score = max(0.1, sharpe + 0.5) * regime_bias
+            # Transform Sharpe to score using exponential transform: exp(sharpe)
+            # This preserves relative differences even when all Sharpes are negative,
+            # unlike the old hard floor (max(0.1, sharpe+0.5)) which collapsed all
+            # strategies to identical scores during market downturns.
+            # Clip to prevent numerical overflow/underflow for extreme values.
+            clipped_sharpe = np.clip(sharpe, -5, 5)
+            score = float(np.exp(clipped_sharpe)) * regime_bias
             raw_scores[name] = score
         
         # Normalize to sum to 1.0
