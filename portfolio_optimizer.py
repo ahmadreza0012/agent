@@ -59,12 +59,17 @@ class PortfolioOptimizer:
                                     risk_free_rate: float = 0.0,
                                     method: str = 'max_sharpe') -> np.ndarray:
         """
-        Mean-Variance Optimization with improved fallback logic.
+        Mean-Variance Optimization with IMPROVED FALLBACK CHAIN (Stage 5).
         
-        CRITICAL FIX: 
-        - Risk-free rate defaults to 0.0 (was 0.02, too high for crypto)
-        - Fallback chain: max_sharpe -> min_volatility -> scipy equal-weight
-        - All calls to PyPortfolioOpt now explicitly pass risk_free_rate=0.0
+        CRITICAL FIX STAGE 5: 
+        When max_sharpe fails, do NOT go straight to pure min_volatility (which produces 100% CASH).
+        Instead implement this improved fallback chain:
+        1. Try max_sharpe with risk_free_rate=0.0
+        2. If it fails → try efficient_return with modest target (mean of expected returns or 0.05 annualized)
+        3. If that fails → try min_volatility but force maximum 40% CASH (60% risky assets minimum)
+        4. Only as last resort use equal-weight among risky assets + 20-30% CASH
+        
+        Risk-free rate defaults to 0.0 (crypto volatility makes higher rates unrealistic).
         """
         logger.info(f"Running Mean-Variance Optimization ({method}, rf_rate={risk_free_rate})")
 
@@ -83,10 +88,18 @@ class PortfolioOptimizer:
                     try:
                         weights = ef.max_sharpe(risk_free_rate=risk_free_rate)
                     except Exception as e:
-                        logger.warning(f"max_sharpe failed: {e}. Trying min_volatility fallback...")
-                        weights = ef.min_volatility()
+                        logger.warning(f"max_sharpe failed: {e}. Trying efficient_return fallback...")
+                        # FALLBACK 1: Try efficient_return with modest target
+                        target_ret = max(np.mean(expected_returns), 0.05 / 24 / 365)  # At least 5% annualized
+                        try:
+                            weights = ef.efficient_return(target_ret)
+                        except Exception as e2:
+                            logger.warning(f"efficient_return also failed: {e2}. Trying min_volatility with cash cap...")
+                            # FALLBACK 2: min_volatility but cap CASH at 40%
+                            weights = self._min_volatility_with_cash_cap(ef, max_cash=0.40)
                 elif method == 'min_volatility':
-                    weights = ef.min_volatility()
+                    # Apply cash cap to prevent 100% CASH solutions
+                    weights = self._min_volatility_with_cash_cap(ef, max_cash=0.40)
                 else:
                     target_return = np.mean(expected_returns)
                     weights = ef.efficient_return(target_return)
@@ -99,9 +112,57 @@ class PortfolioOptimizer:
                 return self._scipy_mean_variance(expected_returns, cov_matrix, risk_free_rate, method)
         
         return self._scipy_mean_variance(expected_returns, cov_matrix, risk_free_rate, method)
+    
+    def _min_volatility_with_cash_cap(self, ef, max_cash: float = 0.40) -> dict:
+        """
+        Stage 5: Helper to run min_volatility while capping CASH allocation.
+        Prevents the optimizer from going 100% CASH which kills returns.
+        """
+        try:
+            # First try standard min_volatility
+            weights = ef.min_volatility()
+            
+            # Check if CASH is too high
+            cash_weight = 0.0
+            for name, w in weights.items():
+                if name == 'CASH':
+                    cash_weight = w
+                    break
+            
+            if cash_weight > max_cash:
+                logger.info(f"CASH weight {cash_weight:.1%} exceeds cap {max_cash:.0%}. Redistributing to risky assets.")
+                # Cap CASH and redistribute proportionally to risky assets
+                excess_cash = cash_weight - max_cash
+                weights['CASH'] = max_cash
+                
+                # Find risky assets and redistribute excess proportionally
+                risky_assets = [k for k in weights.keys() if k != 'CASH']
+                risky_total = sum(weights[k] for k in risky_assets)
+                
+                if risky_total > 0:
+                    for asset in risky_assets:
+                        weights[asset] += excess_cash * (weights[asset] / risky_total)
+                else:
+                    # All risky assets are zero, distribute equally
+                    for asset in risky_assets:
+                        weights[asset] = excess_cash / len(risky_assets)
+            
+            return weights
+        except Exception as e:
+            logger.error(f"_min_volatility_with_cash_cap failed: {e}. Using equal-weight fallback.")
+            # Last resort: equal weight with capped cash
+            n_assets = len(self.asset_names)
+            cash_idx = next((i for i, name in enumerate(self.asset_names) if name == 'CASH'), None)
+            if cash_idx is not None:
+                # Equal weight risky + 30% CASH
+                n_risky = n_assets - 1
+                weights = {name: 0.70 / n_risky if name != 'CASH' else 0.30 for name in self.asset_names}
+            else:
+                weights = {name: 1.0 / n_assets for name in self.asset_names}
+            return weights
 
     def _scipy_mean_variance(self, expected_returns, cov_matrix, risk_free_rate, method) -> np.ndarray:
-        """Scipy-based MVO fallback with better error handling."""
+        """Scipy-based MVO fallback with better error handling and CASH cap (Stage 5)."""
         def portfolio_variance(w):
             return w.T @ cov_matrix @ w
 
@@ -115,10 +176,12 @@ class PortfolioOptimizer:
 
         constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
         
+        # STAGE 5 FIX: Cap CASH at 40% maximum in bounds to prevent 100% CASH solutions
+        max_cash_cap = 0.40
         bounds_list = []
         for i, name in enumerate(self.asset_names):
             if name == 'CASH':
-                bounds_list.append((0.0, 1.0))
+                bounds_list.append((0.0, max_cash_cap))  # Cap CASH at 40%
             else:
                 bounds_list.append((0.0, 0.45))
         
@@ -145,9 +208,11 @@ class PortfolioOptimizer:
                 logger.warning(f"Optimization warning: {result.message}")
             
             weights = result.x.copy()
+            
+            # Ensure bounds are respected
             for i, name in enumerate(self.asset_names):
                 if name == 'CASH':
-                    weights[i] = np.clip(weights[i], 0.0, 1.0)
+                    weights[i] = np.clip(weights[i], 0.0, max_cash_cap)
                 else:
                     weights[i] = np.clip(weights[i], 0.0, 0.45)
             
@@ -155,7 +220,13 @@ class PortfolioOptimizer:
             if s > 0:
                 weights = weights / s
             else:
-                weights = np.ones(self.n_assets) / self.n_assets
+                # Last resort: equal weight with capped cash
+                n_risky = sum(1 for name in self.asset_names if name != 'CASH')
+                if n_risky > 0:
+                    weights = np.array([0.60 / n_risky if name != 'CASH' else 0.40 for name in self.asset_names])
+                else:
+                    weights = np.ones(self.n_assets) / self.n_assets
+                    
             logger.info(f"Scipy MVO weights: {weights}")
             return weights
         except Exception as e:
@@ -293,8 +364,9 @@ class PortfolioOptimizer:
         """
         CVaR-minimizing portfolio via the correct Rockafellar-Uryasev LP.
         
-        CRITICAL FIX: cvar_limit increased from 0.05 to 0.10
-        Crypto volatility makes 10% a more realistic bound than 5%.
+        STAGE 5 FIX: When optimizer wants 100% CASH, cap CASH at 50-60% maximum
+        and distribute the rest according to risk parity or inverse-volatility
+        among risky assets. Keep the 10% CVaR limit, but prevent extreme all-cash solutions.
         """
         logger.info(f"Running CVaR optimization (limit={cvar_limit}, conf={confidence})")
         n_scenarios, n_assets = returns.shape
@@ -368,6 +440,38 @@ class PortfolioOptimizer:
         weights = np.clip(weights, 0, 1)
         s = weights.sum()
         weights = weights / s if s > 0 else np.ones(n_assets) / n_assets
+
+        # STAGE 5 FIX: Cap CASH at 60% maximum and redistribute to risky assets
+        cash_mask = np.array([name == 'CASH' for name in self.asset_names])
+        risky_mask = ~cash_mask
+        
+        cash_weight = weights[cash_mask].sum() if cash_mask.any() else 0.0
+        max_cash_cap = 0.60  # Stage 5: Maximum 60% CASH
+        
+        if cash_weight > max_cash_cap:
+            logger.info(f"CVaR CASH weight {cash_weight:.1%} exceeds cap {max_cash_cap:.0%}. "
+                       f"Redistributing to risky assets via inverse-volatility.")
+            
+            excess_cash = cash_weight - max_cash_cap
+            
+            # Cap CASH
+            if cash_mask.any():
+                weights[cash_mask] = max_cash_cap / cash_mask.sum()
+            
+            # Distribute excess to risky assets using inverse-volatility weighting
+            if risky_mask.sum() > 0:
+                risky_indices = np.where(risky_mask)[0]
+                volatilities = np.sqrt(np.diag(np.cov(returns[:, risky_mask].T)))
+                # Inverse volatility weights
+                inv_vol = 1.0 / (volatilities + 1e-8)
+                inv_vol_weights = inv_vol / inv_vol.sum()
+                
+                # Add excess proportionally
+                weights[risky_indices] += excess_cash * inv_vol_weights
+            
+            # Renormalize
+            weights = weights / weights.sum()
+            logger.info(f"CVaR weights after CASH cap: {weights}")
 
         port_rets = returns @ weights
         var = np.percentile(port_rets, (1 - confidence) * 100)
