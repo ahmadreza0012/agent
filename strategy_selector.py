@@ -59,8 +59,8 @@ def detect_regime(returns: pd.DataFrame, window: int = 168) -> str:
     return "mean_reverting"
 
 
-# STAGE 2 FIX: More aggressive strategy biasing in bad markets
-# In high_vol and mean_reverting (bearish), defensive strategies dominate
+# STAGE 5 FIX: More balanced strategy biasing - allow ML and Black-Litterman more weight
+# In high_vol, target defensive weight around 50-55% instead of forcing 60-70%
 REGIME_PRIOR = {
     "trending": {
         "black_litterman": 1.3, "mvo": 1.2, "ml": 1.0,
@@ -73,9 +73,10 @@ REGIME_PRIOR = {
         "trend_following": 0.5, "mean_reversion": 1.8
     },
     "high_vol": {
-        # STAGE 2 CRITICAL: Aggressively reduce risky strategies in high volatility
-        "risk_parity": 2.2, "cvar": 2.0, "black_litterman": 0.8,
-        "mvo": 0.3, "ml": 0.2,  # Penalize aggressive optimization in high vol
+        # STAGE 5 CRITICAL: Less aggressive reduction of risky strategies
+        # Allow ML and Black-Litterman minimum floor (increased from 0.2/0.3 to 0.5)
+        "risk_parity": 1.8, "cvar": 1.6, "black_litterman": 0.8,  # Reduced from 2.2/2.0
+        "mvo": 0.5, "ml": 0.5,  # Increased from 0.3/0.2 - allow more aggressive strategies
         "trend_following": 1.2, "mean_reversion": 1.4
     },
 }
@@ -262,25 +263,25 @@ class StrategySelector:
         # Apply floor and ceiling constraints
         blend_weights = self._apply_weight_constraints(blend_weights)
         
-        # STAGE 2 FIX: Enforce 60-70% defensive allocation in high_vol/bearish regimes
+        # STAGE 5 FIX: Softer defensive allocation - target 50-55% instead of 60-70%
         if regime in ['high_vol', 'mean_reverting']:
-            logger.info(f"[STAGE 2] Regime {regime} detected - enforcing defensive allocation")
+            logger.info(f"[STAGE 5] Regime {regime} detected - enforcing softer defensive allocation (50-55%)")
             defensive_strategies = ['trend_following', 'cvar', 'risk_parity']
             defensive_weight = sum(blend_weights.get(s, 0) for s in defensive_strategies)
             
-            if defensive_weight < 0.60:
-                logger.info(f"[STAGE 2] Current defensive weight {defensive_weight:.0%} < 60% target. "
-                           f"Rebalancing to enforce 70% minimum...")
-                # Reduce aggressive strategies, boost defensive ones
+            if defensive_weight < 0.50:
+                logger.info(f"[STAGE 5] Current defensive weight {defensive_weight:.0%} < 50% target. "
+                           f"Rebalancing to enforce 55% minimum...")
+                # Reduce aggressive strategies less aggressively (only 30% cut vs 50% before)
                 aggressive_strategies = ['ml', 'mvo', 'black_litterman']
                 aggressive_weight = sum(blend_weights.get(s, 0) for s in aggressive_strategies)
                 
                 if aggressive_weight > 0:
-                    # Cut aggressive strategies in half, reallocate to defensive
-                    reduction = aggressive_weight * 0.5
+                    # Cut aggressive strategies by only 30% (was 50%)
+                    reduction = aggressive_weight * 0.30
                     for s in aggressive_strategies:
                         if s in blend_weights:
-                            blend_weights[s] *= 0.5
+                            blend_weights[s] *= 0.70  # Keep 70% instead of 50%
                     
                     # Reallocate to defensive (preference: trend_following > cvar > risk_parity)
                     boost_distribution = [0.4, 0.35, 0.25]
@@ -291,7 +292,7 @@ class StrategySelector:
                 # Re-apply constraints
                 blend_weights = self._apply_weight_constraints(blend_weights)
                 new_defensive = sum(blend_weights.get(s, 0) for s in defensive_strategies)
-                logger.info(f"[STAGE 2] Defensive allocation after rebalance: {new_defensive:.0%}")
+                logger.info(f"[STAGE 5] Defensive allocation after rebalance: {new_defensive:.0%}")
         
         # STAGE 4 FIX: Apply sentiment multiplier to trend-following and mean-reversion
         if self.sentiment_score != 0.0:
