@@ -69,59 +69,93 @@ class PortfolioOptimizer:
         3. If still fails → run min_volatility but force maximum 40% CASH (minimum 60% in risky assets)
         4. Last resort: equal-weight among risky assets + 25% CASH
         
+        CRITICAL FIX STAGE 5++:
+        Each fallback step must create a FRESH EfficientFrontier instance.
+        PyPortfolioOpt explicitly forbids reusing an optimizer after it has been solved:
+        "Adding constraints to an already solved problem might have unintended consequences."
+        
         Risk-free rate defaults to 0.0 (crypto volatility makes higher rates unrealistic).
         """
         logger.info(f"Running Mean-Variance Optimization ({method}, rf_rate={risk_free_rate})")
 
         if PYPORTFOLIO_OPT_AVAILABLE:
-            try:
+            # Define bounds helper (same for all attempts)
+            def get_bounds():
                 bounds = []
                 for i, name in enumerate(self.asset_names):
                     if name == 'CASH':
                         bounds.append((0.0, 1.0))  # CASH: 0-100%
                     else:
                         bounds.append((0.0, 0.45))  # Risky: 0-45%
-                
-                ef = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=bounds)
-                
+                return bounds
+            
+            # ATTEMPT 1: max_sharpe with fresh instance
+            try:
+                ef1 = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=get_bounds())
                 if method == 'max_sharpe':
-                    try:
-                        weights = ef.max_sharpe(risk_free_rate=risk_free_rate)
-                    except Exception as e:
-                        logger.warning(f"max_sharpe failed: {e}. Trying efficient_return fallback...")
-                        # FALLBACK 1: Try efficient_return with modest positive target
-                        # Use mean of positive expected returns, or at least 3-5% annualized
-                        positive_returns = expected_returns[expected_returns > 0]
-                        if len(positive_returns) > 0:
-                            target_ret = max(np.mean(positive_returns), 0.03 / 24 / 365)  # At least 3% annualized
-                        else:
-                            target_ret = 0.05 / 24 / 365  # 5% annualized as fallback
-                        try:
-                            weights = ef.efficient_return(target_ret)
-                        except Exception as e2:
-                            logger.warning(f"efficient_return also failed: {e2}. Trying min_volatility with cash cap...")
-                            # FALLBACK 2: min_volatility but cap CASH at 40%
-                            weights = self._min_volatility_with_cash_cap(ef, max_cash=0.40)
+                    weights = ef1.max_sharpe(risk_free_rate=risk_free_rate)
                 elif method == 'min_volatility':
-                    # Apply cash cap to prevent 100% CASH solutions
-                    weights = self._min_volatility_with_cash_cap(ef, max_cash=0.40)
+                    # For min_volatility method, use cash-capped version with fresh instance
+                    weights = self._min_volatility_with_cash_cap_fresh(expected_returns, cov_matrix, max_cash=0.40)
                 else:
                     target_return = np.mean(expected_returns)
-                    weights = ef.efficient_return(target_return)
+                    weights = ef1.efficient_return(target_return)
                 
                 weights_array = np.array(list(weights.values()))
-                logger.info(f"MVO weights: {weights_array}")
+                logger.info(f"MVO weights (attempt 1): {weights_array}")
                 return weights_array
             except Exception as e:
-                logger.warning(f"PyPortfolioOpt failed: {e}. Using scipy fallback.")
-                return self._scipy_mean_variance(expected_returns, cov_matrix, risk_free_rate, method)
+                logger.warning(f"Attempt 1 (max_sharpe/direct) failed: {e}. Trying Attempt 2 (efficient_return)...")
+            
+            # ATTEMPT 2: efficient_return with modest positive target (fresh instance)
+            # Use mean of positive expected returns, or at least 3-5% annualized
+            try:
+                positive_returns = expected_returns[expected_returns > 0]
+                if len(positive_returns) > 0:
+                    target_ret = max(np.mean(positive_returns), 0.03 / 24 / 365)  # At least 3% annualized
+                else:
+                    target_ret = 0.05 / 24 / 365  # 5% annualized as fallback
+                
+                ef2 = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=get_bounds())
+                weights = ef2.efficient_return(target_ret)
+                
+                weights_array = np.array(list(weights.values()))
+                logger.info(f"MVO weights (attempt 2 - efficient_return): {weights_array}")
+                return weights_array
+            except Exception as e2:
+                logger.warning(f"Attempt 2 (efficient_return) failed: {e2}. Trying Attempt 3 (min_volatility with cash cap)...")
+            
+            # ATTEMPT 3: min_volatility with cash cap (fresh instance)
+            try:
+                weights = self._min_volatility_with_cash_cap_fresh(expected_returns, cov_matrix, max_cash=0.40)
+                weights_array = np.array(list(weights.values()))
+                logger.info(f"MVO weights (attempt 3 - min_volatility capped): {weights_array}")
+                return weights_array
+            except Exception as e3:
+                logger.warning(f"Attempt 3 (min_volatility capped) failed: {e3}. Using last resort equal-weight.")
+            
+            # LAST RESORT: equal-weight among risky assets + 25% CASH
+            n_assets = len(self.asset_names)
+            cash_idx = next((i for i, name in enumerate(self.asset_names) if name == 'CASH'), None)
+            if cash_idx is not None:
+                n_risky = n_assets - 1
+                weights_array = np.array([0.75 / n_risky if name != 'CASH' else 0.25 for name in self.asset_names])
+            else:
+                weights_array = np.ones(n_assets) / n_assets
+            
+            logger.info(f"MVO weights (last resort - equal-weight): {weights_array}")
+            return weights_array
         
+        # SciPy fallback if PyPortfolioOpt not available
         return self._scipy_mean_variance(expected_returns, cov_matrix, risk_free_rate, method)
     
     def _min_volatility_with_cash_cap(self, ef, max_cash: float = 0.40) -> dict:
         """
         Stage 5: Helper to run min_volatility while capping CASH allocation.
         Prevents the optimizer from going 100% CASH which kills returns.
+        
+        NOTE: This method expects an already-created EfficientFrontier instance.
+        For a fresh instance approach, use _min_volatility_with_cash_cap_fresh instead.
         """
         try:
             # First try standard min_volatility
@@ -162,6 +196,67 @@ class PortfolioOptimizer:
                 # Equal weight risky + 30% CASH
                 n_risky = n_assets - 1
                 weights = {name: 0.70 / n_risky if name != 'CASH' else 0.30 for name in self.asset_names}
+            else:
+                weights = {name: 1.0 / n_assets for name in self.asset_names}
+            return weights
+    
+    def _min_volatility_with_cash_cap_fresh(self, expected_returns: np.ndarray, cov_matrix: np.ndarray, 
+                                             max_cash: float = 0.40) -> dict:
+        """
+        Stage 5++: Helper to run min_volatility while capping CASH allocation.
+        Creates a FRESH EfficientFrontier instance to avoid PyPortfolioOpt's restriction on reusing solved optimizers.
+        
+        PyPortfolioOpt explicitly forbids: \"Adding constraints to an already solved problem might have unintended consequences.\"
+        """
+        try:
+            # Create fresh instance
+            bounds = []
+            for i, name in enumerate(self.asset_names):
+                if name == 'CASH':
+                    bounds.append((0.0, 1.0))
+                else:
+                    bounds.append((0.0, 0.45))
+            
+            ef_fresh = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=bounds)
+            
+            # Run min_volatility on fresh instance
+            weights = ef_fresh.min_volatility()
+            
+            # Check if CASH is too high
+            cash_weight = 0.0
+            for name, w in weights.items():
+                if name == 'CASH':
+                    cash_weight = w
+                    break
+            
+            if cash_weight > max_cash:
+                logger.info(f"CASH weight {cash_weight:.1%} exceeds cap {max_cash:.0%}. Redistributing to risky assets.")
+                # Cap CASH and redistribute proportionally to risky assets
+                excess_cash = cash_weight - max_cash
+                weights['CASH'] = max_cash
+                
+                # Find risky assets and redistribute excess proportionally
+                risky_assets = [k for k in weights.keys() if k != 'CASH']
+                risky_total = sum(weights[k] for k in risky_assets)
+                
+                if risky_total > 0:
+                    for asset in risky_assets:
+                        weights[asset] += excess_cash * (weights[asset] / risky_total)
+                else:
+                    # All risky assets are zero, distribute equally
+                    for asset in risky_assets:
+                        weights[asset] = excess_cash / len(risky_assets)
+            
+            return weights
+        except Exception as e:
+            logger.error(f"_min_volatility_with_cash_cap_fresh failed: {e}. Using equal-weight fallback.")
+            # Last resort: equal weight with capped cash
+            n_assets = len(self.asset_names)
+            cash_idx = next((i for i, name in enumerate(self.asset_names) if name == 'CASH'), None)
+            if cash_idx is not None:
+                # Equal weight risky + 25% CASH (last resort)
+                n_risky = n_assets - 1
+                weights = {name: 0.75 / n_risky if name != 'CASH' else 0.25 for name in self.asset_names}
             else:
                 weights = {name: 1.0 / n_assets for name in self.asset_names}
             return weights
