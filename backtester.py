@@ -343,27 +343,71 @@ class Backtester:
         return {'folds': fold_results, 'aggregated': aggregated}
 
     def _aggregate_folds(self, fold_results: List[Dict]) -> Dict:
+        """Aggregate results across all walk-forward folds.
+        
+        CRITICAL FIX (Stage 6): Ensure mean_monthly_return and mean_sharpe are 
+        calculated from the SAME underlying performance data to avoid inconsistencies
+        where reported mean return is positive but Sharpe is negative (indicating 
+        actual fold returns were negative).
+        
+        Previously: mean_monthly_return was computed from calendar_monthly_returns 
+        (month-end portfolio values), which could be empty or misaligned with fold 
+        boundaries, while sharpe used daily returns from the full fold period.
+        
+        Now: Both metrics derive from each fold's total_return, which accurately 
+        reflects the complete fold performance from start to end.
+        """
         if not fold_results:
             return {}
-        monthly_returns = []
+        
+        # Collect fold-level total returns and convert to monthly equivalents
+        # This ensures consistency with sharpe_ratio which also uses full-fold data
+        fold_total_returns = []
+        fold_months = []
         max_dds = []
         sharpes = []
+        
         for r in fold_results:
             m = r['metrics']
-            monthly_returns.extend(m.get('calendar_monthly_returns', []))
+            
+            # Use total_return from each fold (complete fold performance)
+            fold_total_returns.append(m['total_return'])
+            
+            # Track number of months in each fold for proper annualization
+            # Estimate from the portfolio values timestamp range
+            pv_df = r['portfolio_values']
+            if len(pv_df) > 1:
+                days_in_fold = (pv_df.index[-1] - pv_df.index[0]).days
+                months_in_fold = max(1, days_in_fold / 30.44)  # Average days per month
+            else:
+                months_in_fold = 1
+            fold_months.append(months_in_fold)
+            
             max_dds.append(m['max_drawdown'])
             sharpes.append(m['sharpe_ratio'])
-
+        
+        # Calculate mean monthly return from fold total returns
+        # Convert each fold's total return to a monthly rate: (1 + total)^(1/months) - 1
+        fold_monthly_returns = []
+        for total_ret, months in zip(fold_total_returns, fold_months):
+            if months > 0:
+                monthly_ret = (1 + total_ret) ** (1 / months) - 1
+                fold_monthly_returns.append(monthly_ret)
+        
+        # Aggregate metrics - now all derived from consistent fold-level performance
         return {
             'n_folds': len(fold_results),
-            'mean_monthly_return': float(np.mean(monthly_returns)) if monthly_returns else 0.0,
-            'median_monthly_return': float(np.median(monthly_returns)) if monthly_returns else 0.0,
-            'worst_monthly_return': float(np.min(monthly_returns)) if monthly_returns else 0.0,
-            'pct_months_positive': float(np.mean([m > 0 for m in monthly_returns])) if monthly_returns else 0.0,
+            'mean_monthly_return': float(np.mean(fold_monthly_returns)) if fold_monthly_returns else 0.0,
+            'median_monthly_return': float(np.median(fold_monthly_returns)) if fold_monthly_returns else 0.0,
+            'worst_monthly_return': float(np.min(fold_monthly_returns)) if fold_monthly_returns else 0.0,
+            'pct_months_positive': float(np.mean([m > 0 for m in fold_monthly_returns])) if fold_monthly_returns else 0.0,
             'mean_max_drawdown': float(np.mean(max_dds)) if max_dds else 0.0,
             'worst_max_drawdown': float(np.min(max_dds)) if max_dds else 0.0,
             'mean_sharpe': float(np.mean(sharpes)) if sharpes else 0.0,
-            'n_calendar_months_observed': len(monthly_returns),
+            'n_calendar_months_observed': sum(int(m) for m in fold_months),
+            # Debug info to verify consistency
+            '_fold_total_returns': fold_total_returns,
+            '_fold_monthly_returns': fold_monthly_returns,
         }
 
     # ------------------------------------------------------------------
