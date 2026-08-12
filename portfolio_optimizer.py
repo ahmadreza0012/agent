@@ -59,15 +59,15 @@ class PortfolioOptimizer:
                                     risk_free_rate: float = 0.0,
                                     method: str = 'max_sharpe') -> np.ndarray:
         """
-        Mean-Variance Optimization with IMPROVED FALLBACK CHAIN (Stage 5).
+        Mean-Variance Optimization with IMPROVED FALLBACK CHAIN (Stage 5+).
         
-        CRITICAL FIX STAGE 5: 
-        When max_sharpe fails, do NOT go straight to pure min_volatility (which produces 100% CASH).
-        Instead implement this improved fallback chain:
+        CRITICAL FIX STAGE 5+: 
+        When max_sharpe fails, do NOT jump directly to pure min_volatility (which produces ~100% CASH).
+        Implement this enhanced fallback chain:
         1. Try max_sharpe with risk_free_rate=0.0
-        2. If it fails → try efficient_return with modest target (mean of expected returns or 0.05 annualized)
-        3. If that fails → try min_volatility but force maximum 40% CASH (60% risky assets minimum)
-        4. Only as last resort use equal-weight among risky assets + 20-30% CASH
+        2. If fails → try efficient_return with modest target (mean of POSITIVE expected returns or 3-5% annualized)
+        3. If still fails → run min_volatility but force maximum 40% CASH (minimum 60% in risky assets)
+        4. Last resort: equal-weight among risky assets + 25% CASH
         
         Risk-free rate defaults to 0.0 (crypto volatility makes higher rates unrealistic).
         """
@@ -89,8 +89,13 @@ class PortfolioOptimizer:
                         weights = ef.max_sharpe(risk_free_rate=risk_free_rate)
                     except Exception as e:
                         logger.warning(f"max_sharpe failed: {e}. Trying efficient_return fallback...")
-                        # FALLBACK 1: Try efficient_return with modest target
-                        target_ret = max(np.mean(expected_returns), 0.05 / 24 / 365)  # At least 5% annualized
+                        # FALLBACK 1: Try efficient_return with modest positive target
+                        # Use mean of positive expected returns, or at least 3-5% annualized
+                        positive_returns = expected_returns[expected_returns > 0]
+                        if len(positive_returns) > 0:
+                            target_ret = max(np.mean(positive_returns), 0.03 / 24 / 365)  # At least 3% annualized
+                        else:
+                            target_ret = 0.05 / 24 / 365  # 5% annualized as fallback
                         try:
                             weights = ef.efficient_return(target_ret)
                         except Exception as e2:
