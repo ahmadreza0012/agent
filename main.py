@@ -132,10 +132,14 @@ def run_trading_cycle():
             # Calculate historical returns
             hist_returns = returns.mean().values * 24 * 365
             
-            # STAGE 5 FIX: Add small positive bias/shrinkage toward historical mean
-            # This ensures at least some assets have expected return > 0, helping max_sharpe succeed
-            min_return_threshold = 0.02  # 2% annualized minimum
+            # STAGE 5+ FIX: Add small positive bias/shrinkage toward historical mean with higher floor
+            # This ensures at least some assets have expected return > 0, helping max_sharpe succeed more often
+            min_return_threshold = 0.05  # 5% annualized minimum (increased from 2%)
             expected_returns = np.maximum(hist_returns, min_return_threshold)
+            
+            # Apply mild shrinkage toward positive mean to improve optimizer stability
+            positive_mean = np.mean(hist_returns[hist_returns > 0]) if np.any(hist_returns > 0) else min_return_threshold
+            expected_returns = 0.7 * hist_returns + 0.3 * positive_mean  # 70/30 shrinkage toward positive mean
             
             cov_matrix = returns.cov().values * 24 * 365
             return optimizer.mean_variance_optimization(expected_returns, cov_matrix, 
@@ -157,9 +161,13 @@ def run_trading_cycle():
                 returns_risky = returns
             expected_returns_hist = returns_risky.mean().values
             
-            # STAGE 5 FIX: Apply positive bias to ensure returns are above threshold
-            min_return_threshold = 0.02  # 2% annualized minimum
+            # STAGE 5+ FIX: Apply positive bias with shrinkage to ensure returns are above threshold
+            min_return_threshold = 0.05  # 5% annualized minimum (increased from 2%)
             expected_returns_hist = np.maximum(expected_returns_hist, min_return_threshold)
+            
+            # Apply mild shrinkage toward positive mean for better optimizer stability
+            positive_mean = np.mean(expected_returns_hist[expected_returns_hist > 0]) if np.any(expected_returns_hist > 0) else min_return_threshold
+            expected_returns_hist = 0.7 * expected_returns_hist + 0.3 * positive_mean
             
             risky_symbols = [s for s in returns.columns if s != 'CASH']
             if 'CASH' in prices.columns:
@@ -191,9 +199,13 @@ def run_trading_cycle():
             """ML-based return forecasting"""
             ml_expected_returns = optimizer.ml_forecast_returns(returns, lookback=168, forecast_horizon=24)
             
-            # STAGE 5 FIX: Apply positive bias to ML forecasts as well
-            min_return_threshold = 0.02  # 2% annualized minimum
+            # STAGE 5+ FIX: Apply positive bias with shrinkage to ML forecasts as well
+            min_return_threshold = 0.05  # 5% annualized minimum (increased from 2%)
             ml_expected_returns = np.maximum(ml_expected_returns, min_return_threshold)
+            
+            # Apply mild shrinkage toward positive mean for better optimizer stability
+            positive_mean = np.mean(ml_expected_returns[ml_expected_returns > 0]) if np.any(ml_expected_returns > 0) else min_return_threshold
+            ml_expected_returns = 0.7 * ml_expected_returns + 0.3 * positive_mean
             
             cov_matrix = returns.cov().values * 24 * 365
             return optimizer.mean_variance_optimization(ml_expected_returns, cov_matrix, 
