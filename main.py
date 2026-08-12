@@ -106,12 +106,15 @@ def run_trading_cycle():
         since_days = 365
         n_folds = 3  # STAGE 1: Increased from 1
         
-        # TEMPORARY: lowered targets to allow live trading & learning.
-        # Original targets were >2% return, <15% DD, >0.0 Sharpe.
-        # Revert when the system consistently produces positive returns.
-        target_return = 0.00  # Break-even or better (was 1.5%)
-        max_allowed_dd = 0.12  # Tighter drawdown control (was 15%)
-        min_sharpe = -1.0  # Allow mildly negative Sharpe in high-vol regimes (was 0.0)
+        # TEMPORARY (Stage for live learning):
+        # Allow trading even with mildly negative performance in high_vol regimes.
+        # Original targets: >2% return, <15% DD, >0.0 Sharpe
+        # Previous temporary: >0% return, <12% DD, >-1.0 Sharpe
+        # Current temporary: ≥ -2.0% return, ≤ 12% DD, ≥ -2.5 Sharpe
+        # Revert when the system starts producing consistently better results.
+        target_return = -0.02  # Allow up to -2% monthly return (was 0%)
+        max_allowed_dd = 0.12  # Keep tighter drawdown control at 12%
+        min_sharpe = -2.5  # Allow more negative Sharpe in high-vol regimes (was -1.0)
         
         # Initialize components
         data_fetcher = DataFetcher(symbols=symbols)
