@@ -40,8 +40,10 @@ from backtester import Backtester
 from portfolio_optimizer import PortfolioOptimizer
 from strategy_selector import StrategySelector, detect_regime
 from auto_logger import get_logger
+from db_manager import AgentDB
 
 auto_logger = get_logger()
+db_manager = None  # Will be initialized on startup
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,6 +64,43 @@ system_state = {
 }
 
 _global_strategy_selector = None
+
+def initialize_database():
+    """Initialize the database and load historical strategy records into StrategySelector."""
+    global db_manager, _global_strategy_selector
+    
+    try:
+        db_manager = AgentDB()
+        logger.info("Database initialized successfully")
+        
+        # Load strategy history from database
+        strategy_history = db_manager.load_strategy_history()
+        
+        if strategy_history and _global_strategy_selector is not None:
+            # Restore track records in StrategySelector from database
+            for strategy_name, records in strategy_history.items():
+                if strategy_name in _global_strategy_selector._track_record:
+                    for record in records:
+                        # Add each historical record to the track record
+                        _global_strategy_selector._track_record[strategy_name].append({
+                            'return_pct': record['return_pct'],
+                            'volatility': record['volatility'],
+                            'sharpe': record['sharpe']
+                        })
+                    logger.info(f"Restored {len(records)} historical records for strategy '{strategy_name}'")
+            
+            logger.info(f"Database loaded: {db_manager.get_cycle_count()} cycles, "
+                       f"{sum(len(v) for v in strategy_history.values())} strategy records")
+        elif strategy_history:
+            logger.info(f"Database loaded with {db_manager.get_cycle_count()} cycles "
+                       f"(StrategySelector not yet initialized)")
+        
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Failed to initialize database: {e}. Continuing without persistence.")
+        db_manager = None
+        return False
 
 @app.get("/")
 def read_root():
@@ -235,6 +274,22 @@ def run_trading_cycle():
             logger.info(f"Creating StrategySelector with methods: {candidate_methods}")
             _global_strategy_selector = StrategySelector(candidate_methods=candidate_methods, 
                                                         track_record_len=6)  # STAGE 3
+            
+            # After creating StrategySelector, load historical data from database if available
+            if db_manager is not None:
+                strategy_history = db_manager.load_strategy_history()
+                if strategy_history:
+                    for strategy_name, records in strategy_history.items():
+                        if strategy_name in _global_strategy_selector._track_record:
+                            for record in records:
+                                _global_strategy_selector._track_record[strategy_name].append({
+                                    'return_pct': record['return_pct'],
+                                    'volatility': record['volatility'],
+                                    'sharpe': record['sharpe']
+                                })
+                            logger.info(f"Restored {len(records)} historical records for '{strategy_name}' from DB")
+                    total_records = sum(len(v) for v in strategy_history.values())
+                    logger.info(f"Loaded {total_records} strategy records from database into StrategySelector")
         else:
             logger.info(f"Reusing StrategySelector (track records preserved)")
         
@@ -333,6 +388,56 @@ def run_trading_cycle():
             system_state["last_cycle"] = datetime.now().isoformat()
             
             duration = time.time() - start_time
+            
+            # Prepare comprehensive cycle data for database storage
+            strategy_records = []
+            for method in candidate_methods:
+                if method in strategy_selector._track_record and len(strategy_selector._track_record[method]) > 0:
+                    latest_record = strategy_selector._track_record[method][-1]
+                    strategy_records.append({
+                        'strategy_name': method,
+                        'return_pct': latest_record.get('return_pct'),
+                        'volatility': latest_record.get('volatility'),
+                        'sharpe': latest_record.get('sharpe'),
+                        'track_record_size': len(strategy_selector._track_record[method])
+                    })
+            
+            # Get final blend weights and asset weights from the backtest results
+            final_blend_weights = eval_data.get('final_blend_weights', {})
+            final_asset_weights = eval_data.get('final_weights', {})
+            
+            # Save to database if available
+            if db_manager is not None:
+                try:
+                    cycle_data = {
+                        'cycle_number': cycle_number,
+                        'timestamp': datetime.now().isoformat(),
+                        'regime': current_regime,
+                        'sentiment_score': float(avg_sentiment),
+                        'decision': system_state["status"],
+                        'sleep_hours': sleep_hours,
+                        'duration_seconds': duration,
+                        'metrics': {
+                            'mean_monthly_return': mean_return,
+                            'max_drawdown': max_dd,
+                            'sharpe_ratio': sharpe,
+                            'pct_positive_months': pct_positive,
+                            'n_folds': eval_data.get('n_folds', 0),
+                            '_fold_total_returns': eval_data.get('_fold_total_returns', []),
+                            '_fold_monthly_returns': eval_data.get('_fold_monthly_returns', [])
+                        },
+                        'final_blend_weights': final_blend_weights,
+                        'final_asset_weights': final_asset_weights,
+                        'black_litterman_views': {},  # Can be populated from black_litterman_strategy if needed
+                        'asset_sentiment_scores': {},  # Can be populated from sentiment analysis
+                        'warnings': [],  # Can collect warnings during cycle
+                        'strategy_records': strategy_records
+                    }
+                    db_manager.save_cycle_result(cycle_data)
+                    logger.info(f"Cycle {cycle_number} saved to database")
+                except Exception as db_error:
+                    logger.warning(f"Failed to save cycle {cycle_number} to database: {db_error}")
+            
             cycle_results = {
                 "backtest_results": eval_data,
                 "decision": system_state["status"],
@@ -367,11 +472,14 @@ def background_worker():
         run_trading_cycle()
 
 if __name__ == "__main__":
+    # Initialize database on startup to load historical data
+    initialize_database()
+    
     trader_thread = threading.Thread(target=background_worker, daemon=True)
     trader_thread.start()
     
     port = int(os.environ.get("PORT", 8000))
     logger.info(f"Starting FastAPI server on port {port}...")
-    logger.info("STAGES 1-4 ACTIVE: All critical fixes and improvements deployed")
+    logger.info("STAGES 1-4 ACTIVE + DATABASE PERSISTENCE: All critical fixes and improvements deployed")
     
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

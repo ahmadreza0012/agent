@@ -340,6 +340,18 @@ class Backtester:
             fold_results.append(result)
 
         aggregated = self._aggregate_folds(fold_results)
+        
+        # Add final blend weights and asset weights from the last fold for database storage
+        if fold_results and 'rebalance_events' in fold_results[-1] and len(fold_results[-1]['rebalance_events']) > 0:
+            last_rebalance = fold_results[-1]['rebalance_events'][-1]
+            aggregated['final_weights'] = list(last_rebalance.get('new_weights', []))
+            if last_rebalance.get('individual_weights'):
+                # Convert numpy arrays to lists for JSON serialization
+                aggregated['final_blend_weights'] = {
+                    k: v.tolist() if hasattr(v, 'tolist') else list(v) 
+                    for k, v in last_rebalance['individual_weights'].items()
+                }
+        
         return {'folds': fold_results, 'aggregated': aggregated}
 
     def _aggregate_folds(self, fold_results: List[Dict]) -> Dict:
