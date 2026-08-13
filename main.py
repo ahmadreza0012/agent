@@ -393,13 +393,28 @@ def run_trading_cycle():
             strategy_records = []
             for method in candidate_methods:
                 if method in strategy_selector._track_record and len(strategy_selector._track_record[method]) > 0:
-                    latest_record = strategy_selector._track_record[method][-1]
+                    track_record = strategy_selector._track_record[method]
+                    latest_record = track_record[-1]
+                    
+                    # Track record stores numeric Sharpe scores, not dicts
+                    # Extract metrics robustly for both dict-style and numeric records
+                    if isinstance(latest_record, dict):
+                        # Dict-style record (future-proof)
+                        return_pct = latest_record.get('return_pct')
+                        volatility = latest_record.get('volatility')
+                        sharpe = latest_record.get('sharpe')
+                    else:
+                        # Numeric Sharpe score (current implementation)
+                        return_pct = None
+                        volatility = None
+                        sharpe = float(latest_record) if latest_record is not None else None
+                    
                     strategy_records.append({
                         'strategy_name': method,
-                        'return_pct': latest_record.get('return_pct'),
-                        'volatility': latest_record.get('volatility'),
-                        'sharpe': latest_record.get('sharpe'),
-                        'track_record_size': len(strategy_selector._track_record[method])
+                        'return_pct': return_pct,
+                        'volatility': volatility,
+                        'sharpe': sharpe,
+                        'track_record_size': len(track_record)
                     })
             
             # Get final blend weights and asset weights from the backtest results
