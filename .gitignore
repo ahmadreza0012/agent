@@ -1,31 +1,29 @@
-```
+```gitignore
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Virtual environments
+# Environment
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+
+# Dependencies
 .venv/
 venv/
-env/
+.env/
+
+# Editors
+.vscode/
+.idea/
 
 # Build artifacts
 build/
 dist/
 *.egg-info/
-
-# Logs
-*.log
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Environment variables
-.env
-.env.local
-*.env.*
 ```
