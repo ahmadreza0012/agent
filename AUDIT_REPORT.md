@@ -408,3 +408,64 @@ df['volume'] = 0.0  # CoinGecko OHLC endpoint doesn't include volume in free tie
 ---
 
 **End of Audit Report**
+
+---
+
+## PHASE 3 UPDATE: Regime Engine Implementation
+
+**Date**: Phase 3 Completion  
+**Status**: COMPLETE ✅
+
+### New Components Added
+
+1. **`strategies/regime_engine.py`** - Unified RegimeEngine with:
+   - Multi-feature causal signals (vol, trend, drawdown, correlation)
+   - Frequency-aware window scaling via `utils.timeframe.FrequencySpec`
+   - Hierarchical regime classification (crisis → high_vol → bull/bear → low_vol_range)
+   - Configurable thresholds in single dict
+   - Volume availability tracking (Phase 2 compliant)
+
+2. **`tests/test_phase3_regime_engine.py`** - Test suite covering:
+   - Synthetic bull/bear/high-vol regime detection
+   - No look-ahead bias verification
+   - Frequency-aware window scaling
+   - Integration with StrategySelector priors
+
+### Key Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Hierarchical rules over ML | Avoids curve-fitting on limited data |
+| Bar-based windows (not hours) | Frequency-agnostic, works with daily/hourly |
+| Confidence scores | Enables downstream weighting adjustments |
+| Minimum exploration weights | Prevents permanent strategy elimination |
+| Backward-compatible wrapper | Preserves existing `detect_regime()` interface |
+
+### Phase 1/2 Integrity Verified
+
+- ✅ No "volume = 0" fabrication in production code (grep returns no matches)
+- ✅ Volume unavailability logged with `volume_available=False` flag
+- ✅ Frequency system preserved (uses `FrequencySpec` for annualization)
+- ✅ SymbolMapper / DataQualityValidator importable
+- ✅ All Phase 3 tests pass
+
+### Audit Status by Issue
+
+| Issue # | Severity | Phase 3 Impact | Status |
+|---------|----------|----------------|--------|
+| #1 Timeframe | CRITICAL | RegimeEngine uses correct annualization | ✅ RESOLVED |
+| #2 Expected Returns | CRITICAL | Not modified (separate concern) | ⚠️ PENDING |
+| #3 Risk-Free Rate | HIGH | Not modified (separate concern) | ⚠️ PENDING |
+| #6 Look-Ahead Bias | HIGH | RegimeEngine verified causal-only | ✅ RESOLVED (for regime) |
+| #5 Volume=0 | MEDIUM | Tracked via `volume_available` flag | ✅ RESOLVED |
+
+### Files Modified in Phase 3
+
+| File | Change Type |
+|------|-------------|
+| `strategies/regime_engine.py` | CREATE |
+| `tests/test_phase3_regime_engine.py` | CREATE |
+| `strategies/__init__.py` | MODIFY (exports) |
+| `PHASE3_SUMMARY.md` | CREATE |
+
+---
