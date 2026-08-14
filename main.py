@@ -203,7 +203,7 @@ def run_trading_cycle():
             return optimizer.cvar_optimization(returns.values, cvar_limit=0.10, confidence=0.95)
         
         def black_litterman_strategy(prices, returns):
-            """Black-Litterman with AI sentiment views"""
+            """Black-Litterman with AI sentiment views (Phase 5 dual-signal)"""
             if 'CASH' in returns.columns:
                 returns_risky = returns.drop(columns=['CASH'])
             else:
@@ -222,7 +222,10 @@ def run_trading_cycle():
             else:
                 prices_risky = prices
             
-            P, Q = ai_sentiment.generate_views(prices_risky, expected_returns_hist, risky_symbols)
+            # PHASE 5: Use per_asset_news_sentiment from system_state if available
+            per_asset_sentiment = system_state.get('per_asset_news_sentiment', None)
+            P, Q = ai_sentiment.generate_views(prices_risky, expected_returns_hist, risky_symbols, 
+                                                per_asset_sentiment=per_asset_sentiment)
             cov_risky = returns_risky.cov().values * freq.annualization_factor_mean
             n_risky = len(risky_symbols)
             market_caps = np.ones(n_risky)
@@ -298,12 +301,42 @@ def run_trading_cycle():
         
         strategy_selector = _global_strategy_selector
         
-        # STAGE 4: Set sentiment score for this cycle
-        # Calculate average recent sentiment from returns
-        recent_returns = df_prices_with_cash.pct_change().dropna().tail(168)
-        avg_sentiment = recent_returns.mean().mean() * 1000  # Scale to [-1, 1] roughly
-        strategy_selector.set_sentiment_score(avg_sentiment)
-        system_state["current_sentiment"] = float(avg_sentiment)
+        # STAGE 4 + PHASE 5: Generate dual-signal sentiment (per_asset_news_sentiment + market_tone_score)
+        logger.info("="*50)
+        logger.info("PHASE 5: Generating dual-signal sentiment")
+        logger.info("="*50)
+        
+        # Fetch all headlines once for this cycle
+        news_fetcher_instance = ai_sentiment.news_fetcher
+        all_headlines = news_fetcher_instance.fetch_all()
+        
+        # Build headlines map per symbol
+        headlines_map = {}
+        risky_symbols_no_cash = [s for s in symbols if s != 'CASH']
+        for sym in risky_symbols_no_cash:
+            base_sym = ai_sentiment._normalize_symbol(sym)
+            headlines_map[base_sym] = news_fetcher_instance.get_headlines_for_symbol(
+                base_sym, all_headlines, max_items=8
+            )
+        
+        # Generate per_asset_news_sentiment (for Black-Litterman views)
+        asset_sentiment_scores = ai_sentiment.generate_per_asset_news_sentiment(
+            risky_symbols_no_cash, headlines_map
+        )
+        logger.info(f"asset_sentiment_scores = {asset_sentiment_scores}")
+        
+        # Generate market_tone_score (for strategy weight multipliers)
+        market_tone = ai_sentiment.generate_market_tone_score(asset_sentiment_scores)
+        logger.info(f"market_tone_score = {market_tone:.3f}")
+        
+        # Store both signals in system_state with distinct keys
+        system_state["per_asset_news_sentiment"] = asset_sentiment_scores
+        system_state["market_tone_score"] = float(market_tone)
+        system_state["current_sentiment"] = float(market_tone)  # Legacy key for backward compat
+        
+        # Set sentiment score in strategy selector (uses market_tone for multiplier)
+        strategy_selector.set_sentiment_score(market_tone)
+        logger.info(f"[Phase 5] Dual-signal sentiment logged: per_asset_news_sentiment={asset_sentiment_scores}, market_tone_score={market_tone:.3f}")
         
         track_record_sizes = {m: len(_global_strategy_selector._track_record[m]) 
                                for m in candidate_methods}
