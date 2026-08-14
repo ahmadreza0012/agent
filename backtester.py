@@ -430,8 +430,11 @@ class Backtester:
 
         total_return = (values[-1] - self.initial_capital) / self.initial_capital
 
+        # PHASE 1 FIX: Detect actual frequency from the portfolio value index for correct annualization
+        freq = detect_frequency(pv_df[['value']])
+        
         n_periods = len(values)
-        years = n_periods / (24 * 365)
+        years = n_periods / freq.observations_per_year
         ann_return = (values[-1] / self.initial_capital) ** (1 / years) - 1 if years > 0 else 0
 
         # FIX: real calendar-month returns instead of a CAGR extrapolation
@@ -439,9 +442,11 @@ class Backtester:
         monthly_return = float(np.mean(calendar_monthly_returns)) if calendar_monthly_returns else total_return
 
         if len(returns_series) > 1:
-            vol = returns_series.std() * np.sqrt(24 * 365)
-            mean_ret = returns_series.mean() * 24 * 365
-            sharpe = (mean_ret - 0.02) / vol if vol > 0 else 0
+            # PHASE 1 FIX: Use detected frequency for vol/return annualization
+            vol = returns_series.std() * freq.annualization_factor_vol
+            mean_ret = returns_series.mean() * freq.annualization_factor_mean
+            # PHASE 1 FIX: Use unified risk-free rate (0.0 for crypto research)
+            sharpe = (mean_ret - 0.0) / vol if vol > 0 else 0
         else:
             vol, sharpe = 0, 0
 

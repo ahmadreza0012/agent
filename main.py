@@ -41,6 +41,7 @@ from portfolio_optimizer import PortfolioOptimizer
 from strategy_selector import StrategySelector, detect_regime
 from auto_logger import get_logger
 from db_manager import AgentDB
+from utils.timeframe import detect_frequency, DAILY_FREQ
 
 auto_logger = get_logger()
 db_manager = None  # Will be initialized on startup
@@ -171,27 +172,30 @@ def run_trading_cycle():
         n_assets = len(df_prices_with_cash.columns)
         optimizer = PortfolioOptimizer(n_assets=n_assets, asset_names=list(df_prices_with_cash.columns))
         
+        # PHASE 1 FIX: Detect actual data frequency and use correct annualization
+        # This replaces all hardcoded * 24 * 365 assumptions
+        freq = detect_frequency(df_prices_with_cash)
+        logger.info(f"Detected data frequency: {freq.timeframe_id} "
+                   f"(annualization: mean={freq.annualization_factor_mean:.1f}, vol={freq.annualization_factor_vol:.2f})")
+        
         # STAGE 1 & 5: All strategies use risk_free_rate=0.0
-        # STAGE 5: Add positive bias to expected returns to prevent "expected return lower than risk-free" errors
+        # PHASE 1 FIX: Remove artificial positive expected return forcing
+        # Use historical returns directly (properly annualized), let optimizer handle negatives via fallbacks
         def mvo_strategy(prices, returns):
-            # Calculate historical returns
-            hist_returns = returns.mean().values * 24 * 365
+            # Calculate historical returns with CORRECT annualization for detected frequency
+            hist_returns = returns.mean().values * freq.annualization_factor_mean
             
-            # STAGE 5+ FIX: Add small positive bias/shrinkage toward historical mean with higher floor
-            # This ensures at least some assets have expected return > 0, helping max_sharpe succeed more often
-            min_return_threshold = 0.05  # 5% annualized minimum (increased from 2%)
-            expected_returns = np.maximum(hist_returns, min_return_threshold)
+            # PHASE 1 FIX: NO forced positive floor - use raw historical returns
+            # Optional: mild shrinkage toward grand mean (can be negative) to improve stability
+            grand_mean = np.mean(hist_returns)
+            expected_returns = 0.8 * hist_returns + 0.2 * grand_mean  # 80/20 shrinkage toward grand mean
             
-            # Apply mild shrinkage toward positive mean to improve optimizer stability
-            positive_mean = np.mean(hist_returns[hist_returns > 0]) if np.any(hist_returns > 0) else min_return_threshold
-            expected_returns = 0.7 * hist_returns + 0.3 * positive_mean  # 70/30 shrinkage toward positive mean
-            
-            cov_matrix = returns.cov().values * 24 * 365
+            cov_matrix = returns.cov().values * freq.annualization_factor_mean
             return optimizer.mean_variance_optimization(expected_returns, cov_matrix, 
                                                         risk_free_rate=0.0, method='max_sharpe')
         
         def risk_parity_strategy(prices, returns):
-            cov_matrix = returns.cov().values * 24 * 365
+            cov_matrix = returns.cov().values * freq.annualization_factor_mean
             return optimizer.risk_parity(cov_matrix)
         
         def cvar_strategy(prices, returns):
@@ -204,15 +208,13 @@ def run_trading_cycle():
                 returns_risky = returns.drop(columns=['CASH'])
             else:
                 returns_risky = returns
-            expected_returns_hist = returns_risky.mean().values
+            # PHASE 1 FIX: Use correctly annualized historical returns (no forced positive floor)
+            expected_returns_hist = returns_risky.mean().values * freq.annualization_factor_mean
             
-            # STAGE 5+ FIX: Apply positive bias with shrinkage to ensure returns are above threshold
-            min_return_threshold = 0.05  # 5% annualized minimum (increased from 2%)
-            expected_returns_hist = np.maximum(expected_returns_hist, min_return_threshold)
-            
-            # Apply mild shrinkage toward positive mean for better optimizer stability
-            positive_mean = np.mean(expected_returns_hist[expected_returns_hist > 0]) if np.any(expected_returns_hist > 0) else min_return_threshold
-            expected_returns_hist = 0.7 * expected_returns_hist + 0.3 * positive_mean
+            # PHASE 1 FIX: NO forced positive floor - use raw historical returns
+            # Optional: mild shrinkage toward grand mean for stability
+            grand_mean = np.mean(expected_returns_hist)
+            expected_returns_hist = 0.8 * expected_returns_hist + 0.2 * grand_mean
             
             risky_symbols = [s for s in returns.columns if s != 'CASH']
             if 'CASH' in prices.columns:
@@ -221,7 +223,7 @@ def run_trading_cycle():
                 prices_risky = prices
             
             P, Q = ai_sentiment.generate_views(prices_risky, expected_returns_hist, risky_symbols)
-            cov_risky = returns_risky.cov().values
+            cov_risky = returns_risky.cov().values * freq.annualization_factor_mean
             n_risky = len(risky_symbols)
             market_caps = np.ones(n_risky)
             omega = ai_sentiment.get_confidence_matrix(n_risky, risky_symbols, base_confidence=0.05)
@@ -244,15 +246,10 @@ def run_trading_cycle():
             """ML-based return forecasting"""
             ml_expected_returns = optimizer.ml_forecast_returns(returns, lookback=168, forecast_horizon=24)
             
-            # STAGE 5+ FIX: Apply positive bias with shrinkage to ML forecasts as well
-            min_return_threshold = 0.05  # 5% annualized minimum (increased from 2%)
-            ml_expected_returns = np.maximum(ml_expected_returns, min_return_threshold)
+            # PHASE 1 FIX: Correctly annualize ML forecasts (no forced positive floor)
+            ml_expected_returns = ml_expected_returns * freq.annualization_factor_mean
             
-            # Apply mild shrinkage toward positive mean for better optimizer stability
-            positive_mean = np.mean(ml_expected_returns[ml_expected_returns > 0]) if np.any(ml_expected_returns > 0) else min_return_threshold
-            ml_expected_returns = 0.7 * ml_expected_returns + 0.3 * positive_mean
-            
-            cov_matrix = returns.cov().values * 24 * 365
+            cov_matrix = returns.cov().values * freq.annualization_factor_mean
             return optimizer.mean_variance_optimization(ml_expected_returns, cov_matrix, 
                                                         risk_free_rate=0.0, method='max_sharpe')
         
