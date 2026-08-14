@@ -192,7 +192,7 @@ class DataFetcher:
                             'close': 'Close', 'volume': 'Volume'}, inplace=True)
 
         logger.info(f"✅ Retrieved {len(df)} DAILY candles for {symbol} (Range: {df.index.min()} to {df.index.max()})")
-        logger.warning(f"⚠️ Volume unavailable for {symbol} from CoinGecko (set to NaN)")
+        logger.warning(f"⚠️ Volume unavailable for {symbol} from CoinGecko (volume_available=False, set to NaN)")
         return df
 
     def _fetch_from_yfinance(self, symbol: str, timeframe: str, since_days: int) -> pd.DataFrame:
