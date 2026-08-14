@@ -595,6 +595,8 @@ class PortfolioOptimizer:
         """ML-based return forecasting using Random Forest.
         
         PHASE 4 FIX: Uses bar-based windows scaled by detected frequency.
+        PHASE 6 FIX: Implements purged walk-forward validation with OOS gating.
+        
         Default lookback: ~7 days in bars, forecast_horizon: ~1 day in bars.
         
         Returns per-bar forecasts (NOT annualized).
@@ -632,34 +634,88 @@ class PortfolioOptimizer:
                    f"lag={lag_24_bars}, ma={ma_window}, momentum={momentum_window})")
         try:
             from sklearn.ensemble import RandomForestRegressor
+            from sklearn.metrics import mean_squared_error, r2_score
+            import numpy as np
 
             forecasts = []
             for symbol in returns.columns:
                 df = returns[symbol].to_frame()
-                df['lag_1'] = df[symbol].shift(1)
+                
+                # PHASE 6 FIX: CAUSAL FEATURE DESIGN - Only use past information at time t
+                df['lag_1'] = df[symbol].shift(1)  # Return at t-1
                 df['lag_24'] = df[symbol].shift(lag_24_bars)  # PHASE 4 FIX: frequency-scaled lag
                 df['ma_24'] = df[symbol].rolling(ma_window).mean()  # PHASE 4 FIX: frequency-scaled MA
                 df['std_24'] = df[symbol].rolling(std_window).std()  # PHASE 4 FIX: frequency-scaled std
                 df['momentum_168'] = df[symbol].rolling(momentum_window).apply(  # PHASE 4 FIX: frequency-scaled momentum
                     lambda x: x.iloc[-1] / x.iloc[0] - 1 if len(x) > 0 else 0)
+                
+                # PHASE 6 FIX: CAUSAL LABEL DESIGN - Label at t uses future return but aligned correctly
+                # shift(-forecast_horizon) means: at time t, we predict return from t to t+horizon
                 df['target'] = df[symbol].shift(-forecast_horizon)
+                
                 df = df.dropna()
 
                 if len(df) < lookback:
-                    forecasts.append(0.0)
+                    logger.warning(f"Insufficient data for {symbol} ({len(df)} bars), using historical mean")
+                    forecasts.append(returns[symbol].mean())
                     continue
 
                 X = df[['lag_1', 'lag_24', 'ma_24', 'std_24', 'momentum_168']]
                 y = df['target']
+                
+                # PHASE 6 FIX: PURGED WALK-FORWARD VALIDATION
+                # Split: 80% train, 20% test with embargo gap to prevent leakage
                 split = int(len(df) * 0.8)
-                X_train, y_train = X.iloc[:split], y.iloc[:split]
-
-                model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
+                embargo = max(1, int(forecast_horizon * 0.5))  # Gap to prevent overlapping label leakage
+                
+                X_train = X.iloc[:split-embargo]
+                y_train = y.iloc[:split-embargo]
+                X_test = X.iloc[split:]
+                y_test = y.iloc[split:]
+                
+                # Check minimum sample sizes
+                if len(X_train) < 20 or len(X_test) < 5:
+                    logger.warning(f"Sample too small for {symbol} (train={len(X_train)}, test={len(X_test)}), using historical mean")
+                    forecasts.append(returns[symbol].mean())
+                    continue
+                
+                # PHASE 6 FIX: MODEL SIMPLICITY - Cap complexity to reduce overfitting
+                model = RandomForestRegressor(
+                    n_estimators=30,      # Reduced from 50
+                    max_depth=4,          # Reduced from 5
+                    min_samples_leaf=5,   # Added regularization
+                    random_state=42
+                )
                 model.fit(X_train, y_train)
-                # PHASE 1 FIX: Return per-bar forecast (NOT annualized)
-                # Caller must apply freq.annualization_factor_mean
-                forecast = model.predict(X.iloc[[-1]])[0]
-                forecasts.append(forecast)
+                
+                # PHASE 6 FIX: OOS VALIDATION - Evaluate on held-out test set
+                y_pred_test = model.predict(X_test)
+                
+                # Calculate OOS metrics
+                oos_mse = mean_squared_error(y_test, y_pred_test)
+                oos_r2 = r2_score(y_test, y_pred_test)
+                
+                # Naive baseline: predict historical mean
+                naive_pred = np.full_like(y_test, y_train.mean())
+                naive_mse = mean_squared_error(y_test, naive_pred)
+                naive_r2 = r2_score(y_test, naive_pred)
+                
+                logger.info(f"ML OOS validation for {symbol}: R²={oos_r2:.4f}, MSE={oos_mse:.6f} "
+                           f"(vs naive R²={naive_r2:.4f}, MSE={naive_mse:.6f})")
+                
+                # PHASE 6 FIX: HONEST INTEGRATION POLICY
+                # If OOS R² is negative or worse than naive, skip ML and use historical mean
+                if oos_r2 < 0 or oos_r2 < naive_r2:
+                    logger.warning(f"ML has no OOS predictive power for {symbol} (R²={oos_r2:.4f}), using historical mean")
+                    forecasts.append(returns[symbol].mean())
+                else:
+                    # Model passed OOS validation, use it for prediction
+                    # PHASE 1 FIX: Return per-bar forecast (NOT annualized)
+                    # Caller must apply freq.annualization_factor_mean
+                    last_features = X.iloc[[-1]]
+                    forecast = model.predict(last_features)[0]
+                    forecasts.append(forecast)
+                    
             return np.array(forecasts)
         except ImportError:
             logger.warning("sklearn not available, using historical mean")
