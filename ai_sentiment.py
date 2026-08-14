@@ -206,54 +206,114 @@ No explanation, just the number.
         return base_confidence * adjustment
 
     # ------------------------------------------------------------------
-    # Black-Litterman view generation
+    # Dual-signal sentiment generation (Phase 5)
     # ------------------------------------------------------------------
-    def generate_views(self, prices: pd.DataFrame, expected_returns: np.ndarray,
-                        symbols: List[str]) -> Tuple[np.ndarray, np.ndarray]:
-        logger.info(f"Generating Black-Litterman views (mode={'MOCK' if self.use_mock else 'REAL news+LLM'})")
-
-        # Rate limiting cache: track which symbols have already been processed
-        # in this trading cycle to avoid duplicate Groq calls
-        if not hasattr(self, '_sentiment_cache'):
-            self._sentiment_cache = {}
+    def generate_per_asset_news_sentiment(self, symbols: List[str], headlines_map: Dict[str, List[str]]) -> Dict[str, float]:
+        """
+        Generate per-asset news sentiment scores from LLM analysis of headlines.
+        This is used ONLY for Black-Litterman views.
         
-        if self.use_mock:
+        Returns dict mapping symbol -> sentiment score in [-1, 1]
+        """
+        logger.info(f"[Phase 5] Generating per_asset_news_sentiment for {len(symbols)} symbols")
+        sentiment_scores = {}
+        
+        for symbol in symbols:
+            base_symbol = self._normalize_symbol(symbol)
+            headlines = headlines_map.get(base_symbol, [])
+            
+            if not headlines:
+                logger.info(f"No headlines found for {symbol}, setting neutral per_asset_news_sentiment")
+                sentiment_scores[symbol] = 0.0
+                continue
+            
+            # Cap max headlines to avoid LLM context overflow and rate limits
+            capped_headlines = headlines[:8]
+            
+            if not self.api_key or self.client is None:
+                # Use keyword fallback on LLM failure
+                score = NewsFetcher.keyword_fallback_score(capped_headlines)
+                logger.info(f"[fallback keyword score] {symbol}: {score:.3f}")
+            else:
+                score = self.generate_real_sentiment(symbol, capped_headlines)
+            
+            # Clip to [-1, 1] range (required by Phase 5)
+            score = float(np.clip(score, -1.0, 1.0))
+            sentiment_scores[symbol] = score
+            logger.info(f"per_asset_news_sentiment[{symbol}] = {score:.3f} (from {len(capped_headlines)} headlines)")
+        
+        return sentiment_scores
+    
+    def generate_market_tone_score(self, per_asset_sentiments: Dict[str, float]) -> float:
+        """
+        Generate market-wide tone score from per-asset sentiments.
+        This is used ONLY for strategy weight multipliers.
+        
+        Market tone = mean of available per-asset sentiment scores
+        Named distinctly to avoid confusion with per_asset_news_sentiment
+        """
+        if not per_asset_sentiments:
+            logger.info("No per-asset sentiments available, market_tone_score = 0.0 (neutral)")
+            return 0.0
+        
+        # Simple average of all available asset sentiments
+        scores = list(per_asset_sentiments.values())
+        market_tone = float(np.mean(scores))
+        
+        # Clip to [-1, 1] range
+        market_tone = float(np.clip(market_tone, -1.0, 1.0))
+        
+        logger.info(f"market_tone_score = {market_tone:.3f} (mean of {len(scores)} asset sentiments)")
+        return market_tone
+
+    def generate_views(self, prices: pd.DataFrame, expected_returns: np.ndarray,
+                        symbols: List[str], per_asset_sentiment: Dict[str, float] = None) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Generate Black-Litterman views with Q magnitude capping (Phase 5 requirement).
+        
+        Args:
+            prices: Price data
+            expected_returns: Base expected returns
+            symbols: Asset symbols
+            per_asset_sentiment: Optional dict of sentiment scores from generate_per_asset_news_sentiment
+        
+        Returns:
+            P (pick matrix), Q (view vector) with capped magnitudes
+        """
+        logger.info(f"Generating Black-Litterman views (mode={'MOCK' if self.use_mock else 'REAL news+LLM'})")
+        
+        # Use provided sentiment or fall back to legacy method
+        if per_asset_sentiment is None:
+            # Legacy path - use mock sentiment from prices
             sentiment = self.generate_mock_sentiment(prices)
             latest_sentiment = sentiment.iloc[-1].values
+            n_assets = len(symbols)
+            P = np.eye(n_assets)
+            confidence = 0.5
+            latest_sentiment = np.nan_to_num(latest_sentiment, nan=0.0)
+            Q = latest_sentiment * confidence * np.abs(expected_returns)
         else:
-            all_headlines = self.news_fetcher.fetch_all()
-            latest_sentiment = []
+            # Phase 5 dual-signal path: use per_asset_news_sentiment for BL views
+            n_assets = len(symbols)
+            P = np.eye(n_assets)
             
-            for sym in symbols:
-                # Check cache first - if we've already analyzed this symbol in this cycle, reuse
-                if sym in self._sentiment_cache:
-                    logger.info(f"[CACHE HIT] Reusing cached sentiment for {sym}")
-                    latest_sentiment.append(self._sentiment_cache[sym])
-                    continue
-                
-                # Generate real sentiment with rate limiting
-                sentiment_score = self.generate_real_sentiment(
-                    sym, self.news_fetcher.get_headlines_for_symbol(
-                        self._normalize_symbol(sym), all_headlines))
-                
-                # Cache the result for this symbol
-                self._sentiment_cache[sym] = sentiment_score
-                latest_sentiment.append(sentiment_score)
-                
-                # Add rate limiting delay between Groq API calls to prevent 429 errors
-                # This is critical when processing multiple symbols (BTC, ETH, XRP, etc.)
-                # as each one makes a separate Groq call
-                time.sleep(1.5)  # 1.5 second delay between consecutive API calls
+            # Build Q vector from sentiment scores
+            Q = np.zeros(n_assets)
+            for i, sym in enumerate(symbols):
+                sentiment = per_asset_sentiment.get(sym, 0.0)
+                # Scale by expected return magnitude but apply hard cap (Phase 5 requirement)
+                base_view_magnitude = np.abs(expected_returns[i]) if i < len(expected_returns) else 0.001
+                Q[i] = sentiment * base_view_magnitude
             
-            latest_sentiment = np.array(latest_sentiment)
-
-        n_assets = len(symbols)
-        P = np.eye(n_assets)
-        confidence = 0.5
-        latest_sentiment = np.nan_to_num(latest_sentiment, nan=0.0)  # safety net, see fix above
-        Q = latest_sentiment * confidence * np.abs(expected_returns)
-        logger.info(f"Generated {n_assets} views. Q={Q}")
+            # PHASE 5 REQUIREMENT: Cap Q magnitudes to prevent explosion vs prior
+            # Limit view magnitudes to reasonable bounds (±10% annual max)
+            Q_CAP = 0.10  # Hard cap on view magnitude
+            Q = np.clip(Q, -Q_CAP, Q_CAP)
+            
+            logger.info(f"Generated {n_assets} views with Q magnitude cap={Q_CAP}. Q={Q}")
+        
         return P, Q
+
 
     def get_confidence_matrix(self, n_assets: int, symbols: List[str] = None,
                                base_confidence: float = 0.05) -> np.ndarray:

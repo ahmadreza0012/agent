@@ -55,6 +55,9 @@ class NewsFetcher:
     def __init__(self, feeds: List[str] = None, timeout: int = 8):
         self.feeds = feeds or RSS_FEEDS
         self.timeout = timeout
+        # Simple in-memory cache for headlines (TTL-based)
+        self._cache = {}
+        self._cache_ttl = timedelta(minutes=30)
 
     def _fetch_feed(self, url: str) -> List[Dict]:
         """Fetch and parse a single RSS feed. Returns list of {title, published, link}."""
@@ -89,19 +92,42 @@ class NewsFetcher:
             all_items.extend(items)
             time.sleep(0.2)  # be polite
         return all_items
+    
+    @staticmethod
+    def deduplicate_headlines(headlines: List[Dict]) -> List[Dict]:
+        """
+        Remove duplicate headlines while preserving order.
+        Phase 5 requirement: deduplication to avoid LLM context overflow.
+        """
+        seen = set()
+        unique = []
+        for h in headlines:
+            # Normalize title for comparison
+            normalized = h["title"].lower().strip()
+            if normalized not in seen:
+                seen.add(normalized)
+                unique.append(h)
+        return unique
 
     def get_headlines_for_symbol(self, symbol: str, headlines: List[Dict] = None,
                                   max_items: int = 8) -> List[str]:
         """
         Filter fetched headlines that mention a given symbol (e.g. 'BTC').
-
+        
+        Phase 5 requirements:
+        - Cap max headlines per symbol (max_items parameter)
+        - Deduplicate headlines
+        
         Args:
             symbol: base symbol, e.g. 'BTC', 'ETH'
             headlines: pre-fetched list from fetch_all(); fetched fresh if None
-            max_items: max number of matching headlines to return
+            max_items: max number of matching headlines to return (Phase 5 cap)
         """
         if headlines is None:
             headlines = self.fetch_all()
+        
+        # Phase 5: Deduplicate first
+        headlines = self.deduplicate_headlines(headlines)
 
         keywords = SYMBOL_KEYWORDS.get(symbol.upper(), [symbol.lower()])
         matched = []
@@ -109,6 +135,7 @@ class NewsFetcher:
             title_lower = h["title"].lower()
             if any(kw in title_lower for kw in keywords):
                 matched.append(h["title"])
+            # Phase 5: Cap at max_items
             if len(matched) >= max_items:
                 break
         return matched
