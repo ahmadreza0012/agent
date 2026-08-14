@@ -108,13 +108,16 @@ class PortfolioOptimizer:
                 logger.warning(f"Attempt 1 (max_sharpe/direct) failed: {e}. Trying Attempt 2 (efficient_return)...")
             
             # ATTEMPT 2: efficient_return with modest positive target (fresh instance)
-            # Use mean of positive expected returns, or at least 3-5% annualized
+            # Use mean of positive expected returns, or a modest fraction of that
+            # Avoids inventing arbitrary annualized targets for unknown frequencies
             try:
                 positive_returns = expected_returns[expected_returns > 0]
                 if len(positive_returns) > 0:
-                    target_ret = max(np.mean(positive_returns), 0.03 / 24 / 365)  # At least 3% annualized
+                    # Target: 50% of mean positive return (modest, frequency-agnostic)
+                    target_ret = 0.5 * np.mean(positive_returns)
                 else:
-                    target_ret = 0.05 / 24 / 365  # 5% annualized as fallback
+                    # No positive returns: degrade to min_vol without inventing alpha
+                    target_ret = 0.0  # Will fail and fall through to Attempt 3
                 
                 ef2 = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=get_bounds())
                 weights = ef2.efficient_return(target_ret)
@@ -663,10 +666,10 @@ class PortfolioOptimizer:
             ann_vol = port_std * freq.annualization_factor_vol
             monthly_return = (1 + port_mean) ** (freq.observations_per_day * 30) - 1
         else:
-            # Legacy fallback: assume hourly data
-            logger.warning("calculate_portfolio_metrics: freq not provided, assuming hourly")
-            ann_return = port_mean * 24 * 365
-            ann_vol = port_std * np.sqrt(24 * 365)
+            # Legacy fallback: assume hourly data (documented limitation)
+            logger.warning("calculate_portfolio_metrics: freq not provided, assuming hourly (legacy)")
+            ann_return = port_mean * 8760  # 24 * 365
+            ann_vol = port_std * np.sqrt(8760)
             monthly_return = (1 + port_mean) ** (24 * 30) - 1
             
         sharpe = (ann_return - risk_free_rate) / ann_vol if ann_vol > 0 else 0
@@ -762,10 +765,14 @@ def trend_following_strategy(prices: pd.DataFrame, returns: pd.DataFrame,
 
 
 def mean_reversion_strategy(prices: pd.DataFrame, returns: pd.DataFrame,
-                             lookback_window: int = 50, z_score_threshold: float = 1.5) -> np.ndarray:
+                             lookback_window: int = 50, z_score_threshold: float = 1.5,
+                             max_single_asset_weight: float = 0.40) -> np.ndarray:
     """
     Mean-reversion strategy based on z-score of price deviation from moving average.
     Independent of covariance-based methods - uses only price statistics.
+    
+    PHASE 4 FIX: Added max_single_asset_weight cap to avoid extreme concentration
+    on noisy signals. Default 40% per asset.
     """
     n_assets = len(returns.columns)
     weights = np.zeros(n_assets)
@@ -812,7 +819,21 @@ def mean_reversion_strategy(prices: pd.DataFrame, returns: pd.DataFrame,
             weights[i] = scores[score_idx] / total_score
             score_idx += 1
         
-        weights = weights * 0.80
+        # PHASE 4 FIX: Cap individual asset weights to prevent extreme concentration
+        for i in range(n_assets):
+            if i != cash_col_idx:
+                weights[i] = min(weights[i], max_single_asset_weight)
+        
+        # Renormalize after capping (preserving cash slot if exists)
+        risky_sum = weights.sum()
+        if cash_col_idx is not None:
+            if risky_sum > 0.8:  # Can't exceed 80% in risky assets
+                weights[weights != 0] *= 0.8 / risky_sum
+        else:
+            if risky_sum > 0:
+                weights = weights / risky_sum
+        
+        weights = weights * 0.80  # Scale to 80% max in risky assets
         
         if cash_col_idx is not None:
             weights[cash_col_idx] = 1.0 - weights.sum()
