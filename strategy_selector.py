@@ -37,7 +37,7 @@ def detect_regime(returns: pd.DataFrame, window: int = 168, freq=None) -> str:
     Returns one of: 'trending', 'mean_reverting', 'high_vol'
     
     PHASE 1 FIX: Accepts optional FrequencySpec for correct vol annualization.
-    If freq is None, falls back to hourly assumption (legacy behavior).
+    If freq is None, attempts to auto-detect from returns index.
     """
     if len(returns) < window:
         window = len(returns)
@@ -46,12 +46,19 @@ def detect_regime(returns: pd.DataFrame, window: int = 168, freq=None) -> str:
 
     port = returns.tail(window).mean(axis=1)
     
-    # PHASE 1 FIX: Use detected frequency for vol annualization if provided
-    if freq is not None:
-        vol = port.std() * freq.annualization_factor_vol
-    else:
-        # Legacy fallback: assume hourly data
-        vol = port.std() * np.sqrt(24 * 365)
+    # PHASE 1 FIX: Use detected frequency for vol annualization
+    if freq is None:
+        # Auto-detect frequency from returns index
+        try:
+            from utils.timeframe import detect_frequency as detect_freq
+            freq = detect_freq(returns)
+        except Exception:
+            # Fallback to hourly assumption with warning
+            logger.warning("Could not detect frequency in detect_regime, assuming hourly")
+            from utils.timeframe import FREQUENCY_SPECS
+            freq = FREQUENCY_SPECS["1h"]
+    
+    vol = port.std() * freq.annualization_factor_vol
         
     autocorr = port.autocorr(lag=1) if len(port) > 2 else 0.0
     autocorr = 0.0 if pd.isna(autocorr) else autocorr
@@ -380,19 +387,25 @@ def compute_in_sample_scores(candidate_methods: List[str], strategy_fns: Dict[st
     STAGE 2-3: Better error handling for structural bugs.
     
     PHASE 1 FIX: Accepts optional FrequencySpec for correct annualization.
-    If freq is None, falls back to hourly assumption (legacy behavior).
+    If freq is None, auto-detects from returns index.
     """
     scores = {}
     n_expected_assets = len(returns.columns)
     
     # PHASE 1 FIX: Determine annualization factors
-    if freq is not None:
-        ann_mean_factor = freq.annualization_factor_mean
-        ann_vol_factor = freq.annualization_factor_vol
-    else:
-        # Legacy fallback: assume hourly data
-        ann_mean_factor = 24 * 365
-        ann_vol_factor = np.sqrt(24 * 365)
+    if freq is None:
+        # Auto-detect frequency from returns index
+        try:
+            from utils.timeframe import detect_frequency as detect_freq
+            freq = detect_freq(returns)
+        except Exception:
+            # Fallback to hourly assumption with warning
+            logger.warning("Could not detect frequency in compute_in_sample_scores, assuming hourly")
+            from utils.timeframe import FREQUENCY_SPECS
+            freq = FREQUENCY_SPECS["1h"]
+    
+    ann_mean_factor = freq.annualization_factor_mean
+    ann_vol_factor = freq.annualization_factor_vol
     
     for method in candidate_methods:
         try:

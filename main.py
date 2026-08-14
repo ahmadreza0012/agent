@@ -323,7 +323,8 @@ def run_trading_cycle():
             n_months = eval_data.get('n_calendar_months_observed', 0)
             
             # STAGE 2: Detect regime for logging
-            current_regime = detect_regime(df_prices_with_cash.pct_change().dropna())
+            # PHASE 1 FIX: Pass detected frequency to detect_regime for correct vol annualization
+            current_regime = detect_regime(df_prices_with_cash.pct_change().dropna(), freq=freq)
             system_state["current_regime"] = current_regime
             
             logger.info("="*70)

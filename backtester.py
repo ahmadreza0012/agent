@@ -30,6 +30,7 @@ from datetime import timedelta
 import logging
 
 from strategy_selector import StrategySelector, detect_regime, compute_in_sample_scores
+from utils.timeframe import detect_frequency
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -139,8 +140,14 @@ class Backtester:
                             logger.info(f"[DEBUG] Captured individual_weights for {len(all_individual_weights)} strategies: {list(all_individual_weights.keys())}")
                         else:
                             # LEGACY: Select single best strategy
+                            # PHASE 1 FIX: Detect frequency from lookback data for correct annualization in scoring
+                            try:
+                                freq = detect_frequency(lookback_prices)
+                            except Exception:
+                                freq = None  # compute_in_sample_scores will auto-detect or warn
+                            
                             in_sample_scores = compute_in_sample_scores(
-                                list(strategy_fns.keys()), strategy_fns, lookback_prices, lookback_returns)
+                                list(strategy_fns.keys()), strategy_fns, lookback_prices, lookback_returns, freq=freq)
                             
                             # Pass realized performance from previous period (if available)
                             realized_perf_dict = {}
