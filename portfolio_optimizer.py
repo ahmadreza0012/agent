@@ -590,14 +590,46 @@ class PortfolioOptimizer:
         return weights
 
     # ------------------------------------------------------------------
-    def ml_forecast_returns(self, returns: pd.DataFrame, lookback: int = 168,
-                             forecast_horizon: int = 24) -> np.ndarray:
+    def ml_forecast_returns(self, returns: pd.DataFrame, lookback: int = None,
+                             forecast_horizon: int = None, freq=None) -> np.ndarray:
         """ML-based return forecasting using Random Forest.
         
-        CRITICAL FIX: Returns are per-bar forecasts (NOT annualized).
+        PHASE 4 FIX: Uses bar-based windows scaled by detected frequency.
+        Default lookback: ~7 days in bars, forecast_horizon: ~1 day in bars.
+        
+        Returns per-bar forecasts (NOT annualized).
         Caller must apply correct annualization based on detected data frequency.
+        
+        Args:
+            lookback: Lookback window in bars (default: 7 days worth)
+            forecast_horizon: Forecast horizon in bars (default: 1 day worth)
+            freq: FrequencySpec for automatic window sizing if lookback/horizon not provided
         """
-        logger.info(f"Generating ML return forecasts (lookback={lookback})")
+        # PHASE 4 FIX: Auto-detect windows from frequency if not provided
+        if freq is None:
+            # Try to auto-detect frequency from returns
+            try:
+                from utils.timeframe import detect_frequency as detect_freq
+                freq = detect_freq(returns)
+            except Exception:
+                logger.warning("ml_forecast_returns: Could not detect frequency, using hourly defaults")
+                from utils.timeframe import FREQUENCY_SPECS
+                freq = FREQUENCY_SPECS["1h"]
+        
+        # Default windows: ~7 days lookback, ~1 day horizon in bars
+        if lookback is None:
+            lookback = int(7 * freq.observations_per_day)
+        if forecast_horizon is None:
+            forecast_horizon = int(1 * freq.observations_per_day)
+        
+        # Scale feature windows by frequency (avoid hardcoded 24, 168)
+        lag_24_bars = int(1 * freq.observations_per_day)  # 1 day lag
+        ma_window = int(1 * freq.observations_per_day)    # 1 day MA
+        std_window = int(1 * freq.observations_per_day)   # 1 day std
+        momentum_window = int(7 * freq.observations_per_day)  # 7 day momentum
+        
+        logger.info(f"Generating ML return forecasts (lookback={lookback}, horizon={forecast_horizon}, "
+                   f"lag={lag_24_bars}, ma={ma_window}, momentum={momentum_window})")
         try:
             from sklearn.ensemble import RandomForestRegressor
 
@@ -605,10 +637,10 @@ class PortfolioOptimizer:
             for symbol in returns.columns:
                 df = returns[symbol].to_frame()
                 df['lag_1'] = df[symbol].shift(1)
-                df['lag_24'] = df[symbol].shift(24)
-                df['ma_24'] = df[symbol].rolling(24).mean()
-                df['std_24'] = df[symbol].rolling(24).std()
-                df['momentum_168'] = df[symbol].rolling(168).apply(
+                df['lag_24'] = df[symbol].shift(lag_24_bars)  # PHASE 4 FIX: frequency-scaled lag
+                df['ma_24'] = df[symbol].rolling(ma_window).mean()  # PHASE 4 FIX: frequency-scaled MA
+                df['std_24'] = df[symbol].rolling(std_window).std()  # PHASE 4 FIX: frequency-scaled std
+                df['momentum_168'] = df[symbol].rolling(momentum_window).apply(  # PHASE 4 FIX: frequency-scaled momentum
                     lambda x: x.iloc[-1] / x.iloc[0] - 1 if len(x) > 0 else 0)
                 df['target'] = df[symbol].shift(-forecast_horizon)
                 df = df.dropna()
@@ -645,32 +677,37 @@ class PortfolioOptimizer:
         """
         Calculate portfolio performance metrics.
         
-        CRITICAL FIX: Accepts optional FrequencySpec for correct annualization.
-        If freq is None, falls back to hourly assumption (legacy behavior).
+        PHASE 4 FIX: Auto-detects frequency from returns if not provided.
+        No more hardcoded 24*365 assumptions in production path.
         
         Args:
             weights: Portfolio weights
             returns: DataFrame of per-bar returns
             cov_matrix: Annualized covariance matrix
             risk_free_rate: Risk-free rate (default 0.0 for crypto)
-            freq: FrequencySpec for annualization (optional, defaults to hourly)
+            freq: FrequencySpec for annualization (auto-detected if None)
         """
         weights = np.array(weights)
         port_returns = returns @ weights
         port_mean = port_returns.mean()
         port_std = port_returns.std()
 
-        # PHASE 1 FIX: Use detected frequency for annualization if provided
-        if freq is not None:
-            ann_return = port_mean * freq.annualization_factor_mean
-            ann_vol = port_std * freq.annualization_factor_vol
-            monthly_return = (1 + port_mean) ** (freq.observations_per_day * 30) - 1
-        else:
-            # Legacy fallback: assume hourly data (documented limitation)
-            logger.warning("calculate_portfolio_metrics: freq not provided, assuming hourly (legacy)")
-            ann_return = port_mean * 8760  # 24 * 365
-            ann_vol = port_std * np.sqrt(8760)
-            monthly_return = (1 + port_mean) ** (24 * 30) - 1
+        # PHASE 4 FIX: Auto-detect frequency if not provided (no more silent hourly assumption)
+        if freq is None:
+            try:
+                from utils.timeframe import detect_frequency as detect_freq
+                freq = detect_freq(returns)
+                logger.info(f"calculate_portfolio_metrics: Auto-detected frequency {freq.name}")
+            except Exception as e:
+                logger.warning(f"calculate_portfolio_metrics: Could not auto-detect frequency ({e}), "
+                              f"using hourly as fallback (LEGACY BEHAVIOR - should provide freq)")
+                from utils.timeframe import FREQUENCY_SPECS
+                freq = FREQUENCY_SPECS["1h"]
+        
+        # Use FrequencySpec for all annualization (no hardcoded 24*365)
+        ann_return = port_mean * freq.annualization_factor_mean
+        ann_vol = port_std * freq.annualization_factor_vol
+        monthly_return = (1 + port_mean) ** (freq.observations_per_day * 30) - 1
             
         sharpe = (ann_return - risk_free_rate) / ann_vol if ann_vol > 0 else 0
 

@@ -244,15 +244,12 @@ def run_trading_cycle():
         
         def ml_strategy(prices, returns):
             """ML-based return forecasting with frequency-aware windows"""
-            # PHASE 4 FIX: Use bar-based windows scaled by detected frequency
-            # ~7 days lookback, ~1 day horizon in bars (not hardcoded hours)
-            lookback_bars = int(7 * freq.observations_per_day)  # e.g., 168 for hourly, 7 for daily
-            horizon_bars = int(1 * freq.observations_per_day)   # e.g., 24 for hourly, 1 for daily
-            
+            # PHASE 4 FIX: Pass freq to ml_forecast_returns for automatic window sizing
             ml_expected_returns = optimizer.ml_forecast_returns(
                 returns, 
-                lookback=lookback_bars, 
-                forecast_horizon=horizon_bars
+                lookback=None,  # Auto-detect from freq (default ~7 days)
+                forecast_horizon=None,  # Auto-detect from freq (default ~1 day)
+                freq=freq
             )
             
             # PHASE 1 FIX: Correctly annualize ML forecasts (no forced positive floor)
