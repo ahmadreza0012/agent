@@ -589,7 +589,11 @@ class PortfolioOptimizer:
     # ------------------------------------------------------------------
     def ml_forecast_returns(self, returns: pd.DataFrame, lookback: int = 168,
                              forecast_horizon: int = 24) -> np.ndarray:
-        """ML-based return forecasting using Random Forest."""
+        """ML-based return forecasting using Random Forest.
+        
+        CRITICAL FIX: Returns are per-bar forecasts (NOT annualized).
+        Caller must apply correct annualization based on detected data frequency.
+        """
         logger.info(f"Generating ML return forecasts (lookback={lookback})")
         try:
             from sklearn.ensemble import RandomForestRegressor
@@ -617,28 +621,55 @@ class PortfolioOptimizer:
 
                 model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
                 model.fit(X_train, y_train)
+                # PHASE 1 FIX: Return per-bar forecast (NOT annualized)
+                # Caller must apply freq.annualization_factor_mean
                 forecast = model.predict(X.iloc[[-1]])[0]
-                forecasts.append(forecast * 24 * 365)
+                forecasts.append(forecast)
             return np.array(forecasts)
         except ImportError:
             logger.warning("sklearn not available, using historical mean")
-            return returns.mean().values * 24 * 365
+            # PHASE 1 FIX: Return per-bar mean (NOT annualized)
+            return returns.mean().values
         except Exception as e:
             logger.error(f"ML forecast error: {e}")
-            return returns.mean().values * 24 * 365
+            # PHASE 1 FIX: Return per-bar mean (NOT annualized)
+            return returns.mean().values
 
     # ------------------------------------------------------------------
     def calculate_portfolio_metrics(self, weights: np.ndarray, returns: pd.DataFrame,
-                                     cov_matrix: np.ndarray, risk_free_rate: float = 0.0) -> Dict:
+                                     cov_matrix: np.ndarray, risk_free_rate: float = 0.0,
+                                     freq=None) -> Dict:
+        """
+        Calculate portfolio performance metrics.
+        
+        CRITICAL FIX: Accepts optional FrequencySpec for correct annualization.
+        If freq is None, falls back to hourly assumption (legacy behavior).
+        
+        Args:
+            weights: Portfolio weights
+            returns: DataFrame of per-bar returns
+            cov_matrix: Annualized covariance matrix
+            risk_free_rate: Risk-free rate (default 0.0 for crypto)
+            freq: FrequencySpec for annualization (optional, defaults to hourly)
+        """
         weights = np.array(weights)
         port_returns = returns @ weights
         port_mean = port_returns.mean()
         port_std = port_returns.std()
 
-        ann_return = port_mean * 24 * 365
-        ann_vol = port_std * np.sqrt(24 * 365)
+        # PHASE 1 FIX: Use detected frequency for annualization if provided
+        if freq is not None:
+            ann_return = port_mean * freq.annualization_factor_mean
+            ann_vol = port_std * freq.annualization_factor_vol
+            monthly_return = (1 + port_mean) ** (freq.observations_per_day * 30) - 1
+        else:
+            # Legacy fallback: assume hourly data
+            logger.warning("calculate_portfolio_metrics: freq not provided, assuming hourly")
+            ann_return = port_mean * 24 * 365
+            ann_vol = port_std * np.sqrt(24 * 365)
+            monthly_return = (1 + port_mean) ** (24 * 30) - 1
+            
         sharpe = (ann_return - risk_free_rate) / ann_vol if ann_vol > 0 else 0
-        monthly_return = (1 + port_mean) ** (24 * 30) - 1
 
         cumulative = (1 + port_returns).cumprod()
         running_max = cumulative.cummax()
