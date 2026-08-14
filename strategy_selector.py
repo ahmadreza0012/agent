@@ -29,12 +29,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def detect_regime(returns: pd.DataFrame, window: int = 168) -> str:
+def detect_regime(returns: pd.DataFrame, window: int = 168, freq=None) -> str:
     """
     Aggressive regime classifier for crypto market conditions.
     
     STAGE 2 FIX: Enhanced thresholds for crypto volatility
     Returns one of: 'trending', 'mean_reverting', 'high_vol'
+    
+    PHASE 1 FIX: Accepts optional FrequencySpec for correct vol annualization.
+    If freq is None, falls back to hourly assumption (legacy behavior).
     """
     if len(returns) < window:
         window = len(returns)
@@ -42,7 +45,14 @@ def detect_regime(returns: pd.DataFrame, window: int = 168) -> str:
         return "mean_reverting"
 
     port = returns.tail(window).mean(axis=1)
-    vol = port.std() * np.sqrt(24 * 365)
+    
+    # PHASE 1 FIX: Use detected frequency for vol annualization if provided
+    if freq is not None:
+        vol = port.std() * freq.annualization_factor_vol
+    else:
+        # Legacy fallback: assume hourly data
+        vol = port.std() * np.sqrt(24 * 365)
+        
     autocorr = port.autocorr(lag=1) if len(port) > 2 else 0.0
     autocorr = 0.0 if pd.isna(autocorr) else autocorr
     
@@ -364,13 +374,25 @@ class StrategySelector:
 
 
 def compute_in_sample_scores(candidate_methods: List[str], strategy_fns: Dict[str, Callable],
-                               prices: pd.DataFrame, returns: pd.DataFrame) -> Dict[str, float]:
+                               prices: pd.DataFrame, returns: pd.DataFrame, freq=None) -> Dict[str, float]:
     """
     Score each candidate strategy on the lookback window.
     STAGE 2-3: Better error handling for structural bugs.
+    
+    PHASE 1 FIX: Accepts optional FrequencySpec for correct annualization.
+    If freq is None, falls back to hourly assumption (legacy behavior).
     """
     scores = {}
     n_expected_assets = len(returns.columns)
+    
+    # PHASE 1 FIX: Determine annualization factors
+    if freq is not None:
+        ann_mean_factor = freq.annualization_factor_mean
+        ann_vol_factor = freq.annualization_factor_vol
+    else:
+        # Legacy fallback: assume hourly data
+        ann_mean_factor = 24 * 365
+        ann_vol_factor = np.sqrt(24 * 365)
     
     for method in candidate_methods:
         try:
@@ -383,8 +405,8 @@ def compute_in_sample_scores(candidate_methods: List[str], strategy_fns: Dict[st
                 continue
             
             port_ret = returns.values @ weights_array
-            mean_r = port_ret.mean() * 24 * 365
-            vol_r = port_ret.std() * np.sqrt(24 * 365)
+            mean_r = port_ret.mean() * ann_mean_factor
+            vol_r = port_ret.std() * ann_vol_factor
             scores[method] = (mean_r - 0.0) / vol_r if vol_r > 0 else 0.0  # STAGE 1: rf_rate = 0.0
         except Exception as e:
             logger.warning(f"In-sample scoring failed for {method}: {e}")
