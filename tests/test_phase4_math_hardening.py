@@ -2,6 +2,9 @@
 Phase 4: Math Hardening Tests
 Tests for numerical stability, honest expected returns, and frequency-aware windows.
 """
+import sys
+sys.path.insert(0, '/workspace')
+
 import pytest
 import numpy as np
 import pandas as pd
