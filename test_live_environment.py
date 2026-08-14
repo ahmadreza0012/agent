@@ -216,10 +216,13 @@ class RealEnvironmentTester:
         
         try:
             from portfolio_optimizer import PortfolioOptimizer
+            from utils.timeframe import detect_frequency
             
             returns = prices.pct_change().dropna()
-            cov_matrix = returns.cov().values * 24 * 365  # Annualized
-            expected_returns = returns.mean().values * 24 * 365
+            # PHASE 1 FIX: Use detected frequency for annualization
+            freq = detect_frequency(returns.index)
+            cov_matrix = returns.cov().values * freq.observations_per_year
+            expected_returns = returns.mean().values * freq.annualization_factor_mean
             n_assets = len(prices.columns)
             
             optimizer = PortfolioOptimizer(n_assets, list(prices.columns))

@@ -11,6 +11,7 @@ from data.enhanced_data_fetcher import MultiExchangeDataFetcher
 from portfolio_optimizer import PortfolioOptimizer
 from backtester import Backtester
 from strategies.regime_detection import MarketRegimeDetector, RegimeAdaptiveStrategy
+from utils.timeframe import detect_frequency
 
 def run_production_backtest():
     """Run a production-quality backtest with 1 year of data"""
@@ -75,11 +76,14 @@ def run_production_backtest():
         # Select strategy based on regime
         strategy = regime_strategy.get_optimal_strategy(current_regime)
         
+        # PHASE 1 FIX: Detect frequency from data and use for annualization
+        freq = detect_frequency(returns_df.index)
+        
         n_assets = len(prices_df.columns)
-        cov_matrix = returns_df.cov().values * 24 * 365
+        cov_matrix = returns_df.cov().values * freq.observations_per_year
         
         if strategy == 'momentum':
-            exp_ret = returns_df.mean().values * 24 * 365
+            exp_ret = returns_df.mean().values * freq.annualization_factor_mean
             momentum = prices_df.pct_change(168).iloc[-1].values
             exp_ret *= (1 + momentum)
             weights = optimizer.mean_variance_optimization(exp_ret, cov_matrix, method='max_sharpe')

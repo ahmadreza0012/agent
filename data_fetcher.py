@@ -180,9 +180,11 @@ class DataFetcher:
         # CoinGecko returns: [timestamp(ms), open, high, low, close]
         df = pd.DataFrame(ohlc_data, columns=['timestamp', 'open', 'high', 'low', 'close'])
         
-        # Add volume column (CoinGecko OHLC endpoint doesn't include volume in free tier)
-        # Set to 0.0 as placeholder; portfolio optimization primarily uses returns from Close prices
-        df['volume'] = 0.0
+        # CRITICAL: CoinGecko OHLC endpoint doesn't include volume in free tier.
+        # Set volume to NaN (not 0) to indicate unavailability.
+        # Strategies requiring volume must handle this gracefully.
+        # See data.providers.historical.HistoricalDataProvider for preferred implementation.
+        df['volume'] = np.nan
         
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
@@ -190,6 +192,7 @@ class DataFetcher:
                             'close': 'Close', 'volume': 'Volume'}, inplace=True)
 
         logger.info(f"✅ Retrieved {len(df)} DAILY candles for {symbol} (Range: {df.index.min()} to {df.index.max()})")
+        logger.warning(f"⚠️ Volume unavailable for {symbol} from CoinGecko (set to NaN)")
         return df
 
     def _fetch_from_yfinance(self, symbol: str, timeframe: str, since_days: int) -> pd.DataFrame:

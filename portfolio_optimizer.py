@@ -827,14 +827,20 @@ __all__ = ['PortfolioOptimizer', 'trend_following_strategy', 'mean_reversion_str
 
 def main():
     """Self-test: verifies the fixes."""
+    # Demo/test code: use FrequencySpec for proper annualization
+    from utils.timeframe import FrequencySpec
+    
     np.random.seed(42)
     n_assets = 5
+    # Simulate hourly returns (freq=1/24 days per bar)
     returns = pd.DataFrame(
         np.random.randn(1000, n_assets) * 0.01,
         columns=['BTC', 'ETH', 'SOL', 'BNB', 'XRP']
     )
-    cov_matrix = returns.cov().values * 24 * 365
-    expected_returns = returns.mean().values * 24 * 365
+    # Use hourly frequency spec for demo
+    freq = FrequencySpec(timeframe='1h')
+    cov_matrix = returns.cov().values * freq.observations_per_year
+    expected_returns = returns.mean().values * freq.annualization_factor_mean
     optimizer = PortfolioOptimizer(n_assets, list(returns.columns))
 
     print("\n=== CVaR Optimization (with 10% limit) ===")

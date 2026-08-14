@@ -374,12 +374,16 @@ class SelfImprovingTradingAgent:
                             strategy: str) -> np.ndarray:
         """Get optimal weights using specified strategy"""
         
+        # PHASE 1 FIX: Use detected frequency for annualization
+        from utils.timeframe import detect_frequency
+        freq = detect_frequency(returns.index)
+        
         n_assets = len(prices.columns)
-        cov_matrix = returns.cov().values * 24 * 365
+        cov_matrix = returns.cov().values * freq.observations_per_year
         
         if strategy == 'momentum':
             # Momentum-tilted MVO
-            expected_returns = returns.mean().values * 24 * 365
+            expected_returns = returns.mean().values * freq.annualization_factor_mean
             # Boost high momentum assets
             momentum = prices.pct_change(168).iloc[-1].values
             expected_returns *= (1 + momentum)
@@ -409,7 +413,8 @@ class SelfImprovingTradingAgent:
             # Market cap weights (simplified)
             market_caps = np.array([1.0, 0.5, 0.2, 0.15, 0.1])[:n_assets]
             market_caps = market_caps / market_caps.sum() * n_assets
-            expected_returns = returns.mean().values * 24 * 365
+            # Use frequency-aware annualization (already computed above)
+            expected_returns = returns.mean().values * freq.annualization_factor_mean
             
             P, Q = self.sentiment_analyzer.generate_views(
                 prices, expected_returns, list(prices.columns)

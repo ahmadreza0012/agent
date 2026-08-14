@@ -34,8 +34,11 @@ def risk_parity_strategy(prices, returns):
 
 def mvo_strategy(prices, returns):
     """Simple max Sharpe"""
-    mean_ret = returns.mean() * 24 * 365
-    cov = returns.cov() * 24 * 365
+    # Use frequency-aware annualization
+    from utils.timeframe import detect_frequency
+    freq = detect_frequency(returns.index)
+    mean_ret = returns.mean() * freq.annualization_factor_mean
+    cov = returns.cov() * freq.observations_per_year
     try:
         inv_cov = np.linalg.inv(cov.values + 0.01 * np.eye(len(cov)))
         w = inv_cov @ mean_ret.values
