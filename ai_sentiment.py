@@ -299,11 +299,36 @@ No explanation, just the number.
             
             # Build Q vector from sentiment scores
             Q = np.zeros(n_assets)
+            matched_symbols = []
+            unmatched_symbols = []
+            
             for i, sym in enumerate(symbols):
-                sentiment = per_asset_sentiment.get(sym, 0.0)
+                # FIX B: Normalize symbol key to match per_asset_sentiment dict keys
+                normalized_sym = self._normalize_symbol(sym)
+                
+                # Try direct lookup first, then normalized lookup
+                sentiment = per_asset_sentiment.get(sym, None)
+                if sentiment is None:
+                    # Try normalized key
+                    for key in per_asset_sentiment.keys():
+                        if self._normalize_symbol(key) == normalized_sym:
+                            sentiment = per_asset_sentiment[key]
+                            matched_symbols.append(f"{sym}<-{key}")
+                            break
+                
+                if sentiment is None:
+                    sentiment = 0.0
+                    unmatched_symbols.append(sym)
+                
                 # Scale by expected return magnitude but apply hard cap (Phase 5 requirement)
                 base_view_magnitude = np.abs(expected_returns[i]) if i < len(expected_returns) else 0.001
                 Q[i] = sentiment * base_view_magnitude
+            
+            # Log matched vs unmatched symbols for debugging
+            if matched_symbols:
+                logger.info(f"BL views: matched {len(matched_symbols)} symbols: {matched_symbols}")
+            if unmatched_symbols:
+                logger.warning(f"BL views: {len(unmatched_symbols)} unmatched symbols: {unmatched_symbols}")
             
             # PHASE 5 REQUIREMENT: Cap Q magnitudes to prevent explosion vs prior
             # Limit view magnitudes to reasonable bounds (±10% annual max)
