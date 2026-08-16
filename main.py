@@ -396,7 +396,9 @@ def run_trading_cycle():
                 system_state["status"] = "insufficient_data"
                 system_state["last_result"] = f"INSUFFICIENT_DATA - {n_months} months"
                 sleep_hours = 2
-            elif mean_return >= target_return and max_dd <= max_allowed_dd and sharpe >= min_sharpe:
+            # FIX C: Honest decision gate - require non-negative return and Sharpe
+            elif mean_return >= target_return and max_dd <= max_allowed_dd and sharpe >= min_sharpe \
+                 and mean_return >= 0.0 and sharpe >= 0.0:
                 logger.info("="*70)
                 logger.info("✅ ALL TARGETS MET - READY FOR EXECUTION")
                 logger.info("="*70)
@@ -411,7 +413,7 @@ def run_trading_cycle():
                 logger.warning("="*70)
                 logger.warning("❌ TARGETS NOT MET")
                 logger.warning("="*70)
-                logger.warning(f"Required: >{target_return:.0%} return, <{max_allowed_dd:.0%} DD, >{min_sharpe} Sharpe")
+                logger.warning(f"Required: >{target_return:.0%} return, <{max_allowed_dd:.0%} DD, >{min_sharpe} Sharpe, >=0% return, >=0 Sharpe")
                 logger.warning(f"Actual: {mean_return:.2%} return, {max_dd:.2%} DD, {sharpe:.2f} Sharpe")
                 auto_logger.log_decision("skip_trade", "Targets not met", {
                     "actual_return": mean_return, "actual_dd": max_dd, "actual_sharpe": sharpe,

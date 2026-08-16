@@ -660,18 +660,26 @@ class PortfolioOptimizer:
                 df['target'] = df[symbol].shift(-forecast_horizon)
                 
                 n_rows_before = len(df)
-                df = df.dropna()
-                n_rows_after = len(df)
-                logger.info(f"ML [{symbol}]: rows after dropna: {n_rows_after} (was {n_rows_before})")
+                n_rows_features_ok = df[['lag_1', 'lag_24', 'ma_24', 'std_24', 'momentum_168']].notna().all(axis=1).sum()
+                
+                # FIX A: Separate training data (needs target) from prediction data (features only)
+                # For training: drop rows where features OR target are NaN
+                df_train = df.dropna(subset=['lag_1', 'lag_24', 'ma_24', 'std_24', 'momentum_168', 'target'])
+                n_rows_train = len(df_train)
+                
+                # For final prediction: only need features to be finite (no target required)
+                df_pred = df.dropna(subset=['lag_1', 'lag_24', 'ma_24', 'std_24', 'momentum_168'])
+                
+                logger.info(f"ML [{symbol}]: rows features_ok={n_rows_features_ok}, train={n_rows_train} (was {n_rows_before})")
 
                 min_train = max(lookback, 50)  # Minimum usable rows for training
-                if n_rows_after < min_train:
-                    logger.warning(f"Insufficient data for {symbol} ({n_rows_after} bars after dropna, need {min_train}), using historical mean of risky assets only")
+                if n_rows_train < min_train:
+                    logger.warning(f"Insufficient data for {symbol} ({n_rows_train} bars after dropna, need {min_train}), using historical mean of risky assets only")
                     forecasts_map[symbol] = returns[symbol].mean()
                     continue
 
-                X = df[['lag_1', 'lag_24', 'ma_24', 'std_24', 'momentum_168']]
-                y = df['target']
+                X = df_train[['lag_1', 'lag_24', 'ma_24', 'std_24', 'momentum_168']]
+                y = df_train['target']
                 
                 # PHASE 6 FIX: PURGED WALK-FORWARD VALIDATION
                 # Split: 80% train, 20% test with embargo gap to prevent leakage
@@ -722,9 +730,15 @@ class PortfolioOptimizer:
                     # Model passed OOS validation, use it for prediction
                     # PHASE 1 FIX: Return per-bar forecast (NOT annualized)
                     # Caller must apply freq.annualization_factor_mean
-                    last_features = X.iloc[[-1]]
-                    forecast = model.predict(last_features)[0]
-                    forecasts_map[symbol] = forecast
+                    # FIX A: Use df_pred (features only) for final prediction - no target needed
+                    if len(df_pred) > 0:
+                        last_features = df_pred[['lag_1', 'lag_24', 'ma_24', 'std_24', 'momentum_168']].iloc[[-1]]
+                        forecast = model.predict(last_features)[0]
+                        forecasts_map[symbol] = forecast
+                        logger.info(f"ML [{symbol}]: prediction from last valid features row")
+                    else:
+                        logger.warning(f"ML [{symbol}]: no valid feature rows for prediction, using historical mean")
+                        forecasts_map[symbol] = returns[symbol].mean()
                     
             # Build result array in original column order (CASH gets mean)
             result = []
