@@ -638,7 +638,13 @@ class PortfolioOptimizer:
             import numpy as np
 
             forecasts = []
-            for symbol in returns.columns:
+            # FIX 2: Exclude CASH from ML feature matrix
+            risky_symbols = [s for s in returns.columns if s != 'CASH']
+            if not risky_symbols:
+                logger.warning("No risky assets found for ML forecasting, using historical mean for all")
+                return returns.mean().values
+            forecasts_map = {}  # symbol -> forecast
+            for symbol in risky_symbols:
                 df = returns[symbol].to_frame()
                 
                 # PHASE 6 FIX: CAUSAL FEATURE DESIGN - Only use past information at time t
@@ -653,11 +659,15 @@ class PortfolioOptimizer:
                 # shift(-forecast_horizon) means: at time t, we predict return from t to t+horizon
                 df['target'] = df[symbol].shift(-forecast_horizon)
                 
+                n_rows_before = len(df)
                 df = df.dropna()
+                n_rows_after = len(df)
+                logger.info(f"ML [{symbol}]: rows after dropna: {n_rows_after} (was {n_rows_before})")
 
-                if len(df) < lookback:
-                    logger.warning(f"Insufficient data for {symbol} ({len(df)} bars), using historical mean")
-                    forecasts.append(returns[symbol].mean())
+                min_train = max(lookback, 50)  # Minimum usable rows for training
+                if n_rows_after < min_train:
+                    logger.warning(f"Insufficient data for {symbol} ({n_rows_after} bars after dropna, need {min_train}), using historical mean of risky assets only")
+                    forecasts_map[symbol] = returns[symbol].mean()
                     continue
 
                 X = df[['lag_1', 'lag_24', 'ma_24', 'std_24', 'momentum_168']]
@@ -676,7 +686,7 @@ class PortfolioOptimizer:
                 # Check minimum sample sizes
                 if len(X_train) < 20 or len(X_test) < 5:
                     logger.warning(f"Sample too small for {symbol} (train={len(X_train)}, test={len(X_test)}), using historical mean")
-                    forecasts.append(returns[symbol].mean())
+                    forecasts_map[symbol] = returns[symbol].mean()
                     continue
                 
                 # PHASE 6 FIX: MODEL SIMPLICITY - Cap complexity to reduce overfitting
@@ -707,16 +717,23 @@ class PortfolioOptimizer:
                 # If OOS R² is negative or worse than naive, skip ML and use historical mean
                 if oos_r2 < 0 or oos_r2 < naive_r2:
                     logger.warning(f"ML has no OOS predictive power for {symbol} (R²={oos_r2:.4f}), using historical mean")
-                    forecasts.append(returns[symbol].mean())
+                    forecasts_map[symbol] = returns[symbol].mean()
                 else:
                     # Model passed OOS validation, use it for prediction
                     # PHASE 1 FIX: Return per-bar forecast (NOT annualized)
                     # Caller must apply freq.annualization_factor_mean
                     last_features = X.iloc[[-1]]
                     forecast = model.predict(last_features)[0]
-                    forecasts.append(forecast)
+                    forecasts_map[symbol] = forecast
                     
-            return np.array(forecasts)
+            # Build result array in original column order (CASH gets mean)
+            result = []
+            for col in returns.columns:
+                if col == "CASH":
+                    result.append(returns[col].mean())
+                else:
+                    result.append(forecasts_map.get(col, returns[col].mean()))
+            return np.array(result)
         except ImportError:
             logger.warning("sklearn not available, using historical mean")
             # PHASE 1 FIX: Return per-bar mean (NOT annualized)
