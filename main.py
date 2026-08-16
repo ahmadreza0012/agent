@@ -384,7 +384,7 @@ def run_trading_cycle():
                 "n_folds": eval_data.get('n_folds', 0),
                 "n_months": n_months,
                 "regime": current_regime,
-                "sentiment": float(avg_sentiment)
+                "sentiment": float(system_state.get("market_tone_score", 0.0))
             })
 
             # Decision logic
@@ -402,7 +402,7 @@ def run_trading_cycle():
                 logger.info("="*70)
                 auto_logger.log_decision("execute_trade", "Targets met", {
                     "return": mean_return, "drawdown": max_dd, "sharpe": sharpe,
-                    "regime": current_regime, "sentiment": avg_sentiment
+                    "regime": current_regime, "sentiment": float(system_state.get("market_tone_score", 0.0))
                 })
                 system_state["status"] = "targets_met"
                 system_state["last_result"] = f"SUCCESS - {mean_return:.2%} return, {max_dd:.2%} DD, {sharpe:.2f} Sharpe"
@@ -415,7 +415,8 @@ def run_trading_cycle():
                 logger.warning(f"Actual: {mean_return:.2%} return, {max_dd:.2%} DD, {sharpe:.2f} Sharpe")
                 auto_logger.log_decision("skip_trade", "Targets not met", {
                     "actual_return": mean_return, "actual_dd": max_dd, "actual_sharpe": sharpe,
-                    "regime": current_regime
+                    "regime": current_regime,
+                    "sentiment": float(system_state.get("market_tone_score", 0.0))
                 })
                 system_state["status"] = "targets_not_met"
                 system_state["last_result"] = f"FAILED - {mean_return:.2%} return, {max_dd:.2%} DD"
@@ -465,7 +466,7 @@ def run_trading_cycle():
                         'cycle_number': cycle_number,
                         'timestamp': datetime.now().isoformat(),
                         'regime': current_regime,
-                        'sentiment_score': float(avg_sentiment),
+                        'sentiment_score': float(system_state.get("market_tone_score", 0.0)),
                         'decision': system_state["status"],
                         'sleep_hours': sleep_hours,
                         'duration_seconds': duration,
@@ -481,7 +482,7 @@ def run_trading_cycle():
                         'final_blend_weights': final_blend_weights,
                         'final_asset_weights': final_asset_weights,
                         'black_litterman_views': {},  # Can be populated from black_litterman_strategy if needed
-                        'asset_sentiment_scores': {},  # Can be populated from sentiment analysis
+                        'asset_sentiment_scores': dict(system_state.get("per_asset_news_sentiment", {})),
                         'warnings': [],  # Can collect warnings during cycle
                         'strategy_records': strategy_records
                     }
