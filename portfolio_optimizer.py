@@ -625,10 +625,11 @@ class PortfolioOptimizer:
             forecast_horizon = int(1 * freq.observations_per_day)
         
         # Scale feature windows by frequency (avoid hardcoded 24, 168)
-        lag_24_bars = int(1 * freq.observations_per_day)  # 1 day lag
-        ma_window = int(1 * freq.observations_per_day)    # 1 day MA
-        std_window = int(1 * freq.observations_per_day)   # 1 day std
-        momentum_window = int(7 * freq.observations_per_day)  # 7 day momentum
+        # CRITICAL ML FIX: Ensure minimum window of 2 for std calculation
+        lag_24_bars = max(1, int(1 * freq.observations_per_day))
+        ma_window = max(2, int(1 * freq.observations_per_day))
+        std_window = max(2, int(1 * freq.observations_per_day))
+        momentum_window = max(7, int(7 * freq.observations_per_day))
         
         logger.info(f"Generating ML return forecasts (lookback={lookback}, horizon={forecast_horizon}, "
                    f"lag={lag_24_bars}, ma={ma_window}, momentum={momentum_window})")
@@ -652,8 +653,10 @@ class PortfolioOptimizer:
                 df['lag_24'] = df[symbol].shift(lag_24_bars)  # PHASE 4 FIX: frequency-scaled lag
                 df['ma_24'] = df[symbol].rolling(ma_window).mean()  # PHASE 4 FIX: frequency-scaled MA
                 df['std_24'] = df[symbol].rolling(std_window).std()  # PHASE 4 FIX: frequency-scaled std
-                df['momentum_168'] = df[symbol].rolling(momentum_window).apply(  # PHASE 4 FIX: frequency-scaled momentum
-                    lambda x: x.iloc[-1] / x.iloc[0] - 1 if len(x) > 0 else 0)
+                # CRITICAL ML FIX: Use rolling SUM for momentum on RETURNS (not ratio)
+                # Ratio momentum causes zero-division artifacts on returns series.
+                # Rolling sum of returns = cumulative return over window.
+                df['momentum_168'] = df[symbol].rolling(momentum_window).sum()
                 
                 # PHASE 6 FIX: CAUSAL LABEL DESIGN - Label at t uses future return but aligned correctly
                 # shift(-forecast_horizon) means: at time t, we predict return from t to t+horizon
