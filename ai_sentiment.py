@@ -43,19 +43,23 @@ class AISentimentAnalyzer:
     """
 
     def __init__(self, api_key: str = None, use_mock: Optional[bool] = None,
-                 model: str = "llama-3.1-8b-instant",
+                 model: str = None,
                  track_record_len: int = 20):
         """
         Args:
             api_key: Groq API key. Falls back to GROQ_API_KEY env var.
             use_mock: True/False to force a mode, or None to auto-detect
                       (mock is used automatically if no key is available).
-            model: Groq model name (free tier).
+            model: Groq model name. Defaults to 'llama-3.3-70b-versatile'.
+                   Can be overridden via GROQ_MODEL env var.
             track_record_len: how many past views to keep for the
                                self-adjusting confidence mechanism.
         """
-        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
+        # Model selection: arg > env var > default
+        if model is None:
+            model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
         self.model = model
+        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
         # Auto-detect unless explicitly forced by the caller
         self.use_mock = (self.api_key is None) if use_mock is None else use_mock
 
@@ -299,11 +303,36 @@ No explanation, just the number.
             
             # Build Q vector from sentiment scores
             Q = np.zeros(n_assets)
+            matched_symbols = []
+            unmatched_symbols = []
+            
             for i, sym in enumerate(symbols):
-                sentiment = per_asset_sentiment.get(sym, 0.0)
+                # FIX B: Normalize symbol key to match per_asset_sentiment dict keys
+                normalized_sym = self._normalize_symbol(sym)
+                
+                # Try direct lookup first, then normalized lookup
+                sentiment = per_asset_sentiment.get(sym, None)
+                if sentiment is None:
+                    # Try normalized key
+                    for key in per_asset_sentiment.keys():
+                        if self._normalize_symbol(key) == normalized_sym:
+                            sentiment = per_asset_sentiment[key]
+                            matched_symbols.append(f"{sym}<-{key}")
+                            break
+                
+                if sentiment is None:
+                    sentiment = 0.0
+                    unmatched_symbols.append(sym)
+                
                 # Scale by expected return magnitude but apply hard cap (Phase 5 requirement)
                 base_view_magnitude = np.abs(expected_returns[i]) if i < len(expected_returns) else 0.001
                 Q[i] = sentiment * base_view_magnitude
+            
+            # Log matched vs unmatched symbols for debugging
+            if matched_symbols:
+                logger.info(f"BL views: matched {len(matched_symbols)} symbols: {matched_symbols}")
+            if unmatched_symbols:
+                logger.warning(f"BL views: {len(unmatched_symbols)} unmatched symbols: {unmatched_symbols}")
             
             # PHASE 5 REQUIREMENT: Cap Q magnitudes to prevent explosion vs prior
             # Limit view magnitudes to reasonable bounds (±10% annual max)
