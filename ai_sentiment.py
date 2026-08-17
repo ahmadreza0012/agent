@@ -169,8 +169,52 @@ No explanation, just the number.
                 max_tokens=10,
                 temperature=0.2,
             )
-            sentiment_text = response.choices[0].message.content.strip()
-            sentiment = float(sentiment_text.split()[0])
+            # Defensive parse of Groq OpenAI-compatible response
+            if not hasattr(response, 'choices') or not response.choices or len(response.choices) == 0:
+                logger.warning(f"[LLM] Empty choices in response for {symbol}. Using keyword fallback.")
+                return NewsFetcher.keyword_fallback_score(headlines)
+            
+            choice = response.choices[0]
+            if not hasattr(choice, 'message') or choice.message is None:
+                logger.warning(f"[LLM] No message in choice[0] for {symbol}. Using keyword fallback.")
+                return NewsFetcher.keyword_fallback_score(headlines)
+            
+            content = getattr(choice.message, 'content', None) or ""
+            if not content.strip():
+                logger.warning(f"[LLM] Empty content in response for {symbol}. Raw preview: '{content[:120]}'")
+                return NewsFetcher.keyword_fallback_score(headlines)
+            
+            sentiment_text = content.strip()
+            logger.info(f"[LLM] Raw response for {symbol}: '{sentiment_text[:120]}'")
+            
+            # Robust extraction: try JSON first, then plain number, then regex search
+            sentiment = None
+            # Try JSON parse
+            if sentiment_text.startswith('{'):
+                try:
+                    import json
+                    data = json.loads(sentiment_text)
+                    if 'score' in data:
+                        sentiment = float(data['score'])
+                    elif 'sentiment' in data:
+                        sentiment = float(data['sentiment'])
+                except (json.JSONDecodeError, ValueError, KeyError):
+                    pass
+            
+            # Try plain float parse
+            if sentiment is None:
+                try:
+                    sentiment = float(sentiment_text.split()[0])
+                except (ValueError, IndexError):
+                    # Try regex to find any number in text
+                    import re
+                    match = re.search(r'[-+]?\d*\.?\d+', sentiment_text)
+                    if match:
+                        sentiment = float(match.group())
+                    else:
+                        logger.warning(f"[LLM] Could not parse number from '{sentiment_text}'. Using keyword fallback.")
+                        return NewsFetcher.keyword_fallback_score(headlines)
+            
             sentiment = float(np.clip(sentiment, -1, 1))
             logger.info(f"[LLM] Real sentiment for {symbol}: {sentiment:.3f} (from {len(headlines)} headlines)")
             return sentiment
@@ -187,8 +231,45 @@ No explanation, just the number.
                         max_tokens=10,
                         temperature=0.2,
                     )
-                    sentiment_text = response.choices[0].message.content.strip()
-                    sentiment = float(sentiment_text.split()[0])
+                    # Same defensive parse for fallback
+                    if not hasattr(response, 'choices') or not response.choices or len(response.choices) == 0:
+                        logger.warning(f"[LLM fallback] Empty choices for {symbol}. Using keyword fallback.")
+                        return NewsFetcher.keyword_fallback_score(headlines)
+                    
+                    choice = response.choices[0]
+                    if not hasattr(choice, 'message') or choice.message is None:
+                        logger.warning(f"[LLM fallback] No message for {symbol}. Using keyword fallback.")
+                        return NewsFetcher.keyword_fallback_score(headlines)
+                    
+                    content = getattr(choice.message, 'content', None) or ""
+                    if not content.strip():
+                        logger.warning(f"[LLM fallback] Empty content for {symbol}. Using keyword fallback.")
+                        return NewsFetcher.keyword_fallback_score(headlines)
+                    
+                    sentiment_text = content.strip()
+                    
+                    # Robust extraction for fallback too
+                    sentiment = None
+                    if sentiment_text.startswith('{'):
+                        try:
+                            import json
+                            data = json.loads(sentiment_text)
+                            if 'score' in data:
+                                sentiment = float(data['score'])
+                        except (json.JSONDecodeError, ValueError, KeyError):
+                            pass
+                    
+                    if sentiment is None:
+                        try:
+                            sentiment = float(sentiment_text.split()[0])
+                        except (ValueError, IndexError):
+                            import re
+                            match = re.search(r'[-+]?\d*\.?\d+', sentiment_text)
+                            if match:
+                                sentiment = float(match.group())
+                            else:
+                                return NewsFetcher.keyword_fallback_score(headlines)
+                    
                     sentiment = float(np.clip(sentiment, -1, 1))
                     logger.info(f"[LLM fallback={fallback_model}] Real sentiment for {symbol}: {sentiment:.3f}")
                     return sentiment
