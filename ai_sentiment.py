@@ -50,14 +50,14 @@ class AISentimentAnalyzer:
             api_key: Groq API key. Falls back to GROQ_API_KEY env var.
             use_mock: True/False to force a mode, or None to auto-detect
                       (mock is used automatically if no key is available).
-            model: Groq model name. Defaults to 'llama-3.3-70b-versatile'.
+            model: Groq model name. Defaults to 'openai/gpt-oss-20b'.
                    Can be overridden via GROQ_MODEL env var.
             track_record_len: how many past views to keep for the
                                self-adjusting confidence mechanism.
         """
         # Model selection: arg > env var > default
         if model is None:
-            model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+            model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
         self.model = model
         self.api_key = api_key or os.environ.get("GROQ_API_KEY")
         # Auto-detect unless explicitly forced by the caller
@@ -175,7 +175,27 @@ No explanation, just the number.
             logger.info(f"[LLM] Real sentiment for {symbol}: {sentiment:.3f} (from {len(headlines)} headlines)")
             return sentiment
         except Exception as e:
-            logger.error(f"LLM sentiment call failed for {symbol}: {e}. Using keyword fallback.")
+            # Fallback chain: if primary model 404s, try secondary model
+            error_str = str(e).lower()
+            if "does not exist" in error_str or "404" in error_str:
+                fallback_model = os.environ.get("GROQ_MODEL_FALLBACK", "qwen/qwen3.6-27b")
+                logger.warning(f"Primary model '{self.model}' not found (404). Trying fallback: {fallback_model}")
+                try:
+                    response = self.client.chat.completions.create(
+                        model=fallback_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=10,
+                        temperature=0.2,
+                    )
+                    sentiment_text = response.choices[0].message.content.strip()
+                    sentiment = float(sentiment_text.split()[0])
+                    sentiment = float(np.clip(sentiment, -1, 1))
+                    logger.info(f"[LLM fallback={fallback_model}] Real sentiment for {symbol}: {sentiment:.3f}")
+                    return sentiment
+                except Exception as e2:
+                    logger.error(f"Fallback model '{fallback_model}' also failed: {e2}. Using keyword fallback.")
+            else:
+                logger.error(f"LLM sentiment call failed for {symbol}: {e}. Using keyword fallback.")
             return NewsFetcher.keyword_fallback_score(headlines)
 
     # ------------------------------------------------------------------
