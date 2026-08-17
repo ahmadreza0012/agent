@@ -43,19 +43,23 @@ class AISentimentAnalyzer:
     """
 
     def __init__(self, api_key: str = None, use_mock: Optional[bool] = None,
-                 model: str = "llama-3.1-8b-instant",
+                 model: str = None,
                  track_record_len: int = 20):
         """
         Args:
             api_key: Groq API key. Falls back to GROQ_API_KEY env var.
             use_mock: True/False to force a mode, or None to auto-detect
                       (mock is used automatically if no key is available).
-            model: Groq model name (free tier).
+            model: Groq model name. Defaults to 'llama-3.3-70b-versatile'.
+                   Can be overridden via GROQ_MODEL env var.
             track_record_len: how many past views to keep for the
                                self-adjusting confidence mechanism.
         """
-        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
+        # Model selection: arg > env var > default
+        if model is None:
+            model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
         self.model = model
+        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
         # Auto-detect unless explicitly forced by the caller
         self.use_mock = (self.api_key is None) if use_mock is None else use_mock
 
