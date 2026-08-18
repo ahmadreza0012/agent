@@ -1,14 +1,21 @@
 ```
 # Compiled Python files
-*.pyc
 __pycache__/
+*.pyc
+*.pyo
+
+# Dependencies
+.venv/
+venv/
+env/
+requirements.txt.bak
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
 
-# Environment files
+# Environment
 .env
 .env.local
 *.env.*
@@ -17,19 +24,11 @@ __pycache__/
 .vscode/
 .idea/
 
-# Dependencies
-.venv/
-venv/
-node_modules/
-.mypy_cache/
+# Performance and test artifacts
+performance/__pycache__/
+tests/__pycache__/
+.coverage
+coverage/
+htmlcov/
 .pytest_cache/
-
-# Build artifacts
-dist/
-build/
-target/
-
-# System files
-.DS_Store
-Thumbs.db
 ```
