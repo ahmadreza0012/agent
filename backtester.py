@@ -31,6 +31,7 @@ import logging
 
 from strategy_selector import StrategySelector, detect_regime, compute_in_sample_scores
 from utils.timeframe import detect_frequency
+from performance.attribution import AttributionEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -64,6 +65,8 @@ class Backtester:
         self.rebalance_freq = f'{rebalance_frequency_weeks}W'
         # Initialize dictionary to track realized performance of each strategy for adaptive learning
         self.strategy_realized_performance = {}
+        # Initialize attribution engine for Phase 8
+        self.attribution_engine = AttributionEngine(risk_free_rate=0.0)
         logger.info(f"Initialized backtester with ${initial_capital:,}, "
                     f"circuit breaker at {max_drawdown_circuit_breaker:.0%} drawdown, "
                     f"rebalancing every {rebalance_frequency_weeks} weeks")
@@ -163,6 +166,46 @@ class Backtester:
 
                     turnover = np.abs(new_weights - weights).sum() / 2
                     cost = capital * turnover * self.total_cost_rate
+
+                    # PHASE 8: Record attribution data at each rebalance
+                    if use_blend and all_individual_weights is not None:
+                        # Calculate asset returns for this period (until next rebalance)
+                        future_rebalance = future_dates[0] if future_dates else test_prices.index[-1] + timedelta(hours=1)
+                        period_prices = test_prices.loc[timestamp:future_rebalance]
+                        if len(period_prices) > 1:
+                            period_asset_returns = period_prices.pct_change().dropna()
+                            if len(period_asset_returns) > 0:
+                                avg_asset_returns = period_asset_returns.mean().to_dict()
+                                
+                                # Prepare costs and slippage per strategy
+                                strategy_costs = {name: capital * 0.001 for name in all_individual_weights.keys()}
+                                strategy_slippage = {name: capital * 0.0005 for name in all_individual_weights.keys()}
+                                
+                                # Detect current regime
+                                try:
+                                    current_regime = detect_regime(lookback_prices)
+                                except Exception:
+                                    current_regime = "low_vol_range"
+                                
+                                # Get portfolio strategy weights from blend composition
+                                if 'blend_composition' in locals() and blend_composition is not None:
+                                    portfolio_weights = blend_composition
+                                else:
+                                    n_strats = len(all_individual_weights)
+                                    portfolio_weights = {name: 1.0/n_strats for name in all_individual_weights.keys()}
+                                
+                                # Record attribution
+                                self.attribution_engine.record_rebalance(
+                                    timestamp=timestamp,
+                                    strategy_weights={name: dict(zip(period_prices.columns, w)) 
+                                                     for name, w in all_individual_weights.items()},
+                                    asset_returns=avg_asset_returns,
+                                    costs=strategy_costs,
+                                    slippage=strategy_slippage,
+                                    regime=current_regime,
+                                    portfolio_strategy_weights=portfolio_weights,
+                                )
+                                logger.info(f"[ATTRIBUTION] Recorded rebalance at {timestamp} for {len(all_individual_weights)} strategies")
 
                     rebalance_events.append({
                         'date': timestamp, 'old_weights': weights.copy(),
@@ -285,6 +328,9 @@ class Backtester:
             'rebalance_events': rebalance_events,
             'daily_returns': pd.Series(daily_returns, index=test_prices.index[1:]),
             'strategy_log': chosen_strategy_log,
+            # PHASE 8: Include attribution results
+            'attribution_summary': self.attribution_engine.get_summary_table().to_dict() if not self.attribution_engine._records else {},
+            'attribution_dataframe': self.attribution_engine.to_dataframe(),
         }
 
     # ------------------------------------------------------------------
@@ -358,6 +404,13 @@ class Backtester:
                     k: v.tolist() if hasattr(v, 'tolist') else list(v) 
                     for k, v in last_rebalance['individual_weights'].items()
                 }
+        
+        # PHASE 8: Add attribution results to aggregated output
+        if self.attribution_engine._records:
+            aggregated['attribution_summary'] = self.attribution_engine.get_summary_table().to_dict()
+            aggregated['attribution_ranking'] = self.attribution_engine.get_strategy_ranking()
+            aggregated['attribution_recommendations'] = self.attribution_engine.get_strategy_recommendations()
+            aggregated['regime_breakdown'] = self.attribution_engine.get_regime_breakdown()
         
         return {'folds': fold_results, 'aggregated': aggregated}
 
