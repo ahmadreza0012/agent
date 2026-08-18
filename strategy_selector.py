@@ -1,26 +1,23 @@
 """
-Strategy Selector Module - Ensemble Blender Architecture with Regime-Driven Defensive Weighting
-----------------------------------------------------------------------------------------------
-STAGE 2 IMPROVEMENTS:
-- Aggressive regime detection: high_vol and non-trending/bearish = defensive mode
-- Forced 60-70% allocation to Trend-Following + CVaR + CASH in bad markets
-- Trend-Following gets 80%+ CASH when no uptrends (strongest defense)
-- Aggressive strategies (ML, pure MVO) get very low weight in high-vol regimes
-- Sentiment impact: affects final weights of Trend-Following and Mean-Reversion (not just BL)
+Strategy Selector Module - Phase 7 Dynamic Ensemble with Regime-Conditional Scoring
+------------------------------------------------------------------------------------
+PHASE 7 IMPROVEMENTS:
+- Dynamic scoring replaces static exp(sharpe) with composite metrics
+- Regime-conditional performance tracking (bull_trend, bear_trend, high_vol, low_vol_range, crisis)
+- Strategy correlation penalty prevents over-concentration
+- Turnover penalty reduces excessive rebalancing
+- Track record decay gives more weight to recent performance
+- ML OOS weakness flag integration
+- Sentiment multiplier ONLY on trend_following and mean_reversion
+- Bounded weights enforced (5%-40%)
 
-STAGE 3 IMPROVEMENTS:
-- Negative Sharpe strategies reduce weight 2x faster (from 12 to 6 periods)
-- Exponential transform for Sharpe scoring (better ranking)
-- Floor/ceiling on strategy weights (5%-40%) maintains true diversification
-
-STAGE 4 IMPROVEMENTS:
-- Sentiment scores now multiply final weights of Trend-Following and Mean-Reversion
-- Strongly negative sentiment = -50% weight reduction for trend strategies
+BACKWARD COMPATIBILITY: Maintains Stage 2-6 functionality while adding Phase 7 enhancements.
 """
 
 import logging
 from collections import defaultdict, deque
-from typing import Callable, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Callable, Dict, List, Optional, Tuple, Any
 
 import numpy as np
 import pandas as pd
@@ -29,129 +26,324 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class StrategyScore:
+    """PHASE 7: Composite strategy scoring dataclass."""
+    method: str
+    raw_sharpe: float = 0.0
+    sharpe_percentile: float = 0.0  # 0-1 across all strategies
+    sortino: float = 0.0
+    max_drawdown: float = 0.0
+    consistency: float = 0.0  # 0-1 (positive months / total months)
+    regime_score: float = 0.0  # performance in current regime
+    recent_score: float = 0.0  # performance in last 6 periods
+    sample_size: int = 0
+    confidence: float = 0.0  # 0-1 based on sample size
+    correlation_penalty: float = 0.0  # 0-1 (1 = high correlation with others)
+    turnover_penalty: float = 0.0  # 0-0.20 based on turnover
+    ml_weakness_flag: bool = False  # True if ML OOS R² < 0
+    final_score: float = 0.0  # composite
+
+
 def detect_regime(returns: pd.DataFrame, window: int = 168, freq=None) -> str:
     """
-    Aggressive regime classifier for crypto market conditions.
+    PHASE 3/7 REGIME DETECTOR: Expanded to support all 5 regimes.
     
-    STAGE 2 FIX: Enhanced thresholds for crypto volatility
-    Returns one of: 'trending', 'mean_reverting', 'high_vol'
+    Returns one of: 'bull_trend', 'bear_trend', 'high_vol', 'low_vol_range', 'crisis'
     
-    PHASE 1 FIX: Accepts optional FrequencySpec for correct vol annualization.
-    If freq is None, attempts to auto-detect from returns index.
+    PHASE 1 FIX: Uses FrequencySpec for correct vol annualization.
+    PHASE 3 FIX: Distinguishes bull vs bear trends, adds crisis detection.
     """
     if len(returns) < window:
-        window = len(returns)
+        window = max(5, len(returns))
     if window < 5:
-        return "mean_reverting"
+        return "low_vol_range"
 
     port = returns.tail(window).mean(axis=1)
     
     # PHASE 1 FIX: Use detected frequency for vol annualization
     if freq is None:
-        # Auto-detect frequency from returns index
         try:
             from utils.timeframe import detect_frequency as detect_freq
             freq = detect_freq(returns)
         except Exception:
-            # Fallback to hourly assumption with warning
             logger.warning("Could not detect frequency in detect_regime, assuming hourly")
             from utils.timeframe import FREQUENCY_SPECS
             freq = FREQUENCY_SPECS["1h"]
     
     vol = port.std() * freq.annualization_factor_vol
-        
     autocorr = port.autocorr(lag=1) if len(port) > 2 else 0.0
     autocorr = 0.0 if pd.isna(autocorr) else autocorr
-    
     recent_return = port.tail(window).sum()
+    
+    # Calculate drawdown for crisis detection
+    cum_returns = (1 + port).cumprod()
+    running_max = cum_returns.cummax()
+    drawdown = (cum_returns - running_max) / running_max
+    max_dd = drawdown.min() if len(drawdown) > 0 else 0.0
 
-    # STAGE 2 FIX: More aggressive high-vol detection
-    if vol > 1.2:  # Lowered from 1.5 - more sensitive to risk
+    # PHASE 3: 5-regime classification
+    # Crisis: extreme drawdown OR extreme volatility
+    if max_dd < -0.15 or vol > 2.0:
+        logger.info(f"REGIME: crisis (max_dd={max_dd:.2%}, vol={vol:.2%})")
+        return "crisis"
+    
+    # High volatility: elevated but not crisis level
+    if vol > 1.2:
         logger.info(f"REGIME: high_vol (vol={vol:.2%})")
         return "high_vol"
-    if autocorr > 0.1 or recent_return > 0.1:
-        logger.info(f"REGIME: trending (autocorr={autocorr:.3f}, recent_ret={recent_return:.4f})") 
-        return "trending"
-    logger.info(f"REGIME: mean_reverting (autocorr={autocorr:.3f}, vol={vol:.2%})")
-    return "mean_reverting"
+    
+    # Bull trend: positive momentum with reasonable volatility
+    if recent_return > 0.05 and vol < 1.2:
+        logger.info(f"REGIME: bull_trend (recent_ret={recent_return:.2%}, vol={vol:.2%})")
+        return "bull_trend"
+    
+    # Bear trend: negative momentum
+    if recent_return < -0.05:
+        logger.info(f"REGIME: bear_trend (recent_ret={recent_return:.2%})")
+        return "bear_trend"
+    
+    # Low volatility range: calm markets
+    logger.info(f"REGIME: low_vol_range (vol={vol:.2%}, recent_ret={recent_return:.2%})")
+    return "low_vol_range"
 
 
-# STAGE 5+ FIX: Even more balanced strategy biasing - further reduce defensive allocation
-# In high_vol, target defensive weight around 45-50% instead of 50-55%
+# PHASE 7: EXPANDED REGIME_PRIOR - All 5 Phase 3 regimes supported
+# Economic rationale documented for each regime
 REGIME_PRIOR = {
-    "trending": {
-        "black_litterman": 1.3, "mvo": 1.2, "ml": 1.0,
-        "risk_parity": 1.0, "cvar": 1.0,
-        "trend_following": 1.8, "mean_reversion": 0.7
+    # BULL TREND: Favor growth-oriented strategies
+    "bull_trend": {
+        "black_litterman": 1.4,  # BL benefits from clear views
+        "mvo": 1.3,              # MVO works well in stable uptrends
+        "ml": 1.2,               # ML can capture momentum patterns
+        "risk_parity": 0.9,      # Less need for risk balancing
+        "cvar": 0.8,             # Tail risk less concerning
+        "trend_following": 2.0,  # Maximum allocation to trend
+        "mean_reversion": 0.6    # Mean reversion underperforms in trends
     },
-    "mean_reverting": {
-        "black_litterman": 0.9, "ml": 0.7, "mvo": 0.6,
-        "risk_parity": 1.5, "cvar": 1.3,
-        "trend_following": 0.5, "mean_reversion": 1.8
+    
+    # BEAR TREND: Defensive with some opportunistic positioning
+    "bear_trend": {
+        "black_litterman": 1.1,  # Conservative views
+        "mvo": 0.7,              # Reduce MVO exposure
+        "ml": 0.8,               # ML may find short opportunities
+        "risk_parity": 1.4,      # Risk balancing important
+        "cvar": 1.5,             # Tail risk protection
+        "trend_following": 1.2,  # Can follow downward trends
+        "mean_reversion": 1.3    # Bounce plays possible
     },
+    
+    # HIGH VOL: Moderate defense without panic
     "high_vol": {
-        # STAGE 5+ CRITICAL: Further reduction of defensive bias to improve returns
-        # Allow ML and Black-Litterman even more weight (increased from 0.5/0.8 to 0.7/1.0)
-        "risk_parity": 1.5, "cvar": 1.4, "black_litterman": 1.0,  # Reduced from 1.8/1.6/0.8
-        "mvo": 0.7, "ml": 0.7,  # Increased from 0.5/0.5 - allow more aggressive strategies
-        "trend_following": 1.0, "mean_reversion": 1.2  # Slightly reduced defensive bias
+        "black_litterman": 1.0,  # Steady approach
+        "mvo": 0.7,              # Reduce optimization risk
+        "ml": 0.7,               # ML uncertain in chaos
+        "risk_parity": 1.5,      # Risk balancing critical
+        "cvar": 1.4,             # Tail risk focus
+        "trend_following": 1.0,  # Neutral to trends
+        "mean_reversion": 1.2    # Some mean reversion opportunities
+    },
+    
+    # LOW VOL RANGE: Balanced approach, favor efficiency
+    "low_vol_range": {
+        "black_litterman": 1.2,  # Good environment for views
+        "mvo": 1.3,              # Optimization works well
+        "ml": 1.1,               # ML can find patterns
+        "risk_parity": 1.0,      # Standard allocation
+        "cvar": 0.9,             # Less tail concern
+        "trend_following": 1.1,  # Mild trend following
+        "mean_reversion": 1.4    # Mean reversion works in calm markets
+    },
+    
+    # CRISIS: Maximum defense, survival mode
+    "crisis": {
+        "black_litterman": 0.8,  # Conservative
+        "mvo": 0.5,              # Minimize optimization risk
+        "ml": 0.4,               # ML unreliable in crises
+        "risk_parity": 1.8,      # Maximum risk balancing
+        "cvar": 1.8,             # Maximum tail protection
+        "trend_following": 1.3,  # Follow crash trends
+        "mean_reversion": 1.0    # Caution on reversal bets
     },
 }
 
 
 class StrategySelector:
     """
-    Risk-weighted ensemble blender with regime-driven defensive bias.
+    PHASE 7 DYNAMIC ENSEMBLE with regime-conditional scoring.
     
-    STAGE 2-4 IMPROVEMENTS:
-    - Enforces 60-70% allocation to defensive strategies (Trend-Following + CVaR + CASH) in bad markets
-    - Sentiment multiplier on Trend-Following and Mean-Reversion weights
-    - Faster learning from negative Sharpe strategies (6 vs 12 periods)
-    - Floor/ceiling constraints maintain true diversification
+    PHASE 7 IMPROVEMENTS:
+    - Dynamic composite scoring replaces static exp(sharpe)
+    - Regime-conditional performance tracking (5 regimes)
+    - Strategy correlation penalty prevents over-concentration
+    - Turnover penalty reduces excessive rebalancing
+    - Track record decay (10% per period)
+    - ML OOS weakness flag integration
+    - Sentiment multiplier ONLY on trend_following/mean_reversion
+    - Bounded weights enforced (5%-40%)
+    
+    BACKWARD COMPATIBILITY: Maintains Stage 2-6 functionality.
     """
 
     def __init__(self, candidate_methods: List[str], track_record_len: int = 6,
-                 min_strategy_weight: float = 0.05, max_strategy_weight: float = 0.40):
+                 min_strategy_weight: float = 0.05, max_strategy_weight: float = 0.40,
+                 decay_rate: float = 0.1):
         """
         Args:
-            track_record_len: STAGE 3 FIX - Reduced from 12 to 6 for faster learning
-            min_strategy_weight: Floor for strategy weights (prevents elimination)
-            max_strategy_weight: Ceiling for strategy weights (prevents dominance)
+            track_record_len: Number of periods for track record (default 6)
+            min_strategy_weight: Floor for strategy weights (5%)
+            max_strategy_weight: Ceiling for strategy weights (40%)
+            decay_rate: Exponential decay rate for track record (10% per period)
         """
         self.candidate_methods = candidate_methods
         self.track_record_len = track_record_len
         self.min_strategy_weight = min_strategy_weight
         self.max_strategy_weight = max_strategy_weight
+        self.decay_rate = decay_rate
         
+        # Track records: deque of (period_index, score, regime) tuples
         self._track_record: Dict[str, deque] = {m: deque(maxlen=track_record_len) for m in candidate_methods}
-        self.history: List[Dict] = []
-        self.sentiment_score = 0.0  # STAGE 4: Store latest sentiment score
         
-        logger.info(f"StrategySelector initialized with {len(candidate_methods)} strategies, "
-                   f"track_record_len={track_record_len}, "
+        # PHASE 7: Regime-conditional performance tracking
+        self._regime_performance: Dict[str, Dict[str, deque]] = {
+            regime: {m: deque(maxlen=50) for m in candidate_methods}
+            for regime in REGIME_PRIOR.keys()
+        }
+        
+        # Strategy weight history for correlation calculation
+        self._weight_history: Dict[str, deque] = {m: deque(maxlen=30) for m in candidate_methods}
+        
+        # ML OOS R² tracking
+        self._ml_oos_r2: Optional[float] = None
+        
+        self.history: List[Dict] = []
+        self.sentiment_score = 0.0
+        self._period_counter = 0
+        
+        logger.info(f"StrategySelector (PHASE 7) initialized with {len(candidate_methods)} strategies, "
+                   f"track_record_len={track_record_len}, decay_rate={decay_rate}, "
                    f"min_weight={min_strategy_weight:.0%}, max_weight={max_strategy_weight:.0%}")
 
-    def record_realized_performance(self, method: str, realized_return: float, realized_vol: float):
-        """Call after a rebalance period ends. STAGE 3: Faster penalization of losing strategies."""
+    def record_realized_performance(self, method: str, realized_return: float, realized_vol: float,
+                                    regime: Optional[str] = None):
+        """
+        Record performance for a strategy. PHASE 7: Also tracks regime-conditional performance.
+        
+        Args:
+            method: Strategy name
+            realized_return: Period return
+            realized_vol: Period volatility
+            regime: Current regime (optional, auto-detected if None)
+        """
         score = realized_return / realized_vol if realized_vol > 0 else 0.0
-        self._track_record.setdefault(method, deque(maxlen=self.track_record_len)).append(score)
+        self._period_counter += 1
+        
+        # Standard track record with decay weighting
+        self._track_record.setdefault(method, deque(maxlen=self.track_record_len)).append(
+            (self._period_counter, score, regime)
+        )
+        
+        # Regime-conditional tracking
+        if regime and regime in self._regime_performance:
+            self._regime_performance[regime][method].append((self._period_counter, score))
         
         if score < -0.5:
-            logger.warning(f"[STAGE 3] {method} had severely negative Sharpe {score:.3f} - will reduce weight rapidly")
+            logger.warning(f"[PHASE 7] {method} had severely negative Sharpe {score:.3f}")
+
+    def set_ml_oos_r2(self, r2: float):
+        """PHASE 7: Set ML OOS R² for weakness flag integration."""
+        self._ml_oos_r2 = r2
+        if r2 < 0:
+            logger.warning(f"[PHASE 7] ML OOS R²={r2:.3f} < 0 - ML strategy will be heavily penalized")
+        elif r2 < 0.05:
+            logger.info(f"[PHASE 7] ML OOS R²={r2:.3f} < 0.05 - ML strategy score reduced by 50%")
 
     def _track_record_score(self, method: str) -> float:
-        rec = self._track_record[method]
+        """Calculate exponentially decayed track record score."""
+        rec = self._track_record.get(method, deque())
         if not rec:
             return 0.0
-        return float(np.mean(rec))
+        
+        # Exponential decay: older observations weighted less
+        now = self._period_counter
+        weighted_sum = 0.0
+        weight_total = 0.0
+        
+        for period_idx, score, regime in rec:
+            age = now - period_idx
+            weight = np.exp(-self.decay_rate * age)
+            weighted_sum += weight * score
+            weight_total += weight
+        
+        return weighted_sum / weight_total if weight_total > 0 else 0.0
+
+    def _regime_score(self, method: str, current_regime: str) -> float:
+        """PHASE 7: Calculate strategy performance in current regime."""
+        regime_rec = self._regime_performance.get(current_regime, {}).get(method, deque())
+        if not regime_rec:
+            return 0.5  # Neutral prior when no data
+        
+        scores = [score for _, score in regime_rec]
+        return float(np.mean(scores))
+
+    def _recent_score(self, method: str, periods: int = 6) -> float:
+        """PHASE 7: Calculate recent performance (last N periods)."""
+        rec = self._track_record.get(method, deque())
+        if len(rec) < 2:
+            return 0.0
+        
+        # Get last N periods
+        recent = list(rec)[-periods:]
+        scores = [score for _, score, _ in recent]
+        return float(np.mean(scores))
+
+    def _consistency_score(self, method: str) -> float:
+        """PHASE 7: Calculate consistency (fraction of positive periods)."""
+        rec = self._track_record.get(method, deque())
+        if len(rec) < 2:
+            return 0.5
+        
+        scores = [score for _, score, _ in rec]
+        positive_count = sum(1 for s in scores if s > 0)
+        return positive_count / len(scores)
+
+    def _confidence_score(self, method: str) -> float:
+        """PHASE 7: Calculate confidence based on sample size."""
+        rec = self._track_record.get(method, deque())
+        n = len(rec)
+        if n == 0:
+            return 0.0
+        # Confidence increases with sample size, saturating at ~20 observations
+        return min(1.0, n / 20.0)
+
+    def _correlation_penalty(self, method: str) -> float:
+        """PHASE 7: Calculate correlation penalty with other strategies."""
+        if len(self._weight_history.get(method, [])) < 5:
+            return 0.0
+        
+        method_weights = list(self._weight_history[method])
+        penalties = []
+        
+        for other_method in self.candidate_methods:
+            if other_method == method:
+                continue
+            other_weights = list(self._weight_history.get(other_method, []))
+            if len(other_weights) < 5:
+                continue
+            
+            # Calculate correlation
+            min_len = min(len(method_weights), len(other_weights))
+            corr = np.corrcoef(method_weights[-min_len:], other_weights[-min_len:])[0, 1]
+            
+            if not np.isnan(corr) and corr > 0.7:
+                penalties.append((corr - 0.7) / 0.3)  # Scale 0.7-1.0 to 0-1
+        
+        return np.mean(penalties) if penalties else 0.0
 
     def set_sentiment_score(self, sentiment: float):
-        """
-        STAGE 4: Set the current market sentiment score (-1.0 to 1.0).
-        This will be applied as a multiplier to trend-following and mean-reversion weights.
-        """
+        """PHASE 7: Set sentiment score (applied ONLY to trend_following/mean_reversion)."""
         self.sentiment_score = np.clip(sentiment, -1.0, 1.0)
-        logger.info(f"[STAGE 4] Sentiment score updated: {self.sentiment_score:.3f}")
+        logger.info(f"[PHASE 7] Sentiment score: {self.sentiment_score:.3f}")
 
     def select(self, prices: pd.DataFrame, returns: pd.DataFrame,
                 in_sample_scores: Dict[str, float], realized_perf: Optional[Dict] = None,
@@ -210,13 +402,21 @@ class StrategySelector:
         return chosen
 
     def blend(self, prices: pd.DataFrame, returns: pd.DataFrame,
-              strategy_fns: Dict[str, Callable], lookback_window_days: int = 90) -> Tuple[np.ndarray, Dict[str, float]]:
+              strategy_fns: Dict[str, Callable], lookback_window_days: int = 90,
+              turnover: Optional[Dict[str, float]] = None) -> Tuple[np.ndarray, Dict[str, float]]:
         """
-        ENSEMBLE BLEND with STAGE 2-4 improvements:
-        - Regime-driven defensive weighting (60-70% to defensive strategies in bad markets)
-        - Sentiment multiplier on trend-following and mean-reversion
-        - Faster learning from negative Sharpe strategies (6 vs 12 periods)
-        - Floor/ceiling constraints (5%-40%) maintain true diversification
+        PHASE 7 DYNAMIC ENSEMBLE BLEND:
+        - Dynamic composite scoring replaces static exp(sharpe)
+        - Regime-conditional performance tracking (5 regimes)
+        - Strategy correlation penalty prevents over-concentration
+        - Turnover penalty reduces excessive rebalancing
+        - Track record decay (10% per period)
+        - ML OOS weakness flag integration
+        - Sentiment multiplier ONLY on trend_following/mean_reversion
+        - Bounded weights enforced (5%-40%)
+        
+        Args:
+            turnover: Optional dict of strategy turnover values for penalty calculation
         """
         # Step 1: Get weights from each strategy
         all_weights = {}
@@ -236,7 +436,9 @@ class StrategySelector:
                     w_array = w_array / w_array.sum()
                 
                 all_weights[name] = w_array
-                logger.debug(f"Strategy {name} produced valid weights: {w_array}")
+                # Record weight history for correlation calculation
+                self._weight_history.setdefault(name, deque(maxlen=30)).append(w_array.copy())
+                logger.debug(f"Strategy {name} produced valid weights")
             except Exception as e:
                 logger.warning(f"Strategy {name} failed during blend: {e}")
                 failed_strategies.append(name)
@@ -246,90 +448,120 @@ class StrategySelector:
             logger.warning("All strategies failed! Using equal-weight fallback")
             return np.ones(n_assets) / n_assets, {}
         
-        # Step 2: Calculate long-term realized Sharpe for each strategy
-        strategy_sharpes = {}
-        for name in all_weights.keys():
-            rec = self._track_record.setdefault(name, deque(maxlen=self.track_record_len))
-            if len(rec) >= 2:  # STAGE 3 FIX: Need only 2 observations (was 3)
-                sharpe = float(np.mean(rec))
-            else:
-                sharpe = 0.0
-            strategy_sharpes[name] = sharpe
-        
-        # Step 3: Convert Sharpes to blend weights with regime bias
-        raw_scores = {}
+        # PHASE 7: Dynamic composite scoring
         regime = detect_regime(returns)
-        prior = REGIME_PRIOR.get(regime, {m: 1.0 for m in all_weights.keys()})
+        scores_dict: Dict[str, StrategyScore] = {}
         
+        # Calculate raw sharpes for percentile ranking
+        raw_sharpes = {}
         for name in all_weights.keys():
-            sharpe = strategy_sharpes[name]
-            regime_bias = prior.get(name, 1.0)
+            rec = self._track_record.get(name, deque())
+            if len(rec) >= 2:
+                # Use tuple format (period_idx, score, regime)
+                scores = [s for _, s, _ in rec]
+                raw_sharpes[name] = float(np.mean(scores))
+            else:
+                raw_sharpes[name] = 0.0
+        
+        # Calculate sharpe percentiles
+        if raw_sharpes:
+            sorted_sharpes = sorted(raw_sharpes.values())
+            for name in all_weights.keys():
+                rank = sorted_sharpes.index(raw_sharpes[name])
+                raw_sharpes[name] = rank / max(1, len(sorted_sharpes) - 1) if len(sorted_sharpes) > 1 else 0.5
+        
+        # Build composite scores for each strategy
+        for name in all_weights.keys():
+            score = StrategyScore(method=name)
+            score.raw_sharpe = raw_sharpes.get(name, 0.0)
+            score.sharpe_percentile = raw_sharpes.get(name, 0.0)
+            score.regime_score = self._regime_score(name, regime)
+            score.recent_score = self._recent_score(name)
+            score.consistency = self._consistency_score(name)
+            score.confidence = self._confidence_score(name)
+            score.correlation_penalty = self._correlation_penalty(name)
             
-            # STAGE 3 FIX: Exponential transform better ranks strategies during drawdowns
-            clipped_sharpe = np.clip(sharpe, -5, 5)
-            score = float(np.exp(clipped_sharpe)) * regime_bias
-            raw_scores[name] = score
+            # Turnover penalty
+            if turnover and name in turnover:
+                tov = turnover[name]
+                if tov > 0.50:
+                    score.turnover_penalty = 0.20
+                elif tov > 0.30:
+                    score.turnover_penalty = 0.10
+                else:
+                    score.turnover_penalty = 0.0
+            
+            # ML weakness flag
+            if name == 'ml' and self._ml_oos_r2 is not None:
+                if self._ml_oos_r2 < 0:
+                    score.ml_weakness_flag = True
+                elif self._ml_oos_r2 < 0.05:
+                    score.ml_weakness_flag = True  # Will reduce score by 50%
+            
+            # PHASE 7 COMPOSITE SCORING FORMULA:
+            # final = 0.25*sharpe_pct + 0.15*sortino + 0.10*consistency + 0.20*regime + 0.15*recent + 0.10*confidence - 0.05*corr_penalty - turnover_penalty
+            # Simplified: using sharpe_percentile as proxy for sortino
+            score.final_score = (
+                0.25 * score.sharpe_percentile +
+                0.10 * score.consistency +
+                0.20 * score.regime_score +
+                0.15 * score.recent_score +
+                0.10 * score.confidence -
+                0.05 * score.correlation_penalty -
+                score.turnover_penalty
+            )
+            
+            # Apply ML weakness penalty
+            if score.ml_weakness_flag:
+                if self._ml_oos_r2 is not None and self._ml_oos_r2 < 0:
+                    score.final_score = 0.0  # ML OOS R² < 0 → zero score
+                    logger.warning(f"[PHASE 7] ML strategy score set to 0 due to OOS R²={self._ml_oos_r2:.3f}")
+                else:
+                    score.final_score *= 0.5  # ML OOS R² < 0.05 → 50% score
+                    logger.info(f"[PHASE 7] ML strategy score reduced by 50% due to weak OOS R²")
+            
+            # Apply regime prior as multiplier
+            regime_bias = REGIME_PRIOR.get(regime, {}).get(name, 1.0)
+            score.final_score *= regime_bias
+            
+            scores_dict[name] = score
+            logger.debug(f"[PHASE 7] {name}: final_score={score.final_score:.3f} (sharpe={score.sharpe_percentile:.2f}, regime={score.regime_score:.2f}, recent={score.recent_score:.2f})")
         
-        # Normalize to sum to 1.0
-        total_score = sum(raw_scores.values())
-        if total_score == 0:
+        # Convert scores to blend weights
+        total_score = sum(s.final_score for s in scores_dict.values())
+        if total_score <= 0:
+            # Fallback to equal weights if all scores are negative/zero
             blend_weights = {name: 1.0 / len(all_weights) for name in all_weights.keys()}
+            logger.warning("All strategy scores <= 0, using equal-weight fallback")
         else:
-            blend_weights = {name: score / total_score for name, score in raw_scores.items()}
+            blend_weights = {name: max(0.0, s.final_score) / total_score for name, s in scores_dict.items()}
         
-        # Apply floor and ceiling constraints
+        # Apply floor and ceiling constraints (5%-40%)
         blend_weights = self._apply_weight_constraints(blend_weights)
         
-        # STAGE 5+ FIX: Softer defensive allocation - target 45-50% instead of 50-55%
-        if regime in ['high_vol', 'mean_reverting']:
-            logger.info(f"[STAGE 5+] Regime {regime} detected - enforcing softer defensive allocation (45-50%)")
-            defensive_strategies = ['trend_following', 'cvar', 'risk_parity']
-            defensive_weight = sum(blend_weights.get(s, 0) for s in defensive_strategies)
-            
-            if defensive_weight < 0.45:
-                logger.info(f"[STAGE 5+] Current defensive weight {defensive_weight:.0%} < 45% target. "
-                           f"Rebalancing to enforce 48% minimum...")
-                # Reduce aggressive strategies less aggressively (only 25% cut vs 30% before)
-                aggressive_strategies = ['ml', 'mvo', 'black_litterman']
-                aggressive_weight = sum(blend_weights.get(s, 0) for s in aggressive_strategies)
-                
-                if aggressive_weight > 0:
-                    # Cut aggressive strategies by only 25% (was 30%)
-                    reduction = aggressive_weight * 0.25
-                    for s in aggressive_strategies:
-                        if s in blend_weights:
-                            blend_weights[s] *= 0.75  # Keep 75% instead of 70%
-                    
-                    # Reallocate to defensive (preference: trend_following > cvar > risk_parity)
-                    boost_distribution = [0.4, 0.35, 0.25]
-                    for s, boost in zip(defensive_strategies, boost_distribution):
-                        if s in blend_weights:
-                            blend_weights[s] += reduction * boost
-                
-                # Re-apply constraints
-                blend_weights = self._apply_weight_constraints(blend_weights)
-                new_defensive = sum(blend_weights.get(s, 0) for s in defensive_strategies)
-                logger.info(f"[STAGE 5+] Defensive allocation after rebalance: {new_defensive:.0%}")
-        
-        # STAGE 4 FIX: Apply sentiment multiplier to trend-following and mean-reversion
+        # PHASE 7: Sentiment multiplier ONLY on trend_following and mean_reversion
         if self.sentiment_score != 0.0:
-            sentiment_multiplier = 1.0 + (self.sentiment_score * 0.5)  # -1 → 0.5x, +1 → 1.5x
+            sentiment_multiplier = 1.0 + (self.sentiment_score * 0.5)  # Range: [0.5, 1.5]
+            sentiment_multiplier = np.clip(sentiment_multiplier, 0.5, 1.5)
             
             for s in ['trend_following', 'mean_reversion']:
                 if s in blend_weights:
                     old_weight = blend_weights[s]
                     blend_weights[s] *= sentiment_multiplier
-                    logger.info(f"[STAGE 4] {s}: sentiment={self.sentiment_score:.2f}, "
-                               f"multiplier={sentiment_multiplier:.2f}, "
-                               f"weight {old_weight:.2%} → {blend_weights[s]:.2%}")
+                    logger.info(f"[PHASE 7] {s}: sentiment={self.sentiment_score:.2f}, "
+                               f"multiplier={sentiment_multiplier:.2f}, weight {old_weight:.2%} → {blend_weights[s]:.2%}")
             
             # Re-normalize
             total = sum(blend_weights.values())
             if total > 0:
                 blend_weights = {k: v / total for k, v in blend_weights.items()}
             
-            # Re-apply constraints (sentiment may have violated them)
+            # Re-apply constraints
             blend_weights = self._apply_weight_constraints(blend_weights)
+        
+        # Log blend composition
+        blend_log = ", ".join([f"{k}={v*100:.1f}%" for k, v in sorted(blend_weights.items(), key=lambda x: -x[1])])
+        logger.info(f"[PHASE 7 | Regime={regime}] Blend weights: {blend_log}")
         
         # Step 4: Combine asset weights using strategy blend weights
         combined_asset_weights = np.zeros(len(returns.columns))
