@@ -193,8 +193,8 @@ class RegimeEngine:
         # Clip to prevent overflow
         prices_series = np.clip(prices_series, 1e-6, 1e12)
         
-        # Calculate running maximum
-        running_max = prices_series.cummax()
+        # Use expanding().max() for better stability
+        running_max = prices_series.expanding().max()
         safe_running_max = np.maximum(running_max, 1e-6)
         
         # Calculate drawdown
