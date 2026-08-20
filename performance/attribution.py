@@ -196,12 +196,12 @@ class AttributionEngine:
             # Calculate portfolio contribution
             portfolio_contribution = strategy_return * portfolio_weight
             
-            # Get costs
-            transaction_cost = costs.get(strategy_name, 0.0)
-            slip = slippage.get(strategy_name, 0.0)
+            # Get costs (already as percentages from backtester)
+            transaction_cost_pct = costs.get(strategy_name, 0.0)
+            slip_pct = slippage.get(strategy_name, 0.0)
             
-            # Calculate net contribution
-            net_contribution = portfolio_contribution - transaction_cost - slip
+            # Calculate net contribution (costs are percentages of portfolio_contribution)
+            net_contribution = portfolio_contribution * (1 - transaction_cost_pct - slip_pct)
             
             # Create attribution record
             attribution = StrategyAttribution(
@@ -214,8 +214,8 @@ class AttributionEngine:
                 strategy_return=strategy_return,
                 portfolio_weight=portfolio_weight,
                 portfolio_contribution=portfolio_contribution,
-                transaction_cost=transaction_cost,
-                slippage=slip,
+                transaction_cost=transaction_cost_pct,
+                slippage=slip_pct,
                 net_contribution=net_contribution,
             )
             
@@ -229,8 +229,8 @@ class AttributionEngine:
             for asset, contrib in asset_contributions.items():
                 self._asset_contributions[strategy_name][asset].append(contrib)
             
-            # Store costs
-            self._strategy_costs[strategy_name].append(transaction_cost + slip)
+            # Store costs (as percentages)
+            self._strategy_costs[strategy_name].append(transaction_cost_pct + slip_pct)
             
             # Calculate turnover
             if strategy_name in self._prev_weights:
@@ -324,8 +324,8 @@ class AttributionEngine:
             for asset, contribs in self._asset_contributions[strategy_name].items():
                 asset_contrib_totals[asset] = sum(contribs)
             
-            # Total net return
-            total_net_return = total_gross_return - total_cost
+            # Total net return (costs are percentages, so multiply gross_return by cost percentage)
+            total_net_return = total_gross_return * (1 - total_cost)
             
             results[strategy_name] = CumulativeAttribution(
                 strategy_name=strategy_name,

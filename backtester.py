@@ -181,9 +181,9 @@ class Backtester:
                             if len(period_asset_returns) > 0:
                                 avg_asset_returns = period_asset_returns.mean().to_dict()
                                 
-                                # Prepare costs and slippage per strategy
-                                strategy_costs = {name: capital * 0.001 for name in all_individual_weights.keys()}
-                                strategy_slippage = {name: capital * 0.0005 for name in all_individual_weights.keys()}
+                                # Prepare costs and slippage per strategy (as percentages, not absolute values)
+                                strategy_costs = {name: 0.001 for name in all_individual_weights.keys()}
+                                strategy_slippage = {name: 0.0005 for name in all_individual_weights.keys()}
                                 
                                 # Detect current regime
                                 try:
