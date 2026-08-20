@@ -175,43 +175,36 @@ class RegimeEngine:
         return short_ret, medium_ret
     
     def _compute_drawdown(self, prices: pd.DataFrame) -> float:
-        """
-        Compute maximum drawdown over the lookback window.
-        
-        Uses portfolio-level prices (mean across assets).
-        Returns drawdown as a positive number (e.g., 0.25 = 25% drawdown).
-        """
-        window = min(self.drawdown_window_bars, len(prices))
-        if window < 5:
+        """Compute maximum drawdown safely without overflow."""
+        if prices is None or len(prices) < 2:
             return 0.0
         
-        port_prices = prices.tail(window).mean(axis=1)
+        # Get price series
+        if isinstance(prices, pd.DataFrame):
+            prices_series = prices.iloc[:, 0] if prices.shape[1] > 0 else prices
+        else:
+            prices_series = prices
         
-        # Remove NaN/Inf
-        port_prices = port_prices.replace([np.inf, -np.inf], np.nan).dropna()
-        
-        if len(port_prices) < 2:
+        # Remove NaN/Inf and clip extreme values
+        prices_series = prices_series.replace([np.inf, -np.inf], np.nan).dropna()
+        if len(prices_series) < 2:
             return 0.0
         
-        # Clip extreme values to prevent overflow
-        port_prices = np.clip(port_prices, 1e-6, 1e12)
+        # Clip to prevent overflow
+        prices_series = np.clip(prices_series, 1e-6, 1e12)
         
-        # Calculate running maximum using numpy with safe clipping
-        running_max = port_prices.cummax()
-        
-        # Avoid division by zero
+        # Calculate running maximum
+        running_max = prices_series.cummax()
         safe_running_max = np.maximum(running_max, 1e-6)
         
-        # Calculate drawdown (positive number representing peak-to-trough decline)
-        drawdown = (safe_running_max - port_prices) / safe_running_max
+        # Calculate drawdown
+        drawdown = (prices_series - safe_running_max) / safe_running_max
+        drawdown = np.clip(drawdown, -1.0, 0.0)
         
-        # Clip to prevent extreme values
-        drawdown = np.clip(drawdown, 0.0, 1.0)
+        max_dd = drawdown.min()
         
-        max_dd = drawdown.max()
-        
-        # Safety check for invalid values
-        if np.isnan(max_dd) or np.isinf(max_dd) or max_dd < 0.0 or max_dd > 1.0:
+        # Safety check
+        if np.isnan(max_dd) or np.isinf(max_dd) or max_dd < -1.0 or max_dd > 0.0:
             return 0.0
         
         return float(max_dd)
@@ -268,11 +261,11 @@ class RegimeEngine:
         """
         # Safety: ensure returns are finite
         returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
-        if returns.empty:
+        if returns.empty or len(returns) < 5:
             return RegimeState(
                 label=RegimeLabel.LOW_VOL_RANGE,
                 confidence=0.5,
-                features={'error': 'returns_empty_after_cleanup'},
+                features={'error': 'returns_empty_or_insufficient'},
                 as_of=None
             )
         

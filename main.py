@@ -444,10 +444,19 @@ def run_trading_cycle():
                         volatility = latest_record.get('volatility')
                         sharpe = latest_record.get('sharpe')
                     else:
-                        # Numeric Sharpe score (current implementation)
+                        # Numeric Sharpe score (current implementation) or tuple from database
                         return_pct = None
                         volatility = None
-                        sharpe = float(latest_record) if latest_record is not None else None
+                        # FIX: Handle tuple case from database
+                        if latest_record is not None:
+                            if isinstance(latest_record, tuple):
+                                latest_record = latest_record[0]  # Extract first element
+                            try:
+                                sharpe = float(latest_record) if latest_record is not None else None
+                            except (TypeError, ValueError):
+                                sharpe = None
+                        else:
+                            sharpe = None
                     
                     strategy_records.append({
                         'strategy_name': method,
