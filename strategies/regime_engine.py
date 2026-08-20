@@ -448,6 +448,14 @@ def detect_regime(returns: pd.DataFrame, window: int = 168, freq=None) -> str:
     """
     engine = RegimeEngine(vol_window_bars=window)
     
+    # SAFETY: Remove NaN/Inf and clip returns to prevent overflow in cumprod
+    returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
+    if returns.empty:
+        return "mean_reverting"
+    
+    # Clip returns to prevent overflow
+    returns = np.clip(returns, -0.5, 0.5)
+    
     # Create minimal prices DataFrame from returns (cumulative)
     prices = (1 + returns).cumprod()
     
