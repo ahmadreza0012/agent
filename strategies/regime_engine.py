@@ -141,12 +141,18 @@ class RegimeEngine:
         Uses portfolio-level returns (mean across assets) for regime detection.
         Correctly annualizes using the detected frequency.
         """
-        window = min(self.vol_window_bars, len(returns))
+        # Clip returns to prevent overflow
+        returns_clipped = np.clip(returns, -0.5, 0.5)
+        
+        window = min(self.vol_window_bars, len(returns_clipped))
         if window < 10:
             return 0.0
         
-        port_returns = returns.tail(window).mean(axis=1)
+        port_returns = returns_clipped.tail(window).mean(axis=1)
         vol = port_returns.std() * freq.annualization_factor_vol
+        # Cap vol at reasonable maximum (e.g., 500%)
+        if np.isnan(vol) or np.isinf(vol) or vol > 5.0:
+            return 0.5  # Default to 50% if calculation fails
         return vol
     
     def _compute_trend_signal(self, returns: pd.DataFrame) -> Tuple[float, float]:
@@ -180,10 +186,35 @@ class RegimeEngine:
             return 0.0
         
         port_prices = prices.tail(window).mean(axis=1)
+        
+        # Remove NaN/Inf
+        port_prices = port_prices.replace([np.inf, -np.inf], np.nan).dropna()
+        
+        if len(port_prices) < 2:
+            return 0.0
+        
+        # Clip extreme values to prevent overflow
+        port_prices = np.clip(port_prices, 1e-6, 1e12)
+        
+        # Calculate running maximum using numpy with safe clipping
         running_max = port_prices.cummax()
-        drawdown = (running_max - port_prices) / running_max
+        
+        # Avoid division by zero
+        safe_running_max = np.maximum(running_max, 1e-6)
+        
+        # Calculate drawdown (positive number representing peak-to-trough decline)
+        drawdown = (safe_running_max - port_prices) / safe_running_max
+        
+        # Clip to prevent extreme values
+        drawdown = np.clip(drawdown, 0.0, 1.0)
+        
         max_dd = drawdown.max()
-        return max_dd if not np.isnan(max_dd) else 0.0
+        
+        # Safety check for invalid values
+        if np.isnan(max_dd) or np.isinf(max_dd) or max_dd < 0.0 or max_dd > 1.0:
+            return 0.0
+        
+        return float(max_dd)
     
     def _compute_correlation_signal(self, returns: pd.DataFrame) -> float:
         """
@@ -235,6 +266,19 @@ class RegimeEngine:
         Returns:
             RegimeState with label, confidence, features, and timestamp
         """
+        # Safety: ensure returns are finite
+        returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
+        if returns.empty:
+            return RegimeState(
+                label=RegimeLabel.LOW_VOL_RANGE,
+                confidence=0.5,
+                features={'error': 'returns_empty_after_cleanup'},
+                as_of=None
+            )
+        
+        # Clip returns to prevent overflow
+        returns = np.clip(returns, -0.5, 0.5)
+        
         if len(returns) < 10:
             logger.warning("Insufficient data for regime detection, returning low_vol_range")
             return RegimeState(

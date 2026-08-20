@@ -167,6 +167,10 @@ class Backtester:
                     turnover = np.abs(new_weights - weights).sum() / 2
                     cost = capital * turnover * self.total_cost_rate
 
+                    # Calculate future rebalance dates for attribution
+                    future_dates = [d for d in rebalance_dates if d > timestamp]
+                    next_rebalance = future_dates[0] if future_dates else test_prices.index[-1] + timedelta(hours=1)
+
                     # PHASE 8: Record attribution data at each rebalance
                     if use_blend and all_individual_weights is not None:
                         # Calculate asset returns for this period (until next rebalance)
@@ -220,9 +224,6 @@ class Backtester:
                     weights = new_weights
                     logger.info(f"Rebalanced at {timestamp}: method={current_method_name}, "
                                 f"turnover={turnover:.2%}, cost=${cost:.2f}")
-
-                    future_dates = [d for d in rebalance_dates if d > timestamp]
-                    next_rebalance = future_dates[0] if future_dates else test_prices.index[-1] + timedelta(hours=1)
                 except Exception as e:
                     logger.error(f"Rebalancing failed at {timestamp}: {e}", exc_info=True)
 

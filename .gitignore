@@ -1,34 +1,4 @@
 ```
-# Compiled Python files
 __pycache__/
 *.pyc
-*.pyo
-
-# Dependencies
-.venv/
-venv/
-env/
-requirements.txt.bak
-
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-
-# Environment
-.env
-.env.local
-*.env.*
-
-# Editors
-.vscode/
-.idea/
-
-# Performance and test artifacts
-performance/__pycache__/
-tests/__pycache__/
-.coverage
-coverage/
-htmlcov/
-.pytest_cache/
 ```
