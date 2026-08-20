@@ -42,6 +42,7 @@ from strategy_selector import StrategySelector, detect_regime
 from auto_logger import get_logger
 from db_manager import AgentDB
 from utils.timeframe import detect_frequency, DAILY_FREQ
+from funding_rate_arb import funding_rate_arb_strategy
 
 auto_logger = get_logger()
 db_manager = None  # Will be initialized on startup
@@ -269,7 +270,8 @@ def run_trading_cycle():
             'black_litterman': black_litterman_strategy,
             'ml': ml_strategy,
             'trend_following': trend_following_strategy,
-            'mean_reversion': mean_reversion_strategy
+            'mean_reversion': mean_reversion_strategy,
+            'funding_arb': funding_rate_arb_strategy
         }
         
         candidate_methods = list(strategy_fns.keys())
