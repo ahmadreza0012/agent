@@ -35,34 +35,57 @@ class TransactionCostModel:
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {'fee_maker': 0.0005, 'fee_taker': 0.0010, 'default_spread': 0.0005, 'base_slippage': 0.0005, 'market_impact_factor': 0.1, 'min_liquidity': 10000}
     
-    def calculate_cost(self, symbol: str, order_size: float, price: float, volume: float, volatility: float, side: str = 'buy', is_maker: bool = True) -> CostComponents:
-        fee_rate = self.config['fee_maker'] if is_maker else self.config['fee_taker']
-        fees = order_size * fee_rate
-        spread = self._estimate_spread(symbol, price, volatility, volume)
-        spread_cost = order_size * spread
-        slippage = self._estimate_slippage(order_size, volume, volatility)
-        slippage_cost = order_size * slippage
-        impact = self._estimate_market_impact(order_size, volume)
-        impact_cost = order_size * impact
-        return CostComponents(fees=fees, spread=spread_cost, slippage=slippage_cost, market_impact=impact_cost)
+    def calculate_cost(self, order_value: float, volatility: float, avg_daily_volume: float, 
+                       order_type: str = 'taker') -> CostBreakdown:
+        """
+        Calculate transaction cost for a given order value.
+        
+        Args:
+            order_value: Dollar value of the order
+            volatility: Current volatility
+            avg_daily_volume: Average daily volume
+            order_type: 'maker' or 'taker'
+            
+        Returns:
+            CostBreakdown with detailed cost components
+        """
+        fee_rate = self.config['fee_maker'] if order_type == 'maker' else self.config['fee_taker']
+        fees = order_value * fee_rate
+        
+        # Spread cost estimation
+        spread_rate = self.config['default_spread'] * (1.0 + volatility * 10.0)
+        spread_cost = order_value * spread_rate
+        
+        # Slippage estimation
+        if avg_daily_volume > 0:
+            vol_frac = order_value / avg_daily_volume
+            slippage_rate = min(self.config['base_slippage'] + vol_frac * 5.0 + volatility * 2.0, 0.05)
+        else:
+            slippage_rate = self.config['base_slippage'] * 2.0
+        slippage_cost = order_value * slippage_rate
+        
+        # Market impact estimation
+        if avg_daily_volume > 0:
+            impact_rate = min(self.config['market_impact_factor'] * (order_value / avg_daily_volume) ** 0.5, 0.02)
+        else:
+            impact_rate = self.config['market_impact_factor'] * 0.01
+        impact_cost = order_value * impact_rate
+        
+        total = fees + spread_cost + slippage_cost + impact_cost
+        
+        return CostBreakdown(
+            fees=fees,
+            spread=spread_cost,
+            slippage=slippage_cost,
+            market_impact=impact_cost,
+            total=total
+        )
     
-    def _estimate_spread(self, symbol: str, price: float, volatility: float, volume: float) -> float:
-        base = self.config['default_spread']
-        vol_adj = 1.0 + volatility * 10.0
-        liq_ratio = max(0.1, min(1.0, volume / self.config['min_liquidity']))
-        liq_adj = 1.0 + (1.0 - liq_ratio) * 2.0
-        return base * vol_adj * liq_adj
-    
-    def _estimate_slippage(self, order_size: float, volume: float, volatility: float) -> float:
-        if volume <= 0:
-            return self.config['base_slippage'] * 2.0
-        vol_frac = order_size / volume
-        return min(self.config['base_slippage'] + vol_frac * 5.0 + volatility * 2.0, 0.05)
-    
-    def _estimate_market_impact(self, order_size: float, volume: float) -> float:
-        if volume <= 0:
-            return self.config['market_impact_factor'] * 0.01
-        return min(self.config['market_impact_factor'] * (order_size / volume) ** 0.5, 0.02)
+    def calculate_cost_scalar(self, order_value: float, volatility: float, 
+                              avg_daily_volume: float, order_type: str = 'taker') -> float:
+        """Calculate total cost as a scalar value."""
+        breakdown = self.calculate_cost(order_value, volatility, avg_daily_volume, order_type)
+        return breakdown.total
 
 class LiquidityConstraints:
     def __init__(self, config: Optional[Dict] = None):

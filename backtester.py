@@ -208,12 +208,12 @@ class Backtester:
                         avg_daily_volume=avg_volume,
                         order_type='taker'  # Assume market orders for execution
                     )
-                    cost = cost_breakdown.total_cost
+                    cost = cost_breakdown.total
                     
                     # Log detailed cost breakdown for debugging
-                    logger.debug(f"Rebalance cost at {timestamp}: fee=${cost_breakdown.fee_cost:.2f}, "
-                               f"spread=${cost_breakdown.spread_cost:.2f}, "
-                               f"impact=${cost_breakdown.impact_cost:.2f}, "
+                    logger.debug(f"Rebalance cost at {timestamp}: fee=${cost_breakdown.fees:.2f}, "
+                               f"spread=${cost_breakdown.spread:.2f}, "
+                               f"impact=${cost_breakdown.market_impact:.2f}, "
                                f"total=${cost:.2f} (turnover={turnover:.2%})")
 
                     # Calculate future rebalance dates for attribution
