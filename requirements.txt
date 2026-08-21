@@ -1,15 +1,15 @@
-# Pin exact versions for reproducibility (generated via pip-compile)
-numpy==1.26.4
-pandas==2.2.2
-scipy==1.13.1
-scikit-learn==1.5.0
+# Pin exact versions for reproducibility (Python 3.13 compatible)
+numpy==2.1.0
+pandas==2.2.3
+scipy==1.14.1
+scikit-learn==1.5.2
 pycoingecko==3.1.0
 yfinance==0.2.40
 groq==0.9.0
 PyPortfolioOpt==1.5.5
-matplotlib==3.9.0
-fastapi==0.111.0
-uvicorn==0.30.1
+matplotlib==3.9.2
+fastapi==0.115.0
+uvicorn==0.30.6
 requests==2.32.3
-pytest==8.2.2
+pytest==8.3.3
 ccxt==4.3.50
