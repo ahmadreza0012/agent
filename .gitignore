@@ -1,1 +1,47 @@
-Nothing needs to be added to the .gitignore file based on the provided changes. The listed files are all Python source code files (.py) and an __init__.py file, which should not be ignored. There are no build artifacts, dependency directories, temporary files, or other items that need to be added to the .gitignore.
+```
+# Environment files
+.env
+.env.local
+*.env.*
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Editors and IDEs
+.vscode/
+.idea/
+
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Dependencies
+.venv/
+venv/
+.env/
+pip-log.txt
+pip-selfcheck.json
+
+# Testing
+.coverage
+htmlcov/
+.coverage.*
+.cache
+.pytest_cache/
+.hypothesis/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+```
