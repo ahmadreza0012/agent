@@ -53,6 +53,7 @@ def detect_regime(returns: pd.DataFrame, window: int = 168, freq=None) -> str:
     
     PHASE 1 FIX: Uses FrequencySpec for correct vol annualization.
     PHASE 3 FIX: Distinguishes bull vs bear trends, adds crisis detection.
+    NUMPY SAFEGUARD: Checks for NaN/Inf to prevent overflow errors.
     """
     if len(returns) < window:
         window = max(5, len(returns))
@@ -60,6 +61,11 @@ def detect_regime(returns: pd.DataFrame, window: int = 168, freq=None) -> str:
         return "low_vol_range"
 
     port = returns.tail(window).mean(axis=1)
+    
+    # NUMPY SAFEGUARD: Check for NaN/Inf in returns data
+    if not np.all(np.isfinite(port.values)):
+        logger.warning("REGIME: Non-finite values detected in returns, defaulting to low_vol_range")
+        return "low_vol_range"
     
     # PHASE 1 FIX: Use detected frequency for vol annualization
     if freq is None:
@@ -72,15 +78,29 @@ def detect_regime(returns: pd.DataFrame, window: int = 168, freq=None) -> str:
             freq = FREQUENCY_SPECS["1h"]
     
     vol = port.std() * freq.annualization_factor_vol
+    
+    # NUMPY SAFEGUARD: Ensure vol is finite
+    if not np.isfinite(vol):
+        logger.warning("REGIME: Non-finite volatility detected, defaulting to low_vol_range")
+        return "low_vol_range"
+    
     autocorr = port.autocorr(lag=1) if len(port) > 2 else 0.0
     autocorr = 0.0 if pd.isna(autocorr) else autocorr
     recent_return = port.tail(window).sum()
+    
+    # NUMPY SAFEGUARD: Ensure recent_return is finite
+    if not np.isfinite(recent_return):
+        recent_return = 0.0
     
     # Calculate drawdown for crisis detection
     cum_returns = (1 + port).cumprod()
     running_max = cum_returns.cummax()
     drawdown = (cum_returns - running_max) / running_max
     max_dd = drawdown.min() if len(drawdown) > 0 else 0.0
+    
+    # NUMPY SAFEGUARD: Ensure max_dd is finite
+    if not np.isfinite(max_dd):
+        max_dd = 0.0
 
     # PHASE 3: 5-regime classification
     # Crisis: extreme drawdown OR extreme volatility
@@ -576,7 +596,8 @@ class StrategySelector:
         logger.info(f"[Regime={regime}] Blend weights: {blend_log}")
         logger.info(f"Combined asset weights: {combined_asset_weights}")
         
-        return combined_asset_weights, blend_weights
+        # Return all_weights to avoid recomputing strategies in backtester
+        return combined_asset_weights, blend_weights, all_weights
     
     def _apply_weight_constraints(self, weights: Dict[str, float]) -> Dict[str, float]:
         """
