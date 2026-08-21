@@ -182,7 +182,9 @@ No explanation, just the number.
             content = getattr(choice.message, 'content', None) or ""
             if not content.strip():
                 logger.warning(f"[LLM] Empty content in response for {symbol}. Raw preview: '{content[:120]}'")
-                return NewsFetcher.keyword_fallback_score(headlines)
+                # CRITICAL FIX: When LLM returns empty content, default to NEUTRAL (0.0)
+                # Do NOT use keyword fallback on headlines - that gave false 1.0 scores
+                return 0.0
             
             sentiment_text = content.strip()
             logger.info(f"[LLM] Raw response for {symbol}: '{sentiment_text[:120]}'")
@@ -243,8 +245,9 @@ No explanation, just the number.
                     
                     content = getattr(choice.message, 'content', None) or ""
                     if not content.strip():
-                        logger.warning(f"[LLM fallback] Empty content for {symbol}. Using keyword fallback.")
-                        return NewsFetcher.keyword_fallback_score(headlines)
+                        logger.warning(f"[LLM fallback] Empty content for {symbol}. Using NEUTRAL (0.0).")
+                        # CRITICAL FIX: When LLM returns empty content, default to NEUTRAL (0.0)
+                        return 0.0
                     
                     sentiment_text = content.strip()
                     
