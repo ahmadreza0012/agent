@@ -32,6 +32,7 @@ import logging
 from strategy_selector import StrategySelector, detect_regime, compute_in_sample_scores
 from utils.timeframe import detect_frequency
 from performance.attribution import AttributionEngine
+from models.transaction_cost import TransactionCostModel, CostBreakdown
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,7 +46,11 @@ class Backtester:
                  slippage: float = 0.0005,
                  max_drawdown_circuit_breaker: float = 0.12,
                  circuit_breaker_derisk_factor: float = 0.4,
-                 rebalance_frequency_weeks: int = 2):
+                 rebalance_frequency_weeks: int = 2,
+                 cost_model: TransactionCostModel = None,
+                 min_liquidity_usd: float = 1_000_000,
+                 max_position_pct_of_adv: float = 0.10,
+                 max_volume_participation: float = 0.20):
         """
         Args:
             max_drawdown_circuit_breaker: drawdown level (e.g. 0.12 = 12%)
@@ -55,6 +60,11 @@ class Backtester:
                 not reinvested that period). 0.4 = 40% exposure.
             rebalance_frequency_weeks: how often to rebalance (default: every 2 weeks)
                 FIX: Reduced from weekly to bi-weekly to lower transaction costs
+            cost_model: TransactionCostModel instance for realistic cost calculation
+                       If None, uses default model with maker/taker fees
+            min_liquidity_usd: Minimum acceptable daily volume for trading (default $1M)
+            max_position_pct_of_adv: Max position as % of ADV (default 10%)
+            max_volume_participation: Max order as % of daily volume (default 20%)
         """
         self.initial_capital = initial_capital
         self.transaction_cost = transaction_cost
@@ -63,6 +73,23 @@ class Backtester:
         self.max_dd_breaker = max_drawdown_circuit_breaker
         self.derisk_factor = circuit_breaker_derisk_factor
         self.rebalance_freq = f'{rebalance_frequency_weeks}W'
+        
+        # Initialize TransactionCostModel for Phase 10
+        self.cost_model = cost_model if cost_model is not None else TransactionCostModel(
+            maker_fee=0.0004,  # 0.04%
+            taker_fee=0.0010,  # 0.10%
+            spread=0.0005,     # 0.05%
+            alpha=0.01,
+            min_liquidity_usd=min_liquidity_usd,
+            max_position_pct_of_adv=max_position_pct_of_adv,
+            max_volume_participation=max_volume_participation
+        )
+        
+        # Liquidity constraints
+        self.min_liquidity_usd = min_liquidity_usd
+        self.max_position_pct_of_adv = max_position_pct_of_adv
+        self.max_volume_participation = max_volume_participation
+        
         # Initialize dictionary to track realized performance of each strategy for adaptive learning
         self.strategy_realized_performance = {}
         # Initialize attribution engine for Phase 8
@@ -165,13 +192,34 @@ class Backtester:
                         new_weights = np.array(weights_strategy(lookback_prices, lookback_returns))
 
                     turnover = np.abs(new_weights - weights).sum() / 2
-                    cost = capital * turnover * self.total_cost_rate
+                    
+                    # PHASE 10: Calculate transaction cost using TransactionCostModel
+                    # Use taker fees for market orders (conservative assumption)
+                    # Volatility and volume should be from lookback period to avoid look-ahead bias
+                    current_volatility = lookback_returns.std().mean() if len(lookback_returns) > 0 else 0.01
+                    avg_volume = lookback_prices.mean().sum() * 24 if len(lookback_prices) > 0 else 1e6  # Hourly data -> daily
+                    
+                    # Calculate cost breakdown using the model
+                    order_value = capital * turnover
+                    cost_breakdown = self.cost_model.calculate_cost(
+                        order_value=order_value,
+                        volatility=current_volatility,
+                        avg_daily_volume=avg_volume,
+                        order_type='taker'  # Assume market orders for execution
+                    )
+                    cost = cost_breakdown.total_cost
+                    
+                    # Log detailed cost breakdown for debugging
+                    logger.debug(f"Rebalance cost at {timestamp}: fee=${cost_breakdown.fee_cost:.2f}, "
+                               f"spread=${cost_breakdown.spread_cost:.2f}, "
+                               f"impact=${cost_breakdown.impact_cost:.2f}, "
+                               f"total=${cost:.2f} (turnover={turnover:.2%})")
 
                     # Calculate future rebalance dates for attribution
                     future_dates = [d for d in rebalance_dates if d > timestamp]
                     next_rebalance = future_dates[0] if future_dates else test_prices.index[-1] + timedelta(hours=1)
 
-                    # PHASE 8: Record attribution data at each rebalance
+                    # PHASE 8 & 10: Record attribution data at each rebalance with costs
                     if use_blend and all_individual_weights is not None:
                         # Calculate asset returns for this period (until next rebalance)
                         future_rebalance = future_dates[0] if future_dates else test_prices.index[-1] + timedelta(hours=1)
@@ -181,9 +229,22 @@ class Backtester:
                             if len(period_asset_returns) > 0:
                                 avg_asset_returns = period_asset_returns.mean().to_dict()
                                 
-                                # Prepare costs and slippage per strategy (as percentages, not absolute values)
-                                strategy_costs = {name: 0.001 for name in all_individual_weights.keys()}
-                                strategy_slippage = {name: 0.0005 for name in all_individual_weights.keys()}
+                                # PHASE 10: Calculate per-strategy costs using TransactionCostModel
+                                strategy_costs = {}
+                                strategy_slippage = {}
+                                for name in all_individual_weights.keys():
+                                    # Each strategy's turnover contribution
+                                    strat_turnover = turnover / len(all_individual_weights)
+                                    strat_order_value = capital * strat_turnover
+                                    strat_cost = self.cost_model.calculate_cost_scalar(
+                                        order_value=strat_order_value,
+                                        volatility=current_volatility,
+                                        avg_daily_volume=avg_volume,
+                                        order_type='taker'
+                                    )
+                                    # Convert to percentage for attribution
+                                    strategy_costs[name] = strat_cost / max(capital, 1)
+                                    strategy_slippage[name] = 0.0005  # Fixed slippage assumption
                                 
                                 # Detect current regime
                                 try:
