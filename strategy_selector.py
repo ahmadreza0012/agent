@@ -63,8 +63,14 @@ def detect_regime(returns: pd.DataFrame, window: int = 168, freq=None) -> str:
     port = returns.tail(window).mean(axis=1)
     
     # NUMPY SAFEGUARD: Check for NaN/Inf in returns data
-    if not np.all(np.isfinite(port.values)):
+    port_values = port.values
+    if not np.all(np.isfinite(port_values)):
         logger.warning("REGIME: Non-finite values detected in returns, defaulting to low_vol_range")
+        return "low_vol_range"
+    
+    # Additional safeguard: check for extreme values that could cause overflow
+    if np.any(np.abs(port_values) > 100):  # Returns should never exceed 10000%
+        logger.warning(f"REGIME: Extreme returns detected (max={np.abs(port_values).max():.2f}), defaulting to low_vol_range")
         return "low_vol_range"
     
     # PHASE 1 FIX: Use detected frequency for vol annualization
