@@ -1,0 +1,38 @@
+{
+  "state": "recovery",
+  "state_enter_time": "2026-08-21T12:49:06.488293",
+  "last_update": "2026-08-21T12:49:06.488293",
+  "transitions": [
+    {
+      "timestamp": "2026-08-21T12:49:06.488293",
+      "from_state": "halt",
+      "to_state": "recovery",
+      "reason": "Recovery to 4.0% < 5.0%",
+      "drawdown": -0.04,
+      "daily_pnl": -0.005,
+      "consecutive_losses": 0
+    }
+  ],
+  "config": {
+    "warning_drawdown": 0.05,
+    "derisk_drawdown": 0.08,
+    "halt_drawdown": 0.12,
+    "recovery_drawdown": 0.05,
+    "normal_drawdown": 0.02,
+    "warning_daily_loss": 0.015,
+    "derisk_daily_loss": 0.02,
+    "halt_daily_loss": 0.03,
+    "recovery_daily_loss": 0.01,
+    "normal_daily_loss": 0.005,
+    "warning_losses": 3,
+    "derisk_losses": 5,
+    "halt_losses": 8,
+    "recovery_losses": 2,
+    "normal_wins": 5,
+    "min_time_warning": 1.0,
+    "min_time_derisk": 2.0,
+    "min_time_halt": 24.0,
+    "min_time_recovery": 6.0,
+    "allow_manual_override": true
+  }
+}
