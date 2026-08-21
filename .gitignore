@@ -1,1 +1,1 @@
-(backtester.py and strategy_selector.py are both Python source files, which fall under the category of source/config files (.py). According to rule #6, if the change list contains ONLY source or config files and NO build artifacts, dependencies, or temp files, then output an EMPTY .gitignore. No build artifacts, dependency directories, or temporary files are present in the changes.)
+Nothing should be ignored since only a Python source file (`strategy_selector.py`) was modified and there are no build artifacts, dependencies, or temporary files in the changes.
