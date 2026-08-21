@@ -95,8 +95,8 @@ class PortfolioOptimizer:
                 if method == 'max_sharpe':
                     weights = ef1.max_sharpe(risk_free_rate=risk_free_rate)
                 elif method == 'min_volatility':
-                    # For min_volatility method, use cash-capped version with fresh instance
-                    weights = self._min_volatility_with_cash_cap_fresh(expected_returns, cov_matrix, max_cash=0.40)
+                    # For min_volatility method, allow 100% CASH if optimal (no cap)
+                    weights = self._min_volatility_with_cash_cap_fresh(expected_returns, cov_matrix, max_cash=1.0)
                 else:
                     target_return = np.mean(expected_returns)
                     weights = ef1.efficient_return(target_return)
@@ -128,9 +128,9 @@ class PortfolioOptimizer:
             except Exception as e2:
                 logger.warning(f"Attempt 2 (efficient_return) failed: {e2}. Trying Attempt 3 (min_volatility with cash cap)...")
             
-            # ATTEMPT 3: min_volatility with cash cap (fresh instance)
+            # ATTEMPT 3: min_volatility with no cash cap (allow 100% CASH in crisis)
             try:
-                weights = self._min_volatility_with_cash_cap_fresh(expected_returns, cov_matrix, max_cash=0.40)
+                weights = self._min_volatility_with_cash_cap_fresh(expected_returns, cov_matrix, max_cash=1.0)
                 weights_array = np.array(list(weights.values()))
                 logger.info(f"MVO weights (attempt 3 - min_volatility capped): {weights_array}")
                 return weights_array
@@ -544,37 +544,10 @@ class PortfolioOptimizer:
         s = weights.sum()
         weights = weights / s if s > 0 else np.ones(n_assets) / n_assets
 
-        # STAGE 5 FIX: Cap CASH at 60% maximum and redistribute to risky assets
-        cash_mask = np.array([name == 'CASH' for name in self.asset_names])
-        risky_mask = ~cash_mask
-        
-        cash_weight = weights[cash_mask].sum() if cash_mask.any() else 0.0
-        max_cash_cap = 0.60  # Stage 5: Maximum 60% CASH
-        
-        if cash_weight > max_cash_cap:
-            logger.info(f"CVaR CASH weight {cash_weight:.1%} exceeds cap {max_cash_cap:.0%}. "
-                       f"Redistributing to risky assets via inverse-volatility.")
-            
-            excess_cash = cash_weight - max_cash_cap
-            
-            # Cap CASH
-            if cash_mask.any():
-                weights[cash_mask] = max_cash_cap / cash_mask.sum()
-            
-            # Distribute excess to risky assets using inverse-volatility weighting
-            if risky_mask.sum() > 0:
-                risky_indices = np.where(risky_mask)[0]
-                volatilities = np.sqrt(np.diag(np.cov(returns[:, risky_mask].T)))
-                # Inverse volatility weights
-                inv_vol = 1.0 / (volatilities + 1e-8)
-                inv_vol_weights = inv_vol / inv_vol.sum()
-                
-                # Add excess proportionally
-                weights[risky_indices] += excess_cash * inv_vol_weights
-            
-            # Renormalize
-            weights = weights / weights.sum()
-            logger.info(f"CVaR weights after CASH cap: {weights}")
+        # RISK GUARDRAIL FIX: Allow CVaR to go to 100% CASH in crisis regimes
+        # Removed the 60% CASH cap that was forcing risky asset allocation during drawdowns
+        # If CVaR determines 100% CASH is optimal, respect that decision
+        logger.info(f"CVaR weights: {weights}")
 
         port_rets = returns @ weights
         var = np.percentile(port_rets, (1 - confidence) * 100)
