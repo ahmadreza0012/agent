@@ -147,28 +147,13 @@ class Backtester:
                     if strategy_selector is not None and strategy_fns is not None:
                         if use_blend:
                             # NEW: Use ensemble blend instead of winner-take-all
-                            # No need to compute in_sample_scores for blending
-                            blended_weights, blend_composition = strategy_selector.blend(
-                                lookback_prices, lookback_returns, strategy_fns)
+                            # The blend() method now returns all_weights to avoid double computation
+                            result = strategy_selector.blend(lookback_prices, lookback_returns, strategy_fns)
+                            blended_weights, blend_composition, all_individual_weights = result
                             new_weights = blended_weights
                             current_method_name = "ensemble_blend"
                             logger.info(f"Ensemble blend composition: {blend_composition}")
-                            
-                            # CRITICAL FIX: Store individual strategy weights for later performance attribution
-                            # We need these to calculate hypothetical returns for each strategy at period end
-                            all_individual_weights = {}
-                            for name, fn in strategy_fns.items():
-                                try:
-                                    w = fn(lookback_prices, lookback_returns)
-                                    w_array = np.array(w)
-                                    if len(w_array) == len(lookback_returns.columns):
-                                        if w_array.sum() > 0:
-                                            w_array = w_array / w_array.sum()
-                                        all_individual_weights[name] = w_array
-                                except Exception as e:
-                                    logger.warning(f"Failed to get weights for {name} during blend setup: {e}")
-                            # DEBUG: Log what we captured
-                            logger.info(f"[DEBUG] Captured individual_weights for {len(all_individual_weights)} strategies: {list(all_individual_weights.keys())}")
+                            logger.info(f"[DEBUG] Received individual_weights from blend() for {len(all_individual_weights)} strategies")
                         else:
                             # LEGACY: Select single best strategy
                             # PHASE 1 FIX: Detect frequency from lookback data for correct annualization in scoring
