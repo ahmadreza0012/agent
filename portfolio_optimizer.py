@@ -821,6 +821,111 @@ class PortfolioOptimizer:
             'weights': weights,
         }
 
+    # ------------------------------------------------------------------
+    # PHASE 11: LIQUIDITY-CONSTRAINED PORTFOLIO CONSTRUCTION
+    # ------------------------------------------------------------------
+    
+    def enforce_liquidity_constraints(self, weights: np.ndarray, 
+                                       avg_daily_volumes: Dict[str, float],
+                                       capital: float,
+                                       symbols: List[str] = None) -> np.ndarray:
+        """
+        Enforce that no position exceeds liquidity limits.
+        
+        For each asset:
+        - max_position = ADV * max_position_pct_of_adv (default 10%)
+        - max_participation = ADV * max_volume_participation (default 20%)
+        - Position value = capital * weight[i]
+        
+        If position exceeds limit, cap it and redistribute excess.
+        
+        Args:
+            weights: Raw portfolio weights from optimization
+            avg_daily_volumes: Dictionary mapping symbol to ADV in USD
+            capital: Total portfolio value in USD
+            symbols: Asset symbols corresponding to weights (optional, uses asset_names if None)
+            
+        Returns:
+            Adjusted weights satisfying all liquidity constraints
+        """
+        if symbols is None:
+            symbols = self.asset_names
+        
+        # Import TransactionCostModel for liquidity adjustment
+        try:
+            from models.transaction_cost import TransactionCostModel
+            cost_model = TransactionCostModel()
+            return cost_model.calculate_liquidity_adjusted_weights(
+                raw_weights=weights,
+                symbols=symbols,
+                avg_daily_volumes=avg_daily_volumes,
+                capital=capital
+            )
+        except ImportError:
+            logger.warning("TransactionCostModel not available, skipping liquidity enforcement")
+            return weights
+    
+    def calculate_max_position_from_liquidity(self, 
+                                              symbol: str,
+                                              avg_daily_volume: float,
+                                              capital: float) -> float:
+        """
+        Calculate maximum position size based on liquidity.
+        
+        Returns max weight (as decimal) for this asset.
+        
+        Args:
+            symbol: Asset symbol
+            avg_daily_volume: Average daily volume in USD (ADV)
+            capital: Total portfolio value in USD
+            
+        Returns:
+            Maximum allowable weight for this asset (0.0 to 1.0)
+        """
+        try:
+            from models.transaction_cost import TransactionCostModel
+            cost_model = TransactionCostModel()
+            
+            # Check minimum liquidity
+            if avg_daily_volume < cost_model.min_liquidity_usd:
+                return 0.0
+            
+            # Calculate max order value
+            max_by_position = avg_daily_volume * cost_model.max_position_pct_of_adv
+            max_by_participation = avg_daily_volume * cost_model.max_volume_participation
+            max_order_value = min(max_by_position, max_by_participation)
+            
+            # Convert to weight
+            max_weight = max_order_value / max(capital, 1.0)
+            return min(max_weight, 1.0)  # Cap at 100%
+        except ImportError:
+            # Conservative defaults if model not available
+            return 0.10  # Default 10% max position
+    
+    def filter_by_liquidity(self, symbols: List[str], 
+                            avg_daily_volumes: Dict[str, float],
+                            min_liquidity_usd: float = 1_000_000) -> List[str]:
+        """
+        Filter out assets with insufficient liquidity.
+        
+        Returns only symbols with ADV >= min_liquidity_usd.
+        
+        Args:
+            symbols: List of asset symbols to filter
+            avg_daily_volumes: Dictionary mapping symbol to ADV in USD
+            min_liquidity_usd: Minimum acceptable daily volume (default $1M)
+            
+        Returns:
+            List of symbols passing liquidity filter
+        """
+        liquid_symbols = [s for s in symbols if avg_daily_volumes.get(s, 0) >= min_liquidity_usd]
+        
+        excluded = set(symbols) - set(liquid_symbols)
+        if excluded:
+            logger.info(f"Liquidity filter: excluded {len(excluded)} assets: {list(excluded)}")
+        
+        return liquid_symbols
+
 
 def trend_following_strategy(prices: pd.DataFrame, returns: pd.DataFrame, 
                                short_window: int = 20, long_window: int = 100) -> np.ndarray:
