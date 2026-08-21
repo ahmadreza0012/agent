@@ -4,26 +4,26 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.venv/
+.Python
 venv/
+.venv/
 .env
 .env.local
-*.env.*
+.env.*
 
 # Build artifacts
-dist/
 build/
+dist/
 *.egg-info/
 
 # Logs
 *.log
 
-# Editor/IDE
+# Editors
 .vscode/
 .idea/
 *.swp
 *.swo
-*.tmp
 
 # Coverage
 .coverage
