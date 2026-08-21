@@ -3,6 +3,24 @@ from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
 
 @dataclass
+class CostBreakdown:
+    """Detailed breakdown of transaction costs."""
+    fees: float = 0.0
+    spread: float = 0.0
+    slippage: float = 0.0
+    market_impact: float = 0.0
+    total: float = 0.0
+    
+    def to_dict(self) -> Dict[str, float]:
+        return {
+            'fees': self.fees,
+            'spread': self.spread,
+            'slippage': self.slippage,
+            'market_impact': self.market_impact,
+            'total': self.total,
+        }
+
+@dataclass
 class CostComponents:
     fees: float = 0.0
     spread: float = 0.0
