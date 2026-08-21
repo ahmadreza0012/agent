@@ -291,6 +291,139 @@ class TransactionCostModel:
         
         return max_order
     
+    def check_spread_threshold(self, spread: float, 
+                               max_spread_bps: float = 50) -> Tuple[bool, str]:
+        """
+        Check if spread is acceptable for trading.
+        
+        High spreads indicate illiquid markets and can significantly impact
+        execution costs. This check prevents trading in excessively wide
+        spread conditions.
+        
+        Args:
+            spread: Current spread as decimal (e.g., 0.001 for 10 bps)
+            max_spread_bps: Maximum acceptable spread in basis points (default 50 bps = 0.005)
+        
+        Returns:
+            Tuple of (can_trade: bool, reason: str)
+            If can_trade is False, reason explains why spread is unacceptable
+        """
+        spread_bps = spread * 10000  # Convert to basis points
+        
+        if spread_bps > max_spread_bps:
+            return False, f"Spread too high: {spread_bps:.1f} bps > {max_spread_bps} bps threshold"
+        
+        return True, f"Spread acceptable: {spread_bps:.1f} bps"
+    
+    def calculate_liquidity_adjusted_weights(self, raw_weights: np.ndarray,
+                                              symbols: list[str],
+                                              avg_daily_volumes: Dict[str, float],
+                                              capital: float) -> np.ndarray:
+        """
+        Adjust portfolio weights based on liquidity constraints.
+        
+        This method enforces that no position exceeds liquidity limits and
+        redistributes excess weight proportionally to other assets.
+        
+        Algorithm:
+        1. Calculate max position value for each asset based on ADV
+        2. Cap weights that exceed max position
+        3. Redistribute excess proportionally to uncapped assets
+        4. Iterate until convergence or max iterations
+        5. Ensure sum(weights) = 1
+        
+        Args:
+            raw_weights: Original portfolio weights (should sum to 1)
+            symbols: Asset symbols corresponding to weights
+            avg_daily_volumes: Dictionary mapping symbol to ADV in USD
+            capital: Total portfolio value in USD
+            
+        Returns:
+            Adjusted weights that satisfy all liquidity constraints
+            
+        Note:
+            - Assets with ADV below min_liquidity_usd are excluded (weight = 0)
+            - If all assets are illiquid, returns equal-weight cash position
+        """
+        weights = raw_weights.copy().astype(float)
+        n_assets = len(weights)
+        
+        if n_assets == 0:
+            return weights
+        
+        # Calculate max position for each asset
+        max_positions = np.zeros(n_assets)
+        liquid_mask = np.zeros(n_assets, dtype=bool)
+        
+        for i, symbol in enumerate(symbols):
+            adv = avg_daily_volumes.get(symbol, 0.0)
+            
+            # Check minimum liquidity
+            if adv >= self.min_liquidity_usd:
+                liquid_mask[i] = True
+                # Max position is the more restrictive of position/participation limits
+                max_by_position = adv * self.max_position_pct_of_adv
+                max_by_participation = adv * self.max_volume_participation
+                max_positions[i] = min(max_by_position, max_by_participation) / capital
+            else:
+                # Illiquid asset - force weight to zero
+                weights[i] = 0.0
+                logger.warning(f"Asset {symbol} excluded: ADV ${adv:,.0f} < ${self.min_liquidity_usd:,.0f} minimum")
+        
+        # Check if any liquid assets remain
+        if not liquid_mask.any():
+            logger.warning("No liquid assets available - returning zero weights")
+            return np.zeros(n_assets)
+        
+        # Iteratively cap and redistribute
+        max_iterations = 10
+        for iteration in range(max_iterations):
+            # Find assets exceeding limits
+            excess_mask = (weights > max_positions) & liquid_mask
+            
+            if not excess_mask.any():
+                break  # All constraints satisfied
+            
+            # Calculate excess weight
+            excess = np.sum(weights[excess_mask] - max_positions[excess_mask])
+            
+            # Cap exceeded positions
+            weights[excess_mask] = max_positions[excess_mask]
+            
+            # Redistribute excess to uncapped liquid assets
+            uncapped_mask = ~excess_mask & liquid_mask
+            uncapped_total = np.sum(weights[uncapped_mask])
+            
+            if uncapped_total > 0:
+                # Proportional redistribution
+                for i in range(n_assets):
+                    if uncapped_mask[i]:
+                        weights[i] += excess * (weights[i] / uncapped_total)
+            else:
+                # No uncapped assets - distribute equally among liquid assets
+                liquid_count = liquid_mask.sum()
+                if liquid_count > 0:
+                    remaining_weight = 1.0 - np.sum(weights[liquid_mask])
+                    weights[liquid_mask] += remaining_weight / liquid_count
+        
+        # Final normalization to ensure sum = 1 (for liquid assets only)
+        liquid_total = np.sum(weights[liquid_mask])
+        if liquid_total > 0:
+            weights[liquid_mask] /= liquid_total
+        
+        # Ensure no negative weights
+        weights = np.maximum(weights, 0.0)
+        
+        # Final normalization
+        total = np.sum(weights)
+        if total > 0:
+            weights /= total
+        
+        logger.info(f"Liquidity adjustment: {liquid_mask.sum()}/{n_assets} assets liquid, "
+                   f"final weights sum: {np.sum(weights):.4f}")
+        
+        return weights
+    
     def calculate_turnover_cost(self, old_weights: np.ndarray, new_weights: np.ndarray,
                                 capital: float, volatility: float = 0.01,
                                 avg_daily_volume: float = 1e6) -> CostBreakdown:
