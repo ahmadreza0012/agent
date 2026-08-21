@@ -76,13 +76,14 @@ class Backtester:
         
         # Initialize TransactionCostModel for Phase 10
         self.cost_model = cost_model if cost_model is not None else TransactionCostModel(
-            maker_fee=0.0004,  # 0.04%
-            taker_fee=0.0010,  # 0.10%
-            spread=0.0005,     # 0.05%
-            alpha=0.01,
-            min_liquidity_usd=min_liquidity_usd,
-            max_position_pct_of_adv=max_position_pct_of_adv,
-            max_volume_participation=max_volume_participation
+            config={
+                'fee_maker': 0.0004,  # 0.04%
+                'fee_taker': 0.0010,  # 0.10%
+                'default_spread': 0.0005,  # 0.05%
+                'base_slippage': 0.0005,
+                'market_impact_factor': 0.01,
+                'min_liquidity': min_liquidity_usd,
+            }
         )
         
         # Liquidity constraints
