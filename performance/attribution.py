@@ -200,8 +200,8 @@ class AttributionEngine:
             transaction_cost_pct = costs.get(strategy_name, 0.0)
             slip_pct = slippage.get(strategy_name, 0.0)
             
-            # Calculate net contribution (costs are percentages of portfolio_contribution)
-            net_contribution = portfolio_contribution * (1 - transaction_cost_pct - slip_pct)
+            # Calculate net contribution (subtract costs as percentages of portfolio_contribution)
+            net_contribution = portfolio_contribution - (portfolio_contribution * transaction_cost_pct) - (portfolio_contribution * slip_pct)
             
             # Create attribution record
             attribution = StrategyAttribution(
@@ -324,8 +324,8 @@ class AttributionEngine:
             for asset, contribs in self._asset_contributions[strategy_name].items():
                 asset_contrib_totals[asset] = sum(contribs)
             
-            # Total net return (costs are percentages, so multiply gross_return by cost percentage)
-            total_net_return = total_gross_return * (1 - total_cost)
+            # Total net return (subtract total costs from gross return)
+            total_net_return = total_gross_return - total_cost
             
             results[strategy_name] = CumulativeAttribution(
                 strategy_name=strategy_name,
