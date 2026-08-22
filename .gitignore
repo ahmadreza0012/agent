@@ -5,41 +5,55 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
-env/
-venv/
-.venv/
-.ENV
-.ENV.*
-.pytest_cache/
-.mypy_cache/
-.coverage
-coverage/
-htmlcov/
-
-# Build and distribution artifacts
-build/
-dist/
-*.egg
-*.egg-info/
 *.so
-*.whl
 
-# Environment files
+# Dependencies
+.venv/
+venv/
+env/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+*.pot
+
+# Environment variables
 .env
-.env.local
-.env.*
+.venv.bak
+.python-version
 
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
+# Testing
+.tests/
+test/
+tests/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Local configuration
+local/
+secret.key
 
 # Logs
 *.log
 
-# OS generated files
-.DS_Store
-Thumbs.db
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 ```
