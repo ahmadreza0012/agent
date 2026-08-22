@@ -24,6 +24,11 @@ from .reconciler import (
     PositionMismatch,
     BalanceMismatch,
 )
+# Phase 17: Idempotency & Order Recovery
+from .order_registry import OrderRegistry
+from .order_state_manager import OrderStateManager, StateTransition, OrderStateMachine
+from .order_recovery import OrderRecovery, Discrepancy, RecoveryResult, RecoveryAction
+from .atomic_operations import AtomicOperations, AtomicOrder, AtomicOperationResult, AtomicOperationStatus
 
 __all__ = [
     # Exchange Adapter
@@ -49,4 +54,17 @@ __all__ = [
     'ReconciliationResult',
     'PositionMismatch',
     'BalanceMismatch',
+    # Phase 17: Idempotency & Order Recovery
+    'OrderRegistry',
+    'OrderStateManager',
+    'StateTransition',
+    'OrderStateMachine',
+    'OrderRecovery',
+    'Discrepancy',
+    'RecoveryResult',
+    'RecoveryAction',
+    'AtomicOperations',
+    'AtomicOrder',
+    'AtomicOperationResult',
+    'AtomicOperationStatus',
 ]
