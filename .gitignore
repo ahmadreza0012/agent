@@ -1,70 +1,27 @@
-```gitignore
+```
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Tests
-.tests/
-.pytest_cache/
-
-# Logs
-*.log
-
-# Environment
-.env
-.env.local
-*.env.*
-
 # Dependencies
 .venv/
 venv/
-.env/
+env/
+.env
+.env.local
+.env.*
 
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Build artifacts
-dist/
-build/
-*.o
-*.obj
-*.so
-*.a
-*.dll
-*.exe
-*.out
+# Logs
+*.log
 
 # Coverage
 .coverage
 coverage/
 htmlcov/
 
-# Compression
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+# Testing
+.pytest_cache/
+.mypy_cache/
 ```

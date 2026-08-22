@@ -39,6 +39,12 @@ from .kill_switch_models import (
 )
 from .kill_switch import KillSwitch
 from .kill_switch_manager import KillSwitchManager
+# Phase 20: Paper & Shadow Trading
+from .trading_modes import TradingMode, TradingConfig
+from .paper_adapter import PaperTradingAdapter
+from .shadow_adapter import ShadowTradingAdapter
+from .mode_manager import TradingModeManager, ModeTransitionError
+from .mode_factory import ModeFactory
 
 __all__ = [
     # Exchange Adapter
@@ -85,4 +91,12 @@ __all__ = [
     'KillSwitchResponse',
     'KillSwitch',
     'KillSwitchManager',
+    # Phase 20: Paper & Shadow Trading
+    'TradingMode',
+    'TradingConfig',
+    'PaperTradingAdapter',
+    'ShadowTradingAdapter',
+    'TradingModeManager',
+    'ModeTransitionError',
+    'ModeFactory',
 ]
