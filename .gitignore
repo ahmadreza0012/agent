@@ -5,42 +5,50 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+*.so
 
-# Virtual environments
-venv/
-ENV/
-env.bak/
+# Dependencies
 .venv/
-
-# Testing
+venv/
+env/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
 .coverage
-coverage/
-htmlcov/
-.nosetests
-.pytest_cache/
-
-# Logs
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
 *.log
+*.pot
 
 # Environment variables
 .env
-.env.local
-.env.*
+.venv.bak
+.python-version
+
+# Testing
+.tests/
+test/
+tests/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Local configuration
+local/
+secret.key
+
+# Logs
+*.log
 
 # IDE
 .vscode/
@@ -48,10 +56,4 @@ htmlcov/
 *.swp
 *.swo
 *~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Observability/Monitoring artifacts could go here if needed
 ```
