@@ -1,48 +1,28 @@
 ```
-# Dependencies
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
-.venv/
-.env
-.env.*
-!requirements-dev.txt
-!pyproject.toml
-
-# Build artifacts
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Testing
+*.so
 .coverage
-coverage/
 htmlcov/
-.nosetests
 .pytest_cache/
 .mypy_cache/
+
+# Environment
+.venv/
+venv/
+.env
+.env.local
+.env.*
 
 # Logs
 *.log
 
-# Environment specific
-.DS_Store
-Thumbs.db
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
 ```
