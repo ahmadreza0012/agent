@@ -1,14 +1,23 @@
 """
-Metrics Routes - Performance metrics and snapshots.
+Metrics Routes - Prometheus metrics endpoint and performance data.
 """
 
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Response, Query
 from typing import List
 
 from ..models import PerformanceMetricsResponse, DailySnapshotResponse
 
 router = APIRouter(prefix="/metrics", tags=["Metrics"])
+
+
+@router.get("")
+async def get_prometheus_metrics():
+    """Get Prometheus metrics."""
+    from ...observability import get_observability
+    obs = get_observability()
+    metrics_data = obs.get_metrics()
+    return Response(content=metrics_data, media_type="text/plain")
 
 
 @router.get("/performance", response_model=PerformanceMetricsResponse)
@@ -42,3 +51,12 @@ async def get_daily_snapshots(
     """Get daily snapshots."""
     # Mock daily snapshots
     return []
+
+
+@router.get("/audit")
+async def get_audit_events(limit: int = 50):
+    """Get recent audit events."""
+    from ...observability import get_observability
+    obs = get_observability()
+    events = obs.get_audit_events(limit=limit)
+    return {"events": events, "count": len(events)}
