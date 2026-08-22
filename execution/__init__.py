@@ -29,6 +29,16 @@ from .order_registry import OrderRegistry
 from .order_state_manager import OrderStateManager, StateTransition, OrderStateMachine
 from .order_recovery import OrderRecovery, Discrepancy, RecoveryResult, RecoveryAction
 from .atomic_operations import AtomicOperations, AtomicOrder, AtomicOperationResult, AtomicOperationStatus
+# Phase 19: Kill Switch
+from .kill_switch_models import (
+    KillSwitchLevel,
+    KillSwitchTrigger,
+    KillSwitchEvent,
+    KillSwitchState,
+    KillSwitchResponse,
+)
+from .kill_switch import KillSwitch
+from .kill_switch_manager import KillSwitchManager
 
 __all__ = [
     # Exchange Adapter
@@ -67,4 +77,12 @@ __all__ = [
     'AtomicOrder',
     'AtomicOperationResult',
     'AtomicOperationStatus',
+    # Phase 19: Kill Switch
+    'KillSwitchLevel',
+    'KillSwitchTrigger',
+    'KillSwitchEvent',
+    'KillSwitchState',
+    'KillSwitchResponse',
+    'KillSwitch',
+    'KillSwitchManager',
 ]
