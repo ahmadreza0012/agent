@@ -1,10 +1,10 @@
 {
   "state": "warning",
-  "state_enter_time": "2026-08-23T16:50:45.030273",
-  "last_update": "2026-08-23T16:50:45.030273",
+  "state_enter_time": "2026-08-23T18:04:21.941446",
+  "last_update": "2026-08-23T18:04:21.941446",
   "transitions": [
     {
-      "timestamp": "2026-08-23T16:50:45.029601",
+      "timestamp": "2026-08-23T18:04:21.940812",
       "from_state": "warning",
       "to_state": "derisk",
       "reason": "Daily loss 2.0% > 2.0%",
@@ -13,7 +13,7 @@
       "consecutive_losses": 0
     },
     {
-      "timestamp": "2026-08-23T16:50:45.030273",
+      "timestamp": "2026-08-23T18:04:21.941446",
       "from_state": "derisk",
       "to_state": "warning",
       "reason": "Recovered to 4.0% < 5.0%",
