@@ -126,9 +126,15 @@ class TestDynamicScoring:
                 self.selector.record_realized_performance(method, ret, vol, regime='bull_trend')
         
         # Run blend
-        weights, blend_weights = self.selector.blend(
+        result = self.selector.blend(
             self.prices, self.returns, self.strategy_fns
         )
+        
+        # Handle both old (2-tuple) and new (3-tuple) return formats
+        if len(result) == 3:
+            weights, blend_weights, all_weights = result
+        else:
+            weights, blend_weights = result
         
         # Verify blend weights are valid
         assert all(0 <= w <= 1 for w in blend_weights.values()), \
@@ -149,9 +155,15 @@ class TestDynamicScoring:
                 )
         
         # Blend and check ML weight is at floor (5%)
-        weights, blend_weights = self.selector.blend(
+        result = self.selector.blend(
             self.prices, self.returns, self.strategy_fns
         )
+        
+        # Handle both old (2-tuple) and new (3-tuple) return formats
+        if len(result) == 3:
+            weights, blend_weights, all_weights = result
+        else:
+            weights, blend_weights = result
         
         # ML should be at minimum weight due to zero score
         assert blend_weights.get('ml', 0) <= 0.06, \
@@ -168,10 +180,12 @@ class TestCorrelationPenalty:
         # Record highly correlated weight histories
         np.random.seed(42)
         for _ in range(10):
-            # Same weights for both strategies (perfect correlation)
-            weights = np.array([0.5, 0.5])
-            selector._weight_history['strat_a'].append(weights.copy())
-            selector._weight_history['strat_b'].append(weights.copy())
+            # Use varying but highly correlated weights (constant weights have zero variance)
+            base = np.random.randn(2)
+            weights_a = base + np.random.randn(2) * 0.1
+            weights_b = base + np.random.randn(2) * 0.1  # Highly correlated
+            selector._weight_history['strat_a'].append(weights_a.copy())
+            selector._weight_history['strat_b'].append(weights_b.copy())
             
             selector.record_realized_performance('strat_a', 0.01, 0.1)
             selector.record_realized_performance('strat_b', 0.01, 0.1)
@@ -181,6 +195,7 @@ class TestCorrelationPenalty:
         penalty_b = selector._correlation_penalty('strat_b')
         
         # Both should have high penalty due to perfect correlation
+        # Note: penalty is mean of (corr - 0.7) / 0.3 for corr > 0.7
         assert penalty_a > 0.5 or penalty_b > 0.5, \
             f"Expected high correlation penalty, got a={penalty_a:.2f}, b={penalty_b:.2f}"
 
@@ -260,11 +275,17 @@ class TestBoundedWeights:
         
         strategy_fns = {m: mock_w for m in selector.candidate_methods}
         
-        _, blend_weights = selector.blend(
+        result = selector.blend(
             pd.DataFrame(np.random.randn(100, 5)),
             pd.DataFrame(np.random.randn(100, 5) * 0.01),
             strategy_fns
         )
+        
+        # Handle both old (2-tuple) and new (3-tuple) return formats
+        if len(result) == 3:
+            _, blend_weights, _ = result
+        else:
+            _, blend_weights = result
         
         # All strategies should have at least 5%
         for method, weight in blend_weights.items():
@@ -286,11 +307,17 @@ class TestBoundedWeights:
         
         strategy_fns = {m: mock_w for m in selector.candidate_methods}
         
-        _, blend_weights = selector.blend(
+        result = selector.blend(
             pd.DataFrame(np.random.randn(100, 4)),
             pd.DataFrame(np.random.randn(100, 4) * 0.01),
             strategy_fns
         )
+        
+        # Handle both old (2-tuple) and new (3-tuple) return formats
+        if len(result) == 3:
+            _, blend_weights, _ = result
+        else:
+            _, blend_weights = result
         
         # No strategy should exceed 40%
         for method, weight in blend_weights.items():
@@ -321,11 +348,17 @@ class TestSentimentMultiplier:
         strategy_fns = {m: mock_w for m in selector.candidate_methods}
         
         # Get initial equal weights
-        _, initial_weights = selector.blend(
+        result = selector.blend(
             pd.DataFrame(np.random.randn(100, 5)),
             pd.DataFrame(np.random.randn(100, 5) * 0.01),
             strategy_fns
         )
+        
+        # Handle both old (2-tuple) and new (3-tuple) return formats
+        if len(result) == 3:
+            _, initial_weights, _ = result
+        else:
+            _, initial_weights = result
         
         # Trend following and mean reversion should get boosted
         # Others should not be directly affected by sentiment
@@ -398,11 +431,17 @@ class TestIntegration:
             selector.set_sentiment_score(np.random.randn() * 0.5)
             
             # Run blend
-            weights, blend_weights = selector.blend(
+            result = selector.blend(
                 prices.iloc[:100 + i*10],
                 returns.iloc[:100 + i*10],
                 strategy_fns
             )
+            
+            # Handle both old (2-tuple) and new (3-tuple) return formats
+            if len(result) == 3:
+                weights, blend_weights, _ = result
+            else:
+                weights, blend_weights = result
             
             # Verify weights are valid
             assert len(weights) == 7, f"Expected 7 asset weights, got {len(weights)}"
@@ -427,7 +466,13 @@ class TestIntegration:
         returns = pd.DataFrame(np.random.randn(100, 3) * 0.01)
         prices = (1 + returns).cumprod() * 100
         
-        weights, _ = selector.blend(prices, returns, strategy_fns)
+        result = selector.blend(prices, returns, strategy_fns)
+        
+        # Handle both old (2-tuple) and new (3-tuple) return formats
+        if len(result) == 3:
+            weights, _, _ = result
+        else:
+            weights, _ = result
         
         assert abs(weights.sum() - 1.0) < 1e-6, \
             f"Weights should sum to 1.0, got {weights.sum()}"
