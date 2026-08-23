@@ -1,14 +1,38 @@
-```
-# Python compiled files
-*.pyc
+```gitignore
+# Dependencies
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Logs and temporary files
+# Results and data files
+results/*.json
+
+# Logs
 *.log
-*.tmp
 
-# Environment files
+# Environment
 .env
 .env.local
 *.env.*
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# Testing
+.pytest_cache/
+.mypy_cache/
 ```
