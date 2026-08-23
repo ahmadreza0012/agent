@@ -16,15 +16,24 @@ env/
 # Logs
 *.log
 
-# Editor/IDE
+# Coverage
+.coverage
+htmlcov/
+coverage/
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *.tmp
 
-# Build/distribution
-build/
+# Build
 dist/
+build/
 *.egg-info/
+
+# Testing
+.pytest_cache/
+.mypy_cache/
 ```
