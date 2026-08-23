@@ -36,12 +36,14 @@ class TestReturns(unittest.TestCase):
     
     def test_log_returns(self):
         """Test log return calculation."""
-        from utils.returns import log_returns
+        from utils.returns import log_returns, simple_returns
         returns = log_returns(self.prices)
         self.assertEqual(len(returns), len(self.prices) - 1)
         # Log returns should be approximately equal to simple returns for small changes
         simple = simple_returns(self.prices)
-        np.testing.assert_almost_equal(returns, np.log(1 + simple), decimal=6)
+        # Verify: log_returns ≈ ln(1 + simple_returns)
+        expected = np.log(1 + simple)
+        pd.testing.assert_series_equal(returns, expected, check_exact=False, rtol=1e-10)
     
     def test_cumulative_returns(self):
         """Test cumulative return calculation."""

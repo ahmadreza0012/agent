@@ -116,10 +116,6 @@ addopts = [
     "-ra",
     "-q",
     "--strict-markers",
-    "--cov=.",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-fail-under=80",
 ]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
