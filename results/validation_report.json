@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-08-23T17:10:33.648232",
+  "overall_status": "FAILED",
+  "sections": {
+    "data_provider": {
+      "name": "Data Provider",
+      "passed": false,
+      "error": "No module named 'ccxt'",
+      "severity": "critical"
+    },
+    "feature_engineering": {
+      "name": "Feature Engineering",
+      "passed": false,
+      "error": "cannot import name 'TechnicalFeatures' from 'features.technical' (/workspace/features/technical/__init__.py)",
+      "severity": "high"
+    },
+    "regime_detection": {
+      "name": "Regime Detection",
+      "passed": false,
+      "error": "name 'detect_regime' is not defined",
+      "severity": "high"
+    },
+    "strategies": {
+      "name": "Strategies",
+      "passed": false,
+      "error": "'StrategyRegistry' object has no attribute 'generate_report'",
+      "severity": "critical"
+    },
+    "ensemble": {
+      "name": "Ensemble",
+      "passed": false,
+      "error": "'StrategyScorer' object has no attribute 'score'",
+      "severity": "high"
+    },
+    "portfolio_optimizer": {
+      "name": "Portfolio Optimizer",
+      "passed": true,
+      "checks": {
+        "mvo_produces_weights": true,
+        "risk_parity_works": true,
+        "weights_valid": true
+      },
+      "severity": "critical"
+    },
+    "risk_engine": {
+      "name": "Risk Engine",
+      "passed": false,
+      "error": "RiskEngine.evaluate() got an unexpected keyword argument 'exposure'",
+      "severity": "critical"
+    },
+    "execution": {
+      "name": "Execution",
+      "passed": true,
+      "checks": {
+        "tracks_positions": true,
+        "position_updated": true,
+        "calculates_pnl": true
+      },
+      "severity": "high"
+    },
+    "health_endpoints": {
+      "name": "Health Endpoints",
+      "passed": true,
+      "checks": {
+        "health_endpoint": true,
+        "liveness_endpoint": true,
+        "readiness_endpoint": true
+      },
+      "severity": "critical"
+    },
+    "monitoring": {
+      "name": "Monitoring",
+      "passed": false,
+      "error": "No module named 'prometheus_client'",
+      "severity": "high"
+    }
+  }
+}
