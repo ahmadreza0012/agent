@@ -1,226 +1,498 @@
-# System Architecture
+# Architecture
 
-## Overview
+## System Overview
 
-This document describes the architecture of the Crypto Trading Agent system after Phase 34 refactoring.
+The Crypto Trading Agent is a production-ready quantitative trading system designed for cryptocurrency markets. It implements a multi-layer architecture with clear separation of concerns, enabling robust strategy development, risk management, and execution.
 
-## Directory Structure
+### Key Design Principles
+
+1. **Modularity**: Each component has a single responsibility
+2. **Defensive Programming**: Multiple safety layers prevent catastrophic losses
+3. **Statefulness**: System maintains state across restarts
+4. **Observability**: Comprehensive logging and monitoring
+5. **Testability**: All components are unit-testable
+
+---
+
+## High-Level Architecture
 
 ```
-agent/
-├── core/                              # Core domain & shared components
-│   ├── domain/                        # Domain models and interfaces
-│   │   ├── models.py                  # Order, Position, Balance, Trade, Signal
-│   │   └── interfaces.py              # Abstract interfaces (DataProvider, Strategy, etc.)
-│   └── config/                        # Configuration
-│       └── settings.py                # Centralized settings
-│
-├── data/                              # Data layer
-│   ├── providers/                     # Data providers (CoinGecko, Binance)
-│   ├── validators/                    # Data validation
-│   └── cache/                         # OHLCV caching
-│
-├── features/                          # Feature engineering
-│   ├── technical/                     # Technical indicators
-│   ├── market/                        # Market features
-│   └── sentiment/                     # Sentiment analysis
-│
-├── regime/                            # Regime detection
-│   └── regime_engine.py
-│
-├── strategies/                        # Strategy implementations
-│   ├── base.py                        # Base Strategy class
-│   ├── trend/                         # Trend following
-│   ├── mean_reversion/                # Mean reversion
-│   ├── ml/                            # ML-based strategies
-│   └── [optimizers]/                  # MVO, Risk Parity, CVaR, Black-Litterman
-│
-├── ensemble/                          # Strategy ensemble
-│   └── strategy_selector.py
-│
-├── portfolio/                         # Portfolio construction
-│   └── portfolio_optimizer.py
-│
-├── risk/                              # Risk management
-│   ├── risk_engine.py                 # Centralized risk engine
-│   ├── circuit_breaker.py             # Stateful circuit breaker
-│   ├── risk_limits.py                 # Risk limit definitions
-│   ├── risk_metrics.py                # Risk metric calculations
-│   └── capital_preservation.py        # Capital preservation system
-│
-├── execution/                         # Execution engine
-│   ├── exchange_adapter.py            # Exchange abstraction
-│   ├── order_manager.py               # Order lifecycle
-│   ├── position_manager.py            # Position tracking
-│   ├── reconciler.py                  # Position reconciliation
-│   └── kill_switch.py                 # Emergency kill switch
-│
-├── backtesting/                       # Backtesting framework
-│   ├── engine.py                      # Main backtesting engine
-│   ├── walk_forward.py                # Walk-forward validation
-│   ├── attribution.py                 # Performance attribution
-│   ├── costs.py                       # Transaction cost modeling
-│   ├── robustness.py                  # Monte Carlo analysis
-│   └── stress.py                      # Stress testing
-│
-├── ml/                                # Machine learning
-│   ├── pipeline.py                    # ML pipeline
-│   ├── validation.py                  # Purged walk-forward validation
-│   ├── model_registry.py              # Model version tracking
-│   └── feature_engineering.py         # ML feature engineering
-│
-├── persistence/                       # Persistence layer
-│   ├── repositories/                  # Data repositories
-│   └── db_manager.py                  # Database management
-│
-├── api/                               # FastAPI application
-│   ├── routes/                        # API routes
-│   │   ├── health.py
-│   │   ├── status.py
-│   │   ├── portfolio.py
-│   │   ├── orders.py
-│   │   ├── performance.py
-│   │   ├── risk.py
-│   │   └── admin.py
-│   └── app.py                         # FastAPI application
-│
-├── monitoring/                        # Observability
-│   ├── logging.py                     # Structured logging
-│   └── metrics.py                     # Metrics collection
-│
-├── tests/                             # Test suite
-│   ├── unit/                          # Unit tests
-│   ├── integration/                   # Integration tests
-│   ├── security/                      # Security tests
-│   ├── time_series/                   # Time-series tests
-│   └── fault/                         # Fault injection tests
-│
-├── docs/                              # Documentation
-├── scripts/                           # Utility scripts
-├── main.py                            # Main entry point
-└── requirements.txt                   # Dependencies
+┌─────────────────────────────────────────────────────────────┐
+│                     CRYPTO TRADING AGENT                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
+│  │   Data Layer │    │ Feature Layer│    │ Regime Layer │ │
+│  │  Providers   │───▶│ Engineering  │───▶│  Detection   │ │
+│  │              │    │              │    │              │ │
+│  │ - CoinGecko  │    │ - Technical  │    │ - Volatility │ │
+│  │ - ccxt       │    │ - Statistical│    │ - Trend      │ │
+│  │ - News API   │    │ - ML Features│    │ - Sentiment  │ │
+│  └──────────────┘    └──────────────┘    └──────────────┘ │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
+│  │   Strategy   │    │   Ensemble   │    │   Portfolio  │ │
+│  │   Engines    │───▶│   Selector   │───▶│  Optimizer   │ │
+│  │              │    │              │    │              │ │
+│  │ - Momentum   │    │ - Regime     │    │ - MVO        │ │
+│  │ - Mean Rev   │    │ - Adaptive   │    │ - Risk Parity│ │
+│  │ - ML Signal  │    │ - Scoring    │    │ - CVaR       │ │
+│  └──────────────┘    └──────────────┘    └──────────────┘ │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
+│  │  Risk Engine │    │  Execution   │    │  Persistence │ │
+│  │  + Circuit   │───▶│    Engine    │───▶│   Layer      │ │
+│  │  Breaker     │    │              │    │              │ │
+│  │              │    │              │    │              │ │
+│  │ - Exposure   │    │ - Order Mgmt │    │ - SQLite/    │ │
+│  │ - Drawdown   │    │ - Position   │    │ - PostgreSQL │ │
+│  │ - Limits     │    │ - Reconcile  │    │ - Stateful   │ │
+│  └──────────────┘    └──────────────┘    └──────────────┘ │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
+│  │     API      │    │  Monitoring  │    │   Backtest   │ │
+│  │  (FastAPI)   │◀──▶│   Logging    │◀──▶│   Engine     │ │
+│  │              │    │              │    │              │ │
+│  │ - Status     │    │ - Structured │    │ - Walk-forward││
+│  │ - Control    │    │ - Metrics    │    │ - Attribution ││
+│  │ - Metrics    │    │ - Alerts     │    │ - Monte Carlo ││
+│  └──────────────┘    └──────────────┘    └──────────────┘ │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Core Components
+---
 
-### Domain Layer (`core/domain/`)
+## Component Descriptions
 
-The domain layer contains the fundamental entities and interfaces:
+### Data Layer
 
-**Models:**
-- `Order` - Represents a trading order with side, type, status
-- `Position` - Represents an open position with PnL tracking
-- `Balance` - Represents asset balances
-- `Trade` - Represents an executed trade (fill)
-- `Signal` - Represents a trading signal
+**Purpose**: Acquire, validate, and normalize market data.
 
-**Interfaces:**
-- `DataProvider` - Abstract interface for market data
-- `Strategy` - Abstract interface for trading strategies
-- `RiskEngine` - Abstract interface for risk management
-- `ExchangeAdapter` - Abstract interface for exchange integration
-- `PortfolioOptimizer` - Abstract interface for portfolio optimization
-- `RegimeDetector` - Abstract interface for regime detection
+**Components**:
+- `data_fetcher.py`: Main data acquisition from CoinGecko and other providers
+- `news_fetcher.py`: News and sentiment data collection
+- `ai_sentiment.py`: AI-powered sentiment analysis using Groq LLM
 
-### Configuration (`core/config/`)
+**Features**:
+- Multi-provider fallback
+- Data caching (`.cache/data/`)
+- Timestamp normalization
+- Volume validation
 
-Centralized configuration management with:
-- Risk parameters
-- Transaction cost assumptions
-- Liquidity constraints
-- ML/ensemble settings
-- Backtester defaults
-- Helper functions for mode detection
+### Feature Layer
 
-### Risk Management (`risk/`)
+**Purpose**: Transform raw data into predictive features.
 
-Multi-layered risk management system:
-1. **Risk Engine** - Centralized risk evaluation
-2. **Circuit Breaker** - Stateful trading halt mechanism
-3. **Risk Limits** - Position size, drawdown, and exposure limits
-4. **Capital Preservation** - Drawdown-based risk reduction
+**Components**:
+- `ml/feature_engineering.py`: Causal feature engineering
+- `utils/timeframe.py`: Timeframe detection and handling
 
-### Execution (`execution/`)
+**Feature Categories**:
+- Technical indicators (RSI, MACD, Bollinger Bands)
+- Statistical measures (volatility, correlation)
+- Lag features (autoregressive terms)
+- Cross-sectional features
 
-Trading execution subsystem:
-- Exchange abstraction layer
-- Order lifecycle management
-- Position tracking and reconciliation
-- Kill switch for emergency halts
+### Regime Layer
 
-### Backtesting (`backtesting/`)
+**Purpose**: Detect market regime for adaptive strategy selection.
 
-Comprehensive backtesting framework:
+**Components**:
+- `strategy_selector.py`: Contains `detect_regime()` function
+
+**Regime Types**:
+- `low_vol_bullish`: Low volatility, upward trend
+- `high_vol_bullish`: High volatility, upward trend
+- `low_vol_bearish`: Low volatility, downward trend
+- `high_vol_bearish`: High volatility, downward trend
+
+### Strategy Layer
+
+**Purpose**: Generate trading signals and allocations.
+
+**Strategies Implemented**:
+1. **Equal Weight**: Naive diversification
+2. **Momentum**: Return-based momentum
+3. **Mean Reversion**: Statistical arbitrage
+4. **Risk Parity**: Equal risk contribution
+5. **MVO**: Mean-variance optimization
+6. **CVaR**: Conditional Value-at-Risk optimization
+7. **Black-Litterman**: View-based allocation
+8. **Trend Following**: Moving average crossover
+9. **ML Signal**: Machine learning predictions
+
+### Ensemble Layer
+
+**Purpose**: Combine strategies adaptively based on regime and performance.
+
+**Components**:
+- `strategy_selector.py`: `StrategySelector` class
+- `ensemble/`: Ensemble combination logic
+
+**Features**:
+- Track record tracking (6-period rolling window)
+- Exponential Sharpe transformation
+- Regime-aware weighting
+- Defensive allocation in high volatility
+
+### Portfolio Optimizer
+
+**Purpose**: Convert strategy signals into portfolio weights.
+
+**Components**:
+- `portfolio_optimizer.py`: Main optimization engine
+
+**Optimization Methods**:
+- Mean-Variance Optimization (MVO)
+- Risk Parity
+- CVaR (Conditional Value-at-Risk)
+- Black-Litterman
+- Hierarchical Risk Parity (HRP)
+
+### Risk Engine
+
+**Purpose**: Independent risk evaluation that can override strategy decisions.
+
+**Components**:
+- `risk/risk_engine.py`: Centralized risk evaluation
+- `risk/circuit_breaker.py`: Stateful circuit breaker
+- `risk/risk_limits.py`: Configurable risk limits
+- `risk/risk_metrics.py`: Risk metric calculations
+
+**Risk Checks**:
+- Gross exposure limits
+- Position size limits
+- Daily loss limits
+- Drawdown limits
+- Volatility constraints
+- Liquidity requirements
+
+### Circuit Breaker
+
+**Purpose**: Automatic risk reduction during adverse conditions.
+
+**State Machine**:
+```
+NORMAL → WARNING → DERISK → HALT → RECOVERY → NORMAL
+```
+
+**State Transitions**:
+
+| From | To | Trigger |
+|------|-----|---------|
+| NORMAL | WARNING | Drawdown > 5% or daily loss > 1.5% |
+| WARNING | DERISK | Drawdown > 8% or daily loss > 2.0% |
+| DERISK | HALT | Drawdown > 12% or daily loss > 3.0% |
+| HALT | RECOVERY | Drawdown recovers below 10% |
+| RECOVERY | NORMAL | Drawdown recovers below 2% |
+
+**Position Multipliers**:
+- NORMAL: 100%
+- WARNING: 70%
+- DERISK: 40%
+- HALT: 0%
+- RECOVERY: 50%
+
+### Execution Engine
+
+**Purpose**: Manage order lifecycle and position tracking.
+
+**Components**:
+- `execution/exchange_adapter.py`: Exchange abstraction (ccxt)
+- `execution/order_manager.py`: Order creation and tracking
+- `execution/position_manager.py`: Position tracking
+- `execution/fill_manager.py`: Fill processing
+- `execution/reconciler.py`: Position reconciliation
+- `execution/mode_factory.py`: Trading mode factory
+- `execution/trading_modes.py`: Mode definitions
+
+**Order Lifecycle**:
+```
+Created → Submitted → Open → Partially Filled → Filled
+                       ↓
+                    Cancelled
+                       ↓
+                    Rejected
+                       ↓
+                     Expired
+```
+
+### Persistence Layer
+
+**Purpose**: Maintain state across system restarts.
+
+**Components**:
+- `db_manager.py`: Database operations
+- `persistence/`: State persistence modules
+
+**Persisted Data**:
+- Strategy track records
+- Circuit breaker state
+- Order history
+- Position snapshots
+- Performance metrics
+
+### API Layer
+
+**Purpose**: External interface for monitoring and control.
+
+**Components**:
+- `app.py`: FastAPI application
+- `api/`: API endpoint modules
+
+**Endpoints**:
+- `GET /status`: System status
+- `GET /metrics`: Performance metrics
+- `GET /positions`: Current positions
+- `POST /control`: System control commands
+
+### Monitoring & Observability
+
+**Purpose**: System health tracking and alerting.
+
+**Components**:
+- `auto_logger.py`: Automated logging
+- `logging_config.py`: Logging configuration
+- `observability/`: Monitoring modules
+
+**Logged Events**:
+- Trade executions
+- Risk limit breaches
+- State transitions
+- API requests
+- Errors and exceptions
+
+### Backtesting Engine
+
+**Purpose**: Historical simulation with realistic modeling.
+
+**Components**:
+- `backtester.py`: Event-driven backtester
+- `backtesting/`: Backtest utilities
+- `performance/attribution.py`: Performance attribution
+
+**Features**:
 - Walk-forward validation
-- Performance attribution
 - Transaction cost modeling
-- Monte Carlo robustness analysis
-- Stress testing scenarios
+- Slippage modeling
+- Liquidity constraints
+- Drawdown circuit breaker
+- Performance attribution
+
+---
 
 ## Data Flow
 
+### Live Trading Flow
+
 ```
-Data Providers → Feature Engineering → Regime Detection
+1. Data Fetch → 2. Feature Engineering → 3. Regime Detection
                                               ↓
-Strategy Ensemble ←────────────────────── ML Pipeline
+4. Strategy Selection ← 5. Ensemble Scoring
          ↓
-Portfolio Optimizer
-         ↓
-Risk Engine → Circuit Breaker → Execution Engine → Exchange
-         ↓                              ↓
-    Monitoring                    Persistence
+6. Portfolio Optimization → 7. Risk Check → 8. Circuit Breaker
+                                                    ↓
+9. Order Creation → 10. Order Submission → 11. Fill Processing
+                                                   ↓
+12. Position Update → 13. Persistence → 14. Logging
 ```
 
-## Key Design Principles
+### Backtest Flow
 
-1. **Domain-Driven Design** - Clear separation between domain logic and infrastructure
-2. **Dependency Injection** - Components depend on abstractions, not concrete implementations
-3. **Single Responsibility** - Each module has one well-defined purpose
-4. **Open/Closed Principle** - Open for extension, closed for modification
-5. **Fail-Safe Defaults** - Conservative defaults that protect capital
+```
+1. Load Historical Data → 2. Walk-Forward Split
+                                    ↓
+3. For Each Fold:
+   - Train on Train Set
+   - Validate on Test Set
+   - Simulate Trades
+   - Calculate Metrics
+                                    ↓
+4. Aggregate Results → 5. Attribution Analysis
+```
 
-## Trading Modes
+---
 
-The system supports four trading modes:
+## Module Dependencies
 
-| Mode | Purpose | Risk Limits |
-|------|---------|-------------|
-| BACKTEST | Historical simulation | Research thresholds |
-| PAPER | Live simulation | Live thresholds (no real money) |
-| SHADOW | Parallel live tracking | Live thresholds |
-| LIVE | Real trading | Strict live thresholds |
+```
+main.py
+├── data_fetcher.py
+├── ai_sentiment.py
+├── backtester.py
+├── portfolio_optimizer.py
+├── strategy_selector.py
+├── db_manager.py
+├── auto_logger.py
+└── funding_rate_arb.py
 
-## Extension Points
+backtester.py
+├── strategy_selector.py
+├── portfolio_optimizer.py
+├── performance/attribution.py
+└── models/transaction_cost.py
 
-### Adding a New Strategy
+strategy_selector.py
+├── regime detection logic
+└── strategy scoring
 
-1. Create a new file in `strategies/[category]/`
-2. Inherit from `Strategy` interface
-3. Implement `generate_signal()`, `get_parameters()`, `set_parameters()`
-4. Register in strategy selector
+portfolio_optimizer.py
+├── PyPortfolioOpt (MVO, Risk Parity, CVaR)
+└── custom optimizations
 
-### Adding a New Data Provider
+risk/risk_engine.py
+├── risk/risk_limits.py
+├── risk/risk_metrics.py
+└── risk/circuit_breaker.py
 
-1. Create a new file in `data/providers/`
-2. Inherit from `DataProvider` interface
-3. Implement `get_ohlcv()`, `get_ticker()`, `get_balance()`
-4. Register in data layer
+execution/
+├── exchange_adapter.py (ccxt)
+├── order_manager.py
+├── position_manager.py
+└── reconciler.py
+```
 
-### Adding a New Risk Metric
+---
 
-1. Add calculation to `risk/risk_metrics.py`
-2. Update `risk/risk_engine.py` to use the metric
-3. Add to risk evaluation logic
+## Technology Stack
 
-## Deployment Considerations
+### Core Technologies
 
-- Environment variables for sensitive configuration
-- Health check endpoints for monitoring
-- Structured logging for observability
-- Rate limiting for API protection
-- CORS configuration for web access
+| Component | Technology | Version |
+|-----------|------------|---------|
+| Language | Python | 3.10+ |
+| Database | SQLite/PostgreSQL | Latest |
+| API | FastAPI | 0.115+ |
+| Exchange | ccxt | 4.3+ |
 
-## Version History
+### Key Libraries
 
-- **v1.0.0** (Phase 34) - Final architecture refactoring
-- Previous versions - See individual phase summaries
+| Library | Purpose | Version |
+|---------|---------|---------|
+| numpy | Numerical computing | 1.26+ |
+| pandas | Data manipulation | 2.2+ |
+| scikit-learn | Machine learning | 1.5+ |
+| PyPortfolioOpt | Portfolio optimization | 1.5+ |
+| scipy | Scientific computing | 1.14+ |
+| matplotlib | Visualization | 3.9+ |
+| pytest | Testing | 8.3+ |
+
+### External Services
+
+| Service | Purpose |
+|---------|---------|
+| CoinGecko | Price data |
+| Binance (or other) | Exchange access |
+| Groq | AI sentiment analysis |
+
+---
+
+## Deployment Architecture
+
+### Development
+
+```
+┌─────────────┐
+│   Local     │
+│  Developer  │
+│   Machine   │
+├─────────────┤
+│  main.py    │
+│  app.py     │
+│  SQLite DB  │
+└─────────────┘
+```
+
+### Production
+
+```
+┌─────────────────────────────────────────┐
+│           Cloud Platform                │
+│         (Railway, AWS, etc.)            │
+├─────────────────────────────────────────┤
+│                                         │
+│  ┌───────────┐    ┌───────────┐        │
+│  │   Web     │    │  Worker   │        │
+│  │  Process  │    │  Process  │        │
+│  │           │    │           │        │
+│  │ - API     │    │ - Trading │        │
+│  │ - UI      │    │ - Loop    │        │
+│  └───────────┘    └───────────┘        │
+│                                         │
+│  ┌───────────────────────────┐         │
+│  │      PostgreSQL DB        │         │
+│  └───────────────────────────┘         │
+│                                         │
+│  ┌───────────────────────────┐         │
+│  │       Redis Cache         │         │
+│  └───────────────────────────┘         │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## Scalability Considerations
+
+### Horizontal Scaling
+
+- **API Layer**: Stateless, can be load-balanced
+- **Worker Processes**: Multiple instances with partitioned symbols
+- **Database**: Read replicas for reporting
+
+### Vertical Scaling
+
+- **Memory**: Scale with universe size
+- **CPU**: Parallel backtesting and ML training
+- **Storage**: Historical data grows over time
+
+### Bottlenecks
+
+1. **Data Fetching**: Rate-limited by providers
+2. **ML Training**: CPU-intensive
+3. **Optimization**: Quadratic programming complexity
+
+---
+
+## Security Architecture
+
+### Defense in Depth
+
+```
+┌─────────────────────────────────────┐
+│         Network Layer               │
+│    - Firewall rules                 │
+│    - Rate limiting                  │
+├─────────────────────────────────────┤
+│       Application Layer             │
+│    - API key authentication         │
+│    - Input validation               │
+│    - Trading mode checks            │
+├─────────────────────────────────────┤
+│         Data Layer                  │
+│    - Encrypted secrets              │
+│    - Parameterized queries          │
+│    - Access control                 │
+└─────────────────────────────────────┘
+```
+
+### Key Security Features
+
+- Environment variable-based secrets
+- API key encryption at rest
+- Trading mode isolation
+- Kill switch for emergency halt
+- Audit logging
+
+---
+
+## Version Information
+
+- **Architecture Version**: 5.0
+- **Last Updated**: 2024
+- **Phase**: 35 (Documentation)
+
+---
+
+*This document reflects the actual implementation as of Phase 35.*
