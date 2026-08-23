@@ -179,9 +179,14 @@ No explanation, just the number.
                 logger.warning(f"[LLM] No message in choice[0] for {symbol}. Using keyword fallback.")
                 return NewsFetcher.keyword_fallback_score(headlines)
             
+            # CRITICAL FIX: Log finish_reason to diagnose why content might be empty
+            finish_reason = getattr(choice, 'finish_reason', 'unknown')
+            logger.info(f"[LLM] Response for {symbol}: finish_reason={finish_reason}")
+            
             content = getattr(choice.message, 'content', None) or ""
             if not content.strip():
-                logger.warning(f"[LLM] Empty content in response for {symbol}. Raw preview: '{content[:120]}'")
+                # CRITICAL FIX: Log at ERROR level when content is empty
+                logger.error(f"[LLM] Empty content in response for {symbol}. finish_reason={finish_reason}. Raw preview: '{content[:120]}'")
                 # CRITICAL FIX: When LLM returns empty content, default to NEUTRAL (0.0)
                 # Do NOT use keyword fallback on headlines - that gave false 1.0 scores
                 return 0.0
