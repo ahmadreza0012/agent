@@ -1,30 +1,21 @@
-```
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# Documentation build artifacts
+docs/_build/
+docs/build/
+docs/.doctrees/
+docs/_static/
+.sphinx/
+doc/_build/
+_doc/
 
-# Dependencies
-.venv/
-venv/
-env/
-.env
-.env.local
-.env.*
-
-# Logs
-*.log
-
-# Editor/IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# Build/distribution
-build/
-dist/
-*.egg-info/
-```
+# Common documentation generators
+.mkdocs/
+_site/
+_dist/
+_output/
+public/
+_docs/
+doc-build/
+docs-gen/
+build/html/
+build/markdown/
+build/xml/
