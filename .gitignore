@@ -1,28 +1,50 @@
 ```
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
+*.pyc
+*.pyo
+*.pyd
 .Python
 *.so
-.coverage
-htmlcov/
-.pytest_cache/
-.mypy_cache/
+*.egg-info/
+dist/
+build/
+*.dist-info/
+
+# Data cache
+data/cache/
+
+# Performance reports
+performance_profile_report.txt
 
 # Environment
-.venv/
-venv/
 .env
 .env.local
-.env.*
+*.env.*
 
 # Logs
 *.log
 
-# Testing
+# Temporary files
+*.tmp
+*~
+
+# Coverage
 .coverage
 htmlcov/
+coverage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
 .pytest_cache/
+.mypy_cache/
 ```
