@@ -16,6 +16,14 @@ from .risk_engine import RiskEngine, RiskDecision
 from .risk_limits import RiskLimits, DEFAULT_LIMITS
 from .risk_metrics import RiskMetrics, calculate_risk_metrics
 from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, BreakerState
+from .capital_preservation import (
+    CapitalPreservationEngine,
+    CapitalPreservationConfig,
+    CapitalPosition,
+    CapitalPreservationAction,
+    PreservationLevel,
+    RiskStatus,
+)
 
 __all__ = [
     'RiskEngine',
@@ -27,4 +35,10 @@ __all__ = [
     'CircuitBreaker',
     'CircuitBreakerConfig',
     'BreakerState',
+    'CapitalPreservationEngine',
+    'CapitalPreservationConfig',
+    'CapitalPosition',
+    'CapitalPreservationAction',
+    'PreservationLevel',
+    'RiskStatus',
 ]

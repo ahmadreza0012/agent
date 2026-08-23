@@ -5,8 +5,26 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Performance data files (if they're auto-generated)
-performance_history.csv
-performance_target_assessment.csv
-performance_target_report.txt
+# Dependencies
+.venv/
+venv/
+env/
+.env
+.env.local
+.env.*
+
+# Logs
+*.log
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Build/distribution
+build/
+dist/
+*.egg-info/
 ```
