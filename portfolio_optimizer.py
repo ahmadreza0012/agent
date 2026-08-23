@@ -107,7 +107,7 @@ class PortfolioOptimizer:
             except Exception as e:
                 logger.warning(f"Attempt 1 (max_sharpe/direct) failed: {e}. Trying Attempt 2 (efficient_return)...")
             
-            # ATTEMPT 2: efficient_return with modest positive target (fresh instance)
+            # ATTEMPT 2: efficient_return with modest target (fresh instance)
             # Use mean of positive expected returns, or a modest fraction of that
             # Avoids inventing arbitrary annualized targets for unknown frequencies
             try:
@@ -116,33 +116,49 @@ class PortfolioOptimizer:
                     # Target: 50% of mean positive return (modest, frequency-agnostic)
                     target_ret = 0.5 * np.mean(positive_returns)
                 else:
-                    # No positive returns: degrade to min_vol without inventing alpha
-                    target_ret = 0.0  # Will fail and fall through to Attempt 3
+                    # No positive returns: skip to min_vol with CASH cap (don't waste attempt)
+                    target_ret = None
                 
-                ef2 = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=get_bounds())
-                weights = ef2.efficient_return(target_ret)
-                
-                weights_array = np.array(list(weights.values()))
-                logger.info(f"MVO weights (attempt 2 - efficient_return): {weights_array}")
-                return weights_array
+                if target_ret is not None:
+                    ef2 = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=get_bounds())
+                    weights = ef2.efficient_return(target_ret)
+                    
+                    weights_array = np.array(list(weights.values()))
+                    logger.info(f"MVO weights (attempt 2 - efficient_return): {weights_array}")
+                    return weights_array
+                else:
+                    logger.info("Attempt 2 skipped (no positive expected returns). Going to Attempt 3...")
+                    raise ValueError("No positive expected returns for efficient_return")
             except Exception as e2:
-                logger.warning(f"Attempt 2 (efficient_return) failed: {e2}. Trying Attempt 3 (min_volatility with cash cap)...")
+                logger.warning(f"Attempt 2 (efficient_return) failed/skipped: {e2}. Trying Attempt 3 (min_volatility with cash cap)...")
             
-            # ATTEMPT 3: min_volatility with no cash cap (allow 100% CASH in crisis)
+            # ATTEMPT 3: min_volatility with CASH CAP (max 60% CASH in crisis regime)
+            # CRITICAL FIX: When all expected returns are negative, min_vol with no cap goes 100% CASH
+            # This is mathematically optimal but defeats the purpose of being invested
+            # Cap CASH at 60% to maintain 40% exposure to risky assets even in crisis
             try:
-                weights = self._min_volatility_with_cash_cap_fresh(expected_returns, cov_matrix, max_cash=1.0)
+                weights = self._min_volatility_with_cash_cap_fresh(expected_returns, cov_matrix, max_cash=0.60)
                 weights_array = np.array(list(weights.values()))
-                logger.info(f"MVO weights (attempt 3 - min_volatility capped): {weights_array}")
+                logger.info(f"MVO weights (attempt 3 - min_volatility, cash capped 60%): {weights_array}")
                 return weights_array
             except Exception as e3:
-                logger.warning(f"Attempt 3 (min_volatility capped) failed: {e3}. Using last resort equal-weight.")
+                logger.warning(f"Attempt 3 (min_volatility 60% cap) failed: {e3}. Trying Attempt 4 (40% cap)...")
             
-            # LAST RESORT: equal-weight among risky assets + 25% CASH
+            # ATTEMPT 4: min_volatility with stricter CASH cap (40%)
+            try:
+                weights = self._min_volatility_with_cash_cap_fresh(expected_returns, cov_matrix, max_cash=0.40)
+                weights_array = np.array(list(weights.values()))
+                logger.info(f"MVO weights (attempt 4 - min_volatility, cash capped 40%): {weights_array}")
+                return weights_array
+            except Exception as e4:
+                logger.warning(f"Attempt 4 (min_volatility 40% cap) failed: {e4}. Using last resort equal-weight.")
+            
+            # LAST RESORT: equal-weight among risky assets + 40% CASH
             n_assets = len(self.asset_names)
             cash_idx = next((i for i, name in enumerate(self.asset_names) if name == 'CASH'), None)
             if cash_idx is not None:
                 n_risky = n_assets - 1
-                weights_array = np.array([0.75 / n_risky if name != 'CASH' else 0.25 for name in self.asset_names])
+                weights_array = np.array([0.60 / n_risky if name != 'CASH' else 0.40 for name in self.asset_names])
             else:
                 weights_array = np.ones(n_assets) / n_assets
             
