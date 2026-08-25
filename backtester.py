@@ -508,6 +508,52 @@ class WalkForwardValidator:
         }
 
 
+def _generate_walk_forward_folds(
+    n_samples: int,
+    n_folds: int,
+    min_train_size: int = 60,
+    min_test_size: int = 20
+) -> List[Tuple[int, int, int, int]]:
+    """
+    Generate walk-forward fold indices ensuring temporal causality.
+    
+    Args:
+        n_samples: Total number of samples
+        n_folds: Number of folds to generate
+        min_train_size: Minimum training window size
+        min_test_size: Minimum test window size
+        
+    Returns:
+        List of (train_start, train_end, test_start, test_end) index tuples
+    """
+    folds = []
+    
+    # Calculate fold sizes
+    total_required = min_train_size + min_test_size
+    if n_samples < total_required:
+        logger.warning(f"Insufficient data: {n_samples} samples < {total_required} required")
+        return folds
+    
+    # Divide available data into folds
+    available_for_folds = n_samples - min_train_size
+    fold_step = max(1, available_for_folds // n_folds)
+    
+    for i in range(n_folds):
+        train_start = 0
+        train_end = min_train_size + i * fold_step
+        test_start = train_end
+        test_end = min(test_start + min_test_size, n_samples)
+        
+        if test_end > n_samples:
+            break
+            
+        if train_end - train_start >= min_train_size and test_end - test_start >= min_test_size:
+            folds.append((train_start, train_end, test_start, test_end))
+    
+    logger.info(f"Generated {len(folds)} walk-forward folds from {n_samples} samples")
+    return folds
+
+
 if __name__ == "__main__":
     # Example usage
     np.random.seed(42)
