@@ -5,7 +5,7 @@ Uses CCXT library with Binance exchange for clean, reliable OHLCV data.
 
 import ccxt
 import pandas as pd
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict
 import time
 import logging
