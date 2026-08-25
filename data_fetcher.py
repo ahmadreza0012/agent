@@ -20,14 +20,16 @@ class CryptoDataFetcher:
     Handles rate limits gracefully and returns clean DataFrames with DatetimeIndex.
     """
     
-    def __init__(self, exchange_id: str = 'binance', rate_limit_delay: float = 0.2):
+    def __init__(self, symbols: Optional[List[str]] = None, exchange_id: str = 'binance', rate_limit_delay: float = 0.2):
         """
-        Initialize the data fetcher with specified exchange.
+        Initialize the data fetcher with specified exchange and symbols.
         
         Args:
+            symbols: List of trading pair symbols (e.g., ['BTC/USDT', 'ETH/USDT'])
             exchange_id: Exchange identifier (default: 'binance')
             rate_limit_delay: Delay between API calls in seconds to respect rate limits
         """
+        self.symbols = symbols or []
         self.exchange_id = exchange_id
         self.rate_limit_delay = rate_limit_delay
         self.exchange = self._initialize_exchange(exchange_id)
@@ -255,6 +257,62 @@ class CryptoDataFetcher:
                 result[symbol] = None
         
         return result
+    
+    def fetch_all_symbols(
+        self,
+        timeframe: str = '1d',
+        since_days: int = 365,
+        limit: int = 500
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Fetch OHLCV data for all configured symbols.
+        Compatible interface with main.py trading cycle.
+        
+        Args:
+            timeframe: Candle timeframe (default: '1d')
+            since_days: How many days back to fetch (default: 365)
+            limit: Maximum number of candles to fetch per request (default: 500)
+            
+        Returns:
+            Dictionary mapping symbol to DataFrame
+        """
+        if not self.symbols:
+            logger.warning("No symbols configured. Use constructor or set symbols first.")
+            return {}
+        
+        since = datetime.now(timezone.utc) - timedelta(days=since_days)
+        return self.fetch_multiple_pairs(self.symbols, timeframe, since, limit)
+    
+    def align_data(self, raw_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+        """
+        Align data from different symbols to common timestamps.
+        Compatible interface with main.py trading cycle.
+        
+        Args:
+            raw_data: Dictionary mapping symbol to DataFrame
+            
+        Returns:
+            Aligned DataFrame with columns for each symbol
+        """
+        if not raw_data:
+            logger.warning("No data to align")
+            return pd.DataFrame()
+        
+        # Get closing prices
+        prices = pd.DataFrame()
+        for symbol, df in raw_data.items():
+            if df is not None and not df.empty:
+                prices[symbol] = df['close']
+        
+        if prices.empty:
+            logger.warning("All dataframes were empty or None")
+            return pd.DataFrame()
+        
+        # Forward fill then backward fill for missing values
+        prices = prices.ffill().bfill()
+        
+        logger.info(f"Aligned data: {len(prices)} rows, {len(prices.columns)} columns")
+        return prices
     
     def get_available_symbols(self, quote_currency: str = 'USDT') -> List[str]:
         """
