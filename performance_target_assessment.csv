@@ -1,0 +1,10 @@
+target_name,target_type,metric,target_value,achieved_value,percentage_achieved,is_achieved,gap,recommendation
+Positive Risk-Adjusted Return,minimum_viability,sharpe_ratio,0.3,0.58,1.9333333333333333,True,0.27999999999999997,Exceeded sharpe_ratio target significantly
+Beat Buy & Hold,minimum_viability,excess_return,0.05,0.08,1.5999999999999999,True,0.03,Exceeded excess_return target significantly
+Controlled Drawdown,minimum_viability,max_drawdown,0.3,0.25,0.8333333333333334,False,-0.04999999999999999,Close to max_drawdown target - minor improvements needed
+Strong Sharpe,improvement,sharpe_ratio,0.6,0.58,0.9666666666666667,False,-0.020000000000000018,Close to sharpe_ratio target - minor improvements needed
+Low Drawdown,improvement,max_drawdown,0.2,0.25,1.25,True,0.04999999999999999,Exceeded max_drawdown target
+Positive Monthly Returns,improvement,win_rate,0.55,0.55,1.0,True,0.0,Achieved win_rate target
+Excellent Sharpe,excellent,sharpe_ratio,1.0,0.58,0.58,False,-0.42000000000000004,Below sharpe_ratio target - consider improvements
+Very Low Drawdown,excellent,max_drawdown,0.15,0.25,1.6666666666666667,True,0.1,Exceeded max_drawdown target significantly
+Elite Sharpe,stretch,sharpe_ratio,1.5,0.58,0.38666666666666666,False,-0.92,Failed sharpe_ratio target significantly - review strategy
