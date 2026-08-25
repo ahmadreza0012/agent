@@ -312,6 +312,10 @@ def get_crypto_data(
         fetcher.close()
 
 
+# Alias for backward compatibility with main.py
+DataFetcher = CryptoDataFetcher
+
+
 if __name__ == "__main__":
     # Example usage
     fetcher = CryptoDataFetcher()
