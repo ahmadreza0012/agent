@@ -13,6 +13,12 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Keyword lexicon for news sentiment scoring (imported from news_fetcher when available)
+_POSITIVE_WORDS = ["surge", "rally", "bullish", "soar", "gain", "record high",
+                   "approval", "adoption", "partnership", "upgrade", "etf inflow"]
+_NEGATIVE_WORDS = ["crash", "plunge", "bearish", "hack", "exploit", "lawsuit",
+                    "ban", "sell-off", "selloff", "collapse", "fraud"]
+
 
 class AISentimentAnalyzer:
     """
@@ -31,6 +37,19 @@ class AISentimentAnalyzer:
         self.api_key = api_key
         self.model = model
         self.client = self._initialize_client()
+        self.news_fetcher = self._initialize_news_fetcher()
+    
+    def _initialize_news_fetcher(self):
+        """Initialize NewsFetcher instance."""
+        try:
+            from news_fetcher import NewsFetcher
+            return NewsFetcher()
+        except ImportError as e:
+            logger.warning(f"NewsFetcher not available: {e}. Sentiment will use price-only fallback.")
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to initialize NewsFetcher: {e}")
+            return None
         
     def _initialize_client(self):
         """Initialize Groq client."""
@@ -432,9 +451,86 @@ Your response:"""
         
         return Q, P_indices, view_assets
     
+    def _normalize_symbol(self, symbol: str) -> str:
+        """Normalize trading pair symbol to base asset (e.g., 'BTC/USDT' -> 'BTC')."""
+        # Remove common suffixes and normalize
+        normalized = symbol.upper().replace('/', '').replace('-', '').replace('_', '')
+        for quote in ['USDT', 'USDC', 'BUSD', 'USD', 'BTC', 'ETH']:
+            if normalized.endswith(quote):
+                normalized = normalized[:-len(quote)]
+                break
+        return normalized
+    
+    def generate_per_asset_news_sentiment(
+        self,
+        symbols: List[str],
+        headlines_map: Dict[str, List[str]]
+    ) -> Dict[str, float]:
+        """
+        Generate sentiment scores per asset based on news headlines.
+        
+        Args:
+            symbols: List of trading pair symbols (e.g., ['BTC/USDT', 'ETH/USDT'])
+            headlines_map: Dict mapping base symbols to list of headlines
+            
+        Returns:
+            Dict mapping base symbols to sentiment scores (-1 to 1)
+        """
+        sentiment_scores = {}
+        
+        for symbol in symbols:
+            base_sym = self._normalize_symbol(symbol)
+            headlines = headlines_map.get(base_sym, [])
+            
+            if not headlines:
+                # No news, neutral sentiment
+                sentiment_scores[base_sym] = 0.0
+                continue
+            
+            # Simple keyword-based sentiment scoring as fallback
+            # In production, this would use LLM analysis
+            score = 0.0
+            for headline in headlines[:5]:  # Use up to 5 headlines
+                headline_lower = headline.lower()
+                positive_count = sum(1 for word in _POSITIVE_WORDS if word in headline_lower)
+                negative_count = sum(1 for word in _NEGATIVE_WORDS if word in headline_lower)
+                
+                if positive_count + negative_count > 0:
+                    headline_score = (positive_count - negative_count) / (positive_count + negative_count)
+                else:
+                    headline_score = 0.0
+                score += headline_score
+            
+            avg_score = score / min(len(headlines), 5) if headlines else 0.0
+            sentiment_scores[base_sym] = np.clip(avg_score, -1, 1)
+            logger.info(f"{base_sym}: news sentiment = {sentiment_scores[base_sym]:.3f} from {len(headlines)} headlines")
+        
+        return sentiment_scores
+    
+    def generate_market_tone_score(self, asset_sentiment_scores: Dict[str, float]) -> float:
+        """
+        Generate overall market tone score from individual asset sentiments.
+        
+        Args:
+            asset_sentiment_scores: Dict mapping asset symbols to sentiment scores
+            
+        Returns:
+            Overall market tone score (-1 to 1)
+        """
+        if not asset_sentiment_scores:
+            return 0.0
+        
+        # Average sentiment across all assets
+        scores = list(asset_sentiment_scores.values())
+        market_tone = np.mean(scores)
+        
+        logger.info(f"Market tone: {market_tone:.3f} from {len(scores)} assets")
+        return float(np.clip(market_tone, -1, 1))
+    
     def close(self):
         """Clean up resources."""
         self.client = None
+        self.news_fetcher = None
 
 
 def get_sentiment_views(
