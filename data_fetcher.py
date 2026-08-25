@@ -1,329 +1,333 @@
 """
-Data Fetcher Module
-Fetches historical OHLCV data from CoinGecko using pycoingecko
-with fallback to yfinance
+Data Fetcher Module for Cryptocurrency Algorithmic Trading
+Uses CCXT library with Binance exchange for clean, reliable OHLCV data.
 """
 
+import ccxt
 import pandas as pd
-import numpy as np
-import logging
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from datetime import datetime, timezone
+from typing import List, Optional, Dict
 import time
-from pycoingecko import CoinGeckoAPI
+import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# Mapping from trading pair symbols to CoinGecko coin IDs
-SYMBOL_TO_COINGECKO_ID = {
-    'BTC/USDT': 'bitcoin',
-    'ETH/USDT': 'ethereum',
-    'SOL/USDT': 'solana',
-    'BNB/USDT': 'binancecoin',
-    'XRP/USDT': 'ripple',
-}
-
-# Mapping from trading pair symbols to yfinance ticker symbols
-SYMBOL_TO_YFINANCE_TICKER = {
-    'BTC/USDT': 'BTC-USD',
-    'ETH/USDT': 'ETH-USD',
-    'SOL/USDT': 'SOL-USD',
-    'BNB/USDT': 'BNB-USD',
-    'XRP/USDT': 'XRP-USD',
-}
-
-
-class DataFetcher:
-    """Fetch and process cryptocurrency OHLCV data from CoinGecko"""
-
-    def __init__(self, symbols: List[str] = None):
+class CryptoDataFetcher:
+    """
+    Robust cryptocurrency data fetcher using CCXT and Binance exchange.
+    Handles rate limits gracefully and returns clean DataFrames with DatetimeIndex.
+    """
+    
+    def __init__(self, exchange_id: str = 'binance', rate_limit_delay: float = 0.2):
         """
-        Initialize data fetcher
-
-        Args:
-            symbols: List of trading pairs (e.g., ['BTC/USDT', 'ETH/USDT'])
-        """
-        self.symbols = symbols or [
-            'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT'
-        ]
-        self.api = CoinGeckoAPI()
-        logger.info(f"Initialized DataFetcher for {len(self.symbols)} symbols using CoinGecko API")
-
-    def fetch_ohlcv(self, symbol: str, timeframe: str = '1d',
-                     since_days: int = 90) -> pd.DataFrame:
-        """
-        Fetch OHLCV data for a single symbol.
-        Priority: yfinance for hourly data (reliable), CoinGecko for daily fallback.
-
-        Args:
-            symbol: Trading pair (e.g., 'BTC/USDT')
-            timeframe: Candle timeframe ('1h' for hourly, '1d' for daily)
-            since_days: Number of days of historical data.
-                        For hourly data: max 90 days
-                        For daily data: max 365 days
-
-        Returns:
-            DataFrame with OHLCV data ['Open', 'High', 'Low', 'Close', 'Volume']
-        """
-        logger.info(f"Fetching {timeframe} data for {symbol} ({since_days} days)")
-
-        # Enforce maximum limits based on timeframe
-        if timeframe == '1h':
-            max_days = 90
-            if since_days > max_days:
-                logger.warning(f"Hourly data limited to {max_days} days. "
-                              f"Reducing from {since_days} to {max_days} days.")
-                since_days = max_days
-        else:  # daily
-            max_days = 365
-            if since_days > max_days:
-                logger.warning(f"Daily data limited to {max_days} days. "
-                              f"Reducing from {since_days} to {max_days} days.")
-                since_days = max_days
+        Initialize the data fetcher with specified exchange.
         
-        # For hourly data, use yfinance directly (CoinGecko free API doesn't support hourly for long periods)
-        if timeframe == '1h':
-            logger.info(f"Using yfinance for hourly data ({since_days} days)")
-            try:
-                return self._fetch_from_yfinance(symbol, timeframe, since_days)
-            except Exception as e:
-                logger.error(f"yfinance hourly fetch failed: {e}")
-                raise
+        Args:
+            exchange_id: Exchange identifier (default: 'binance')
+            rate_limit_delay: Delay between API calls in seconds to respect rate limits
+        """
+        self.exchange_id = exchange_id
+        self.rate_limit_delay = rate_limit_delay
+        self.exchange = self._initialize_exchange(exchange_id)
+        self._last_request_time = 0
         
-        # For daily data, prefer yfinance for reliability (CoinGecko free API has limitations)
-        # Try yfinance first, fallback to CoinGecko only if yfinance fails
-        logger.info(f"Using yfinance for daily data ({since_days} days)")
+    def _initialize_exchange(self, exchange_id: str) -> ccxt.Exchange:
+        """Initialize CCXT exchange with proper configuration."""
         try:
-            return self._fetch_from_yfinance(symbol, timeframe, since_days)
+            exchange_class = getattr(ccxt, exchange_id)
+            exchange = exchange_class({
+                'enableRateLimit': True,
+                'timeout': 30000,
+                'options': {
+                    'defaultType': 'spot',
+                }
+            })
+            logger.info(f"Successfully initialized {exchange_id} exchange")
+            return exchange
+        except AttributeError:
+            raise ValueError(f"Exchange '{exchange_id}' not supported by CCXT")
         except Exception as e:
-            logger.warning(f"yfinance daily fetch failed ({e}), falling back to CoinGecko...")
-            # Fall through to CoinGecko code below
-            pass
-        
-        # CoinGecko fallback for daily data
-        coin_id = SYMBOL_TO_COINGECKO_ID.get(symbol)
-        if coin_id is None:
-            raise ValueError(f"Symbol {symbol} not mapped to CoinGecko ID.")
-        
-        max_retries = 3
-        retry_delay = 60
-        ohlc_data = None
-        use_yfinance_fallback = False
-        
-        for attempt in range(max_retries):
-            try:
-                # Determine the 'days' parameter for CoinGecko API
-                # Valid values: 1, 14, 30, 90, 'max'
-                # DO NOT use 'max' - use explicit numeric values only
-                if since_days > 90:
-                    api_days = 365  # Use largest explicit value
-                elif since_days > 30:
-                    api_days = 90
-                elif since_days > 14:
-                    api_days = 30
-                elif since_days > 1:
-                    api_days = 14
-                else:
-                    api_days = 1
-                
-                logger.debug(f"Using CoinGecko days parameter: {api_days}")
-                
-                # get_coin_ohlc_by_id(coin_id, vs_currency, days) returns [timestamp, open, high, low, close]
-                # This endpoint RETURNS DAILY CANDLES for most values of 'days'
-                ohlc_data = self.api.get_coin_ohlc_by_id(coin_id, vs_currency='usd', days=api_days)
-                
-                # Check if we got enough data
-                if ohlc_data and len(ohlc_data) >= 10:
-                    break  # Success, exit retry loop
-                else:
-                    logger.warning(f"CoinGecko returned insufficient data ({len(ohlc_data) if ohlc_data else 0} candles)")
-                    use_yfinance_fallback = True
-                    break
-                    
-            except Exception as e:
-                error_str = str(e)
-                # Check for rate limit or time range errors
-                if '429' in error_str or 'rate limit' in error_str.lower():
-                    logger.warning(f"Rate limit hit for {symbol}, waiting {retry_delay}s before retry {attempt+1}/{max_retries}")
-                    time.sleep(retry_delay)
-                elif '10012' in error_str or 'time range' in error_str.lower():
-                    # Time range error - reduce days and retry
-                    logger.warning(f"Time range error for {symbol}, reducing days parameter")
-                    api_days = min(api_days if isinstance(api_days, int) else 90, 90)
-                    try:
-                        ohlc_data = self.api.get_coin_ohlc_by_id(coin_id, vs_currency='usd', days=api_days)
-                        if ohlc_data and len(ohlc_data) >= 10:
-                            break
-                    except Exception as e2:
-                        logger.warning(f"Error with reduced days: {e2}")
-                    use_yfinance_fallback = True
-                    break
-                else:
-                    logger.warning(f"Error fetching {symbol}: {e}")
-                    if attempt == max_retries - 1:
-                        use_yfinance_fallback = True
-                    else:
-                        time.sleep(1)
-        
-        # Fallback to yfinance if CoinGecko fails or returned insufficient data
-        if use_yfinance_fallback or (ohlc_data is None or len(ohlc_data) < 10):
-            logger.info(f"Attempting yfinance fallback for {symbol}...")
-            try:
-                return self._fetch_from_yfinance(symbol, timeframe, since_days)
-            except Exception as yf_error:
-                logger.error(f"yfinance fallback also failed for {symbol}: {yf_error}")
-                raise ValueError(f"No sufficient data retrieved for {symbol} from any source")
-
-        # Convert to DataFrame
-        # CoinGecko returns: [timestamp(ms), open, high, low, close]
-        df = pd.DataFrame(ohlc_data, columns=['timestamp', 'open', 'high', 'low', 'close'])
-        
-        # CRITICAL: CoinGecko OHLC endpoint doesn't include volume in free tier.
-        # Set volume to NaN (not 0) to indicate unavailability.
-        # Strategies requiring volume must handle this gracefully.
-        # See data.providers.historical.HistoricalDataProvider for preferred implementation.
-        df['volume'] = np.nan
-        
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df.set_index('timestamp', inplace=True)
-        df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low',
-                            'close': 'Close', 'volume': 'Volume'}, inplace=True)
-
-        logger.info(f"✅ Retrieved {len(df)} DAILY candles for {symbol} (Range: {df.index.min()} to {df.index.max()})")
-        logger.warning(f"⚠️ Volume unavailable for {symbol} from CoinGecko (volume_available=False, set to NaN)")
-        return df
-
-    def _fetch_from_yfinance(self, symbol: str, timeframe: str, since_days: int) -> pd.DataFrame:
+            raise ConnectionError(f"Failed to initialize exchange: {e}")
+    
+    def _respect_rate_limit(self):
+        """Ensure we don't exceed rate limits by adding delays between requests."""
+        current_time = time.time()
+        elapsed = current_time - self._last_request_time
+        if elapsed < self.rate_limit_delay:
+            sleep_time = self.rate_limit_delay - elapsed
+            time.sleep(sleep_time)
+        self._last_request_time = time.time()
+    
+    def fetch_ohlcv(
+        self,
+        symbol: str,
+        timeframe: str = '1d',
+        since: Optional[datetime] = None,
+        limit: int = 500,
+        max_retries: int = 3
+    ) -> pd.DataFrame:
         """
-        Fetch OHLCV data from yfinance as fallback
+        Fetch OHLCV data from the exchange and return as a clean DataFrame.
         
         Args:
-            symbol: Trading pair (e.g., 'BTC/USDT')
-            timeframe: Candle timeframe ('1h' for hourly, '1d' for daily)
-            since_days: Number of days of historical data
+            symbol: Trading pair symbol (e.g., 'BTC/USDT', 'ETH/USDT')
+            timeframe: Candle timeframe (e.g., '1m', '5m', '1h', '1d')
+            since: Start datetime for fetching data
+            limit: Maximum number of candles to fetch per request
+            max_retries: Maximum retry attempts on failure
             
         Returns:
-            DataFrame with OHLCV data ['Open', 'High', 'Low', 'Close', 'Volume']
+            pd.DataFrame with DatetimeIndex and columns: open, high, low, close, volume
         """
-        import yfinance as yf
+        # Normalize symbol format for CCXT
+        if '/' not in symbol:
+            # Assume format like 'BTCUSDT' -> convert to 'BTC/USDT'
+            if symbol.endswith('USDT'):
+                symbol = f"{symbol[:-4]}/{symbol[-4:]}"
+            elif symbol.endswith('USD'):
+                symbol = f"{symbol[:-3]}/{symbol[-3:]}"
+            else:
+                symbol = f"{symbol}/USDT"
         
-        ticker_symbol = SYMBOL_TO_YFINANCE_TICKER.get(symbol)
-        if ticker_symbol is None:
-            raise ValueError(f"Symbol {symbol} not mapped to yfinance ticker. "
-                           f"Available mappings: {list(SYMBOL_TO_YFINANCE_TICKER.keys())}")
+        symbol = symbol.upper()
         
-        logger.info(f"Fetching {timeframe} data for {ticker_symbol} from yfinance ({since_days} days)")
+        # Convert since to milliseconds timestamp if provided
+        since_ms = None
+        if since is not None:
+            if isinstance(since, datetime):
+                since_ms = int(since.timestamp() * 1000)
+            else:
+                since_ms = int(since)
         
-        ticker = yf.Ticker(ticker_symbol)
+        all_ohlcv = []
+        retries = 0
         
-        # Calculate date range
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=since_days)
+        while retries < max_retries:
+            try:
+                self._respect_rate_limit()
+                
+                ohlcv_data = self.exchange.fetch_ohlcv(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    since=since_ms,
+                    limit=limit
+                )
+                
+                if not ohlcv_data:
+                    logger.warning(f"No data returned for {symbol}")
+                    break
+                
+                all_ohlcv.extend(ohlcv_data)
+                
+                # If we got less than limit, we've reached the end
+                if len(ohlcv_data) < limit:
+                    break
+                    
+                # For pagination, update since to last candle + 1ms
+                last_timestamp = ohlcv_data[-1][0]
+                since_ms = last_timestamp + 1
+                
+                # Add small delay for pagination
+                time.sleep(0.1)
+                
+                break  # Success, exit retry loop
+                
+            except ccxt.RateLimitExceeded:
+                retries += 1
+                wait_time = 2 ** retries  # Exponential backoff
+                logger.warning(f"Rate limit exceeded for {symbol}. Waiting {wait_time}s...")
+                time.sleep(wait_time)
+                
+            except ccxt.NetworkError as e:
+                retries += 1
+                wait_time = 2 ** retries
+                logger.warning(f"Network error for {symbol}: {e}. Retrying ({retries}/{max_retries})...")
+                time.sleep(wait_time)
+                
+            except ccxt.ExchangeError as e:
+                retries += 1
+                logger.warning(f"Exchange error for {symbol}: {e}. Retrying ({retries}/{max_retries})...")
+                time.sleep(1)
+                
+            except Exception as e:
+                logger.error(f"Unexpected error fetching {symbol}: {e}")
+                raise
         
-        # Download data
-        df = ticker.history(start=start_date, end=end_date, interval=timeframe)
+        if not all_ohlcv:
+            raise ValueError(f"Failed to fetch data for {symbol} after {max_retries} retries")
         
-        if df.empty or len(df) < 10:
-            raise ValueError(f"No sufficient data retrieved from yfinance for {symbol}")
-        
-        # Ensure proper column names
-        df.rename(columns={
-            'Open': 'Open', 'High': 'High', 'Low': 'Low',
-            'Close': 'Close', 'Volume': 'Volume'
-        }, inplace=True)
-        
-        logger.info(f"✅ Retrieved {len(df)} candles for {symbol} from yfinance (Range: {df.index.min()} to {df.index.max()})")
-        return df[['Open', 'High', 'Low', 'Close', 'Volume']]
-
-    def fetch_all_symbols(self, timeframe: str = '1d',
-                           since_days: int = 90) -> Dict[str, pd.DataFrame]:
+        return self._parse_ohlcv(all_ohlcv, symbol)
+    
+    def _parse_ohlcv(self, ohlcv_data: List[List], symbol: str) -> pd.DataFrame:
         """
-        Fetch OHLCV data for all symbols.
-        Note: Uses daily candles by default due to CoinGecko free API limitations.
-
+        Parse raw OHLCV data into a clean DataFrame with DatetimeIndex.
+        
+        Args:
+            ohlcv_data: Raw OHLCV data from CCXT
+            symbol: Trading pair symbol
+            
+        Returns:
+            Clean DataFrame with DatetimeIndex
+        """
+        df = pd.DataFrame(
+            ohlcv_data,
+            columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
+        )
+        
+        # Convert timestamp to datetime and set as index
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+        df.set_index('timestamp', inplace=True)
+        
+        # Convert numeric columns to float
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        for col in numeric_cols:
+            df[col] = df[col].astype(float)
+        
+        # Remove any duplicate indices
+        df = df[~df.index.duplicated(keep='first')]
+        
+        # Sort by timestamp
+        df.sort_index(inplace=True)
+        
+        # Validate data quality - check for extreme values
+        self._validate_data_quality(df, symbol)
+        
+        logger.info(f"Parsed {len(df)} candles for {symbol} from {df.index[0]} to {df.index[-1]}")
+        
+        return df
+    
+    def _validate_data_quality(self, df: pd.DataFrame, symbol: str):
+        """
+        Validate data quality and log warnings for suspicious values.
+        
+        Args:
+            df: DataFrame to validate
+            symbol: Trading pair symbol
+        """
+        # Check for zero or negative prices
+        if (df['close'] <= 0).any():
+            logger.warning(f"{symbol}: Found non-positive close prices")
+        
+        # Check for extreme price jumps (>50% in single candle)
+        returns = df['close'].pct_change().abs()
+        extreme_jumps = returns[returns > 0.5]
+        if len(extreme_jumps) > 0:
+            logger.warning(f"{symbol}: Found {len(extreme_jumps)} extreme price jumps (>50%)")
+        
+        # Check for volume spikes
+        if 'volume' in df.columns:
+            volume_std = df['volume'].std()
+            if volume_std > 0:
+                volume_zscore = (df['volume'] - df['volume'].mean()) / volume_std
+                extreme_volume = volume_zscore[volume_zscore.abs() > 10]
+                if len(extreme_volume) > 0:
+                    logger.info(f"{symbol}: Found {len(extreme_volume)} extreme volume spikes")
+    
+    def fetch_multiple_pairs(
+        self,
+        symbols: List[str],
+        timeframe: str = '1d',
+        since: Optional[datetime] = None,
+        limit: int = 500
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Fetch OHLCV data for multiple trading pairs.
+        
+        Args:
+            symbols: List of trading pair symbols
+            timeframe: Candle timeframe
+            since: Start datetime for fetching data
+            limit: Maximum number of candles to fetch per request
+            
         Returns:
             Dictionary mapping symbol to DataFrame
         """
-        data = {}
-        for symbol in self.symbols:
+        result = {}
+        for symbol in symbols:
             try:
-                df = self.fetch_ohlcv(symbol, timeframe, since_days)
-                data[symbol] = df
+                df = self.fetch_ohlcv(symbol, timeframe, since, limit)
+                result[symbol] = df
+                logger.info(f"Successfully fetched data for {symbol}")
             except Exception as e:
-                logger.error(f"Failed to fetch {symbol}: {e}")
-        return data
-
-    def align_data(self, data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+                logger.error(f"Failed to fetch data for {symbol}: {e}")
+                result[symbol] = None
+        
+        return result
+    
+    def get_available_symbols(self, quote_currency: str = 'USDT') -> List[str]:
         """
-        Align all symbols to common timestamps (inner join)
-
-        Args:
-            data: Dictionary of symbol -> DataFrame
-
-        Returns:
-            DataFrame with Close prices for all symbols aligned
-        """
-        close_prices = {}
-        for symbol, df in data.items():
-            clean_symbol = symbol.replace('/', '_').replace('USDT', '')
-            close_prices[clean_symbol] = df['Close']
-
-        # Inner join to align timestamps
-        aligned = pd.DataFrame(close_prices).dropna()
-        logger.info(f"Aligned data shape: {aligned.shape}")
-        logger.info(f"Date range: {aligned.index.min()} to {aligned.index.max()}")
-        return aligned
-
-    def calculate_returns(self, prices: pd.DataFrame, add_cash_column: bool = True) -> pd.DataFrame:
-        """
-        Calculate log returns from price data
+        Get list of available trading pairs for a quote currency.
         
         Args:
-            prices: DataFrame of aligned prices
-            add_cash_column: If True, adds a CASH column with zero return (stablecoin allocation option)
-
+            quote_currency: Quote currency to filter by (default: 'USDT')
+            
         Returns:
-            DataFrame of log returns
+            List of available symbol strings
         """
-        returns = np.log(prices / prices.shift(1)).dropna()
+        try:
+            markets = self.exchange.load_markets()
+            symbols = [
+                symbol for symbol, info in markets.items()
+                if info.get('quote') == quote_currency and info.get('active', True)
+            ]
+            return symbols
+        except Exception as e:
+            logger.error(f"Failed to load markets: {e}")
+            return []
+    
+    def close(self):
+        """Close the exchange connection."""
+        if self.exchange:
+            self.exchange.close()
+            logger.info("Exchange connection closed")
+
+
+# Convenience function for quick data fetching
+def get_crypto_data(
+    symbol: str,
+    timeframe: str = '1d',
+    since: Optional[datetime] = None,
+    limit: int = 500,
+    exchange: str = 'binance'
+) -> pd.DataFrame:
+    """
+    Convenience function to fetch crypto OHLCV data.
+    
+    Args:
+        symbol: Trading pair symbol (e.g., 'BTC/USDT')
+        timeframe: Candle timeframe
+        since: Start datetime
+        limit: Maximum candles to fetch
+        exchange: Exchange to use
         
-        # FEATURE 1: Add cash/stablecoin column for defensive allocation
-        if add_cash_column:
-            # CASH has zero return (or very small positive like staking yield)
-            # This allows optimizers to allocate to safety during market downturns
-            returns['CASH'] = 0.0  # Zero daily return = stable value
-            logger.info("Added CASH column for defensive allocation (zero return, zero variance)")
-        
-        logger.info(f"Returns calculated: {returns.shape}")
-        return returns
-
-
-def main():
-    """Test data fetching"""
-    fetcher = DataFetcher()
-
-    # Fetch 90 days of daily data (within CoinGecko limits)
-    data = fetcher.fetch_all_symbols(timeframe='1d', since_days=90)
-
-    # Align data
-    prices = fetcher.align_data(data)
-
-    # Calculate returns
-    returns = fetcher.calculate_returns(prices)
-
-    print("\n=== Data Summary ===")
-    print(f"Symbols: {list(prices.columns)}")
-    print(f"Date range: {prices.index.min()} to {prices.index.max()}")
-    print(f"Total observations: {len(prices)}")
-    print(f"\nPrice statistics:")
-    print(prices.describe())
-    print(f"\nReturn statistics:")
-    print(returns.describe())
-
-    return prices, returns
+    Returns:
+        DataFrame with OHLCV data
+    """
+    fetcher = CryptoDataFetcher(exchange_id=exchange)
+    try:
+        return fetcher.fetch_ohlcv(symbol, timeframe, since, limit)
+    finally:
+        fetcher.close()
 
 
 if __name__ == "__main__":
-    prices, returns = main()
+    # Example usage
+    fetcher = CryptoDataFetcher()
+    
+    try:
+        # Fetch BTC/USDT daily data
+        btc_data = fetcher.fetch_ohlcv('BTC/USDT', timeframe='1d', limit=100)
+        print(f"\nBTC/USDT Data Shape: {btc_data.shape}")
+        print(btc_data.tail())
+        
+        # Fetch multiple pairs
+        symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
+        multi_data = fetcher.fetch_multiple_pairs(symbols)
+        
+        for sym, df in multi_data.items():
+            if df is not None:
+                print(f"\n{sym}: {len(df)} candles, Range: {df.index[0]} to {df.index[-1]}")
+    finally:
+        fetcher.close()

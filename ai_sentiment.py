@@ -1,36 +1,14 @@
 """
-AI Sentiment Module (v2)
--------------------------
-Generates market views from REAL news headlines using a free LLM (Groq),
-with a transparent, clearly-labeled fallback when no API key / network
-is available.
-
-Key fixes vs. v1:
-- No longer hardcoded to mock mode from main.py; auto-detects based on
-  GROQ_API_KEY availability (can still be forced either way).
-- Real mode now actually feeds the LLM real news headlines fetched from
-  news_fetcher.NewsFetcher, instead of asking it to guess with no context.
-- Adds a simple self-improving confidence mechanism: the module tracks
-  whether each past view direction (bullish/bearish) matched the
-  subsequent realized return, and adjusts the Black-Litterman confidence
-  (omega) up/down accordingly. This is the "self-correcting" feedback
-  loop requested -- it is a lightweight, auditable version, not a
-  reinforcement-learning agent, and that trade-off is intentional so the
-  behavior stays inspectable.
+AI Sentiment Analysis Module for Cryptocurrency Trading
+Uses Groq API with robust JSON parsing and fallback mechanisms.
 """
 
 import json
-import logging
-import os
 import re
-import time
-from collections import deque
 from typing import Dict, List, Optional, Tuple
-
+import logging
 import numpy as np
 import pandas as pd
-
-from news_fetcher import NewsFetcher
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,458 +16,487 @@ logger = logging.getLogger(__name__)
 
 class AISentimentAnalyzer:
     """
-    Generate market views from real news + LLM sentiment, with a
-    self-adjusting confidence track record.
+    AI-powered sentiment analyzer using Groq API.
+    Implements robust JSON parsing with regex extraction and rule-based fallbacks.
     """
-
-    def __init__(self, api_key: str = None, use_mock: Optional[bool] = None,
-                 model: str = None,
-                 track_record_len: int = 20):
-        """
-        Args:
-            api_key: Groq API key. Falls back to GROQ_API_KEY env var.
-            use_mock: True/False to force a mode, or None to auto-detect
-                      (mock is used automatically if no key is available).
-            model: Groq model name. Defaults to 'openai/gpt-oss-20b'.
-                   Can be overridden via GROQ_MODEL env var.
-            track_record_len: how many past views to keep for the
-                               self-adjusting confidence mechanism.
-        """
-        # Model selection: arg > env var > default
-        if model is None:
-            model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
-        self.model = model
-        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
-        # Auto-detect unless explicitly forced by the caller
-        self.use_mock = (self.api_key is None) if use_mock is None else use_mock
-
-        self.client = None
-        if not self.use_mock:
-            try:
-                from groq import Groq
-                self.client = Groq(api_key=self.api_key)
-                logger.info(f"Groq client initialized (model={self.model}) - REAL sentiment mode")
-            except Exception as e:
-                logger.warning(f"Failed to initialize Groq ({e}). Falling back to mock mode.")
-                self.use_mock = True
-        if self.use_mock:
-            logger.warning(
-                "AISentimentAnalyzer running in MOCK mode (no GROQ_API_KEY found). "
-                "Views will be derived from price momentum only, NOT real news/LLM. "
-                "Set the GROQ_API_KEY environment variable to enable real analysis."
-            )
-
-        self.news_fetcher = NewsFetcher()
-        self.symbol_names = {
-            "BTC": "Bitcoin", "ETH": "Ethereum", "SOL": "Solana",
-            "BNB": "Binance Coin", "XRP": "Ripple",
-        }
-
-        # Self-improving track record: per symbol, deque of
-        # (predicted_direction, realized_direction) used to scale confidence.
-        self._track_record: Dict[str, deque] = {}
-        self._track_record_len = track_record_len
-
-    @staticmethod
-    def _normalize_symbol(symbol: str) -> str:
-        """
-        Robustly extract the base ticker (e.g. 'BTC') from whatever symbol
-        format is passed in. Handles 'BTC/USDT', 'BTCUSDT', and -- important
-        integration fix -- 'BTC_' (the trailing-underscore form produced by
-        data_fetcher.py's align_data(), whose naive
-        symbol.replace('/', '_').replace('USDT', '') leaves a stray '_').
-        A plain .replace("USDT", "").replace("/", "") does NOT strip that
-        trailing underscore, which silently broke news/keyword matching.
-        """
-        cleaned = symbol.upper().replace("USDT", "").replace("/", "")
-        return re.sub(r"[^A-Z]", "", cleaned)
-
-    # ------------------------------------------------------------------
-    # Mock mode (price-momentum based) - kept as an explicit, labeled
-    # fallback, not disguised as "AI".
-    # ------------------------------------------------------------------
-    def generate_mock_sentiment(self, prices: pd.DataFrame, window: int = 168) -> pd.DataFrame:
-        logger.info("[MOCK] Generating momentum-based pseudo-sentiment (not real news/LLM)")
-        sentiment_data = {}
-        for symbol in prices.columns:
-            returns = prices[symbol].pct_change(window)
-            sentiment = np.tanh(returns * 10)
-            ma = prices[symbol].rolling(window=24).mean()
-            deviation = (prices[symbol] - ma) / ma
-            mean_rev = -np.tanh(deviation * 5) * 0.3
-            sentiment_data[symbol] = sentiment + mean_rev
-        sentiment_df = pd.DataFrame(sentiment_data, index=prices.index)
-        # FIX (found via integration testing): when the lookback window is
-        # only as long as `window`, pct_change(window) is NaN on the last
-        # row, which silently propagated NaN into Black-Litterman's Q
-        # vector and made it fall back to equal-weight without warning.
-        n_nan = int(sentiment_df.iloc[-1].isna().sum())
-        if n_nan > 0:
-            logger.warning(f"{n_nan} symbol(s) had NaN mock sentiment (lookback shorter than "
-                            f"{window}h window) - filled with 0 (neutral) instead of propagating NaN")
-        return sentiment_df.fillna(0.0).clip(-1, 1)
-
-    # ------------------------------------------------------------------
-    # Real mode: news + LLM
-    # ------------------------------------------------------------------
-    def generate_real_sentiment(self, symbol: str, headlines: List[str] = None) -> float:
-        """
-        Score sentiment for one symbol using real news headlines + Groq LLM.
-        Falls back to a transparent keyword score if the LLM call fails.
-        """
-        base_symbol = self._normalize_symbol(symbol)
-        if headlines is None:
-            headlines = self.news_fetcher.get_headlines_for_symbol(base_symbol)
-
-        if not headlines:
-            logger.info(f"No recent headlines found for {symbol}; returning neutral sentiment")
-            return 0.0
-
-        if not self.api_key or self.client is None:
-            score = NewsFetcher.keyword_fallback_score(headlines)
-            logger.info(f"[fallback keyword score] {symbol}: {score:.3f}")
-            return score
-
-        name = self.symbol_names.get(base_symbol, symbol)
-        headline_block = "\n".join(f"- {h}" for h in headlines)
-        prompt = f"""You are a crypto market analyst. Based ONLY on the following
-real recent news headlines about {name} ({symbol}), score the current market
-sentiment.
-
-Headlines:
-{headline_block}
-
-Return ONLY a single number between -1 (very bearish) and 1 (very bullish).
-No explanation, just the number.
-"""
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=10,
-                temperature=0.2,
-            )
-            # Defensive parse of Groq OpenAI-compatible response
-            if not hasattr(response, 'choices') or not response.choices or len(response.choices) == 0:
-                logger.warning(f"[LLM] Empty choices in response for {symbol}. Using keyword fallback.")
-                return NewsFetcher.keyword_fallback_score(headlines)
-            
-            choice = response.choices[0]
-            if not hasattr(choice, 'message') or choice.message is None:
-                logger.warning(f"[LLM] No message in choice[0] for {symbol}. Using keyword fallback.")
-                return NewsFetcher.keyword_fallback_score(headlines)
-            
-            # CRITICAL FIX: Log finish_reason to diagnose why content might be empty
-            finish_reason = getattr(choice, 'finish_reason', 'unknown')
-            logger.info(f"[LLM] Response for {symbol}: finish_reason={finish_reason}")
-            
-            content = getattr(choice.message, 'content', None) or ""
-            if not content.strip():
-                # CRITICAL FIX: Log at ERROR level when content is empty
-                logger.error(f"[LLM] Empty content in response for {symbol}. finish_reason={finish_reason}. Raw preview: '{content[:120]}'")
-                # CRITICAL FIX: When LLM returns empty content, default to NEUTRAL (0.0)
-                # Do NOT use keyword fallback on headlines - that gave false 1.0 scores
-                return 0.0
-            
-            sentiment_text = content.strip()
-            logger.info(f"[LLM] Raw response for {symbol}: '{sentiment_text[:120]}'")
-            
-            # Robust extraction: try JSON first, then plain number, then regex search
-            sentiment = None
-            # Try JSON parse
-            if sentiment_text.startswith('{'):
-                try:
-                    import json
-                    data = json.loads(sentiment_text)
-                    if 'score' in data:
-                        sentiment = float(data['score'])
-                    elif 'sentiment' in data:
-                        sentiment = float(data['sentiment'])
-                except (json.JSONDecodeError, ValueError, KeyError):
-                    pass
-            
-            # Try plain float parse
-            if sentiment is None:
-                try:
-                    sentiment = float(sentiment_text.split()[0])
-                except (ValueError, IndexError):
-                    # Try regex to find any number in text
-                    import re
-                    match = re.search(r'[-+]?\d*\.?\d+', sentiment_text)
-                    if match:
-                        sentiment = float(match.group())
-                    else:
-                        logger.warning(f"[LLM] Could not parse number from '{sentiment_text}'. Using keyword fallback.")
-                        return NewsFetcher.keyword_fallback_score(headlines)
-            
-            sentiment = float(np.clip(sentiment, -1, 1))
-            logger.info(f"[LLM] Real sentiment for {symbol}: {sentiment:.3f} (from {len(headlines)} headlines)")
-            return sentiment
-        except Exception as e:
-            # Fallback chain: if primary model 404s, try secondary model
-            error_str = str(e).lower()
-            if "does not exist" in error_str or "404" in error_str:
-                fallback_model = os.environ.get("GROQ_MODEL_FALLBACK", "qwen/qwen3.6-27b")
-                logger.warning(f"Primary model '{self.model}' not found (404). Trying fallback: {fallback_model}")
-                try:
-                    response = self.client.chat.completions.create(
-                        model=fallback_model,
-                        messages=[{"role": "user", "content": prompt}],
-                        max_tokens=10,
-                        temperature=0.2,
-                    )
-                    # Same defensive parse for fallback
-                    if not hasattr(response, 'choices') or not response.choices or len(response.choices) == 0:
-                        logger.warning(f"[LLM fallback] Empty choices for {symbol}. Using keyword fallback.")
-                        return NewsFetcher.keyword_fallback_score(headlines)
-                    
-                    choice = response.choices[0]
-                    if not hasattr(choice, 'message') or choice.message is None:
-                        logger.warning(f"[LLM fallback] No message for {symbol}. Using keyword fallback.")
-                        return NewsFetcher.keyword_fallback_score(headlines)
-                    
-                    content = getattr(choice.message, 'content', None) or ""
-                    if not content.strip():
-                        logger.warning(f"[LLM fallback] Empty content for {symbol}. Using NEUTRAL (0.0).")
-                        # CRITICAL FIX: When LLM returns empty content, default to NEUTRAL (0.0)
-                        return 0.0
-                    
-                    sentiment_text = content.strip()
-                    
-                    # Robust extraction for fallback too
-                    sentiment = None
-                    if sentiment_text.startswith('{'):
-                        try:
-                            import json
-                            data = json.loads(sentiment_text)
-                            if 'score' in data:
-                                sentiment = float(data['score'])
-                        except (json.JSONDecodeError, ValueError, KeyError):
-                            pass
-                    
-                    if sentiment is None:
-                        try:
-                            sentiment = float(sentiment_text.split()[0])
-                        except (ValueError, IndexError):
-                            import re
-                            match = re.search(r'[-+]?\d*\.?\d+', sentiment_text)
-                            if match:
-                                sentiment = float(match.group())
-                            else:
-                                return NewsFetcher.keyword_fallback_score(headlines)
-                    
-                    sentiment = float(np.clip(sentiment, -1, 1))
-                    logger.info(f"[LLM fallback={fallback_model}] Real sentiment for {symbol}: {sentiment:.3f}")
-                    return sentiment
-                except Exception as e2:
-                    logger.error(f"Fallback model '{fallback_model}' also failed: {e2}. Using keyword fallback.")
-            else:
-                logger.error(f"LLM sentiment call failed for {symbol}: {e}. Using keyword fallback.")
-            return NewsFetcher.keyword_fallback_score(headlines)
-
-    # ------------------------------------------------------------------
-    # Self-improving confidence tracking
-    # ------------------------------------------------------------------
-    def record_outcome(self, symbol: str, predicted_sentiment: float, realized_return: float):
-        """
-        Feed back what actually happened after a view was made, so future
-        confidence in this symbol's views can adapt. Call this once you
-        know the realized return for the period the view covered.
-        """
-        pred_dir = np.sign(predicted_sentiment)
-        real_dir = np.sign(realized_return)
-        correct = 1.0 if pred_dir == real_dir and pred_dir != 0 else 0.0
-        self._track_record.setdefault(symbol, deque(maxlen=self._track_record_len)).append(correct)
-
-    def get_symbol_confidence(self, symbol: str, base_confidence: float = 0.05) -> float:
-        """
-        Self-adjusting uncertainty (lower = more confident) per symbol,
-        based on recent hit-rate of the AI's directional calls.
-        No track record yet -> use base_confidence (neutral prior).
-        """
-        record = self._track_record.get(symbol)
-        if not record or len(record) < 5:
-            return base_confidence
-        hit_rate = float(np.mean(record))
-        # hit_rate 0.5 (coin-flip) -> confidence unchanged
-        # hit_rate 1.0 -> confidence tightened (lower omega, trust the view more)
-        # hit_rate 0.0 -> confidence loosened a lot (don't trust the view)
-        adjustment = 1.0 + (0.5 - hit_rate) * 2.0  # ranges roughly [0, 2]
-        adjustment = float(np.clip(adjustment, 0.2, 3.0))
-        return base_confidence * adjustment
-
-    # ------------------------------------------------------------------
-    # Dual-signal sentiment generation (Phase 5)
-    # ------------------------------------------------------------------
-    def generate_per_asset_news_sentiment(self, symbols: List[str], headlines_map: Dict[str, List[str]]) -> Dict[str, float]:
-        """
-        Generate per-asset news sentiment scores from LLM analysis of headlines.
-        This is used ONLY for Black-Litterman views.
-        
-        Returns dict mapping symbol -> sentiment score in [-1, 1]
-        """
-        logger.info(f"[Phase 5] Generating per_asset_news_sentiment for {len(symbols)} symbols")
-        sentiment_scores = {}
-        
-        for symbol in symbols:
-            base_symbol = self._normalize_symbol(symbol)
-            headlines = headlines_map.get(base_symbol, [])
-            
-            if not headlines:
-                logger.info(f"No headlines found for {symbol}, setting neutral per_asset_news_sentiment")
-                sentiment_scores[symbol] = 0.0
-                continue
-            
-            # Cap max headlines to avoid LLM context overflow and rate limits
-            capped_headlines = headlines[:8]
-            
-            if not self.api_key or self.client is None:
-                # Use keyword fallback on LLM failure
-                score = NewsFetcher.keyword_fallback_score(capped_headlines)
-                logger.info(f"[fallback keyword score] {symbol}: {score:.3f}")
-            else:
-                score = self.generate_real_sentiment(symbol, capped_headlines)
-            
-            # Clip to [-1, 1] range (required by Phase 5)
-            score = float(np.clip(score, -1.0, 1.0))
-            sentiment_scores[symbol] = score
-            logger.info(f"per_asset_news_sentiment[{symbol}] = {score:.3f} (from {len(capped_headlines)} headlines)")
-        
-        return sentiment_scores
     
-    def generate_market_tone_score(self, per_asset_sentiments: Dict[str, float]) -> float:
+    def __init__(self, api_key: Optional[str] = None, model: str = "llama-3.1-70b-versatile"):
         """
-        Generate market-wide tone score from per-asset sentiments.
-        This is used ONLY for strategy weight multipliers.
-        
-        Market tone = mean of available per-asset sentiment scores
-        Named distinctly to avoid confusion with per_asset_news_sentiment
-        """
-        if not per_asset_sentiments:
-            logger.info("No per-asset sentiments available, market_tone_score = 0.0 (neutral)")
-            return 0.0
-        
-        # Simple average of all available asset sentiments
-        scores = list(per_asset_sentiments.values())
-        market_tone = float(np.mean(scores))
-        
-        # Clip to [-1, 1] range
-        market_tone = float(np.clip(market_tone, -1.0, 1.0))
-        
-        logger.info(f"market_tone_score = {market_tone:.3f} (mean of {len(scores)} asset sentiments)")
-        return market_tone
-
-    def generate_views(self, prices: pd.DataFrame, expected_returns: np.ndarray,
-                        symbols: List[str], per_asset_sentiment: Dict[str, float] = None) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Generate Black-Litterman views with Q magnitude capping (Phase 5 requirement).
+        Initialize the sentiment analyzer.
         
         Args:
-            prices: Price data
-            expected_returns: Base expected returns
-            symbols: Asset symbols
-            per_asset_sentiment: Optional dict of sentiment scores from generate_per_asset_news_sentiment
+            api_key: Groq API key (can also be set via GROQ_API_KEY env var)
+            model: Groq model to use (default: llama-3.1-70b-versatile)
+        """
+        self.api_key = api_key
+        self.model = model
+        self.client = self._initialize_client()
+        
+    def _initialize_client(self):
+        """Initialize Groq client."""
+        try:
+            from groq import Groq
+            return Groq(api_key=self.api_key)
+        except ImportError:
+            logger.warning("Groq library not installed. Install with: pip install groq")
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to initialize Groq client: {e}")
+            return None
+    
+    def analyze_sentiment(
+        self,
+        asset: str,
+        price_data: pd.Series,
+        news_headlines: Optional[List[str]] = None,
+        social_sentiment: Optional[float] = None
+    ) -> Dict:
+        """
+        Analyze sentiment for a single asset.
+        
+        Args:
+            asset: Asset symbol (e.g., 'BTC', 'ETH')
+            price_data: Series of recent prices
+            news_headlines: Optional list of news headlines
+            social_sentiment: Optional pre-computed social sentiment score
+            
+        Returns:
+            Dictionary with sentiment score, confidence, and view
+        """
+        # Calculate technical indicators for context
+        momentum_7d = self._calculate_momentum(price_data, 7)
+        momentum_21d = self._calculate_momentum(price_data, 21)
+        rsi = self._calculate_rsi(price_data)
+        volatility = price_data.pct_change().std()
+        
+        # Build prompt with strict JSON output requirement
+        prompt = self._build_prompt(asset, momentum_7d, momentum_21d, rsi, 
+                                   volatility, news_headlines, social_sentiment)
+        
+        # Try LLM analysis first
+        llm_response = None
+        if self.client is not None:
+            try:
+                llm_response = self._call_llm(prompt)
+                sentiment_data = self._parse_llm_response(llm_response)
+                
+                if sentiment_data is not None and self._validate_sentiment_data(sentiment_data):
+                    logger.info(f"{asset}: LLM sentiment parsed successfully: {sentiment_data}")
+                    return sentiment_data
+                    
+            except Exception as e:
+                logger.warning(f"{asset}: LLM call failed: {e}. Using fallback.")
+        
+        # Log raw response for debugging
+        if llm_response:
+            logger.warning(f"{asset}: Raw LLM response (fallback triggered): {llm_response[:500]}...")
+        
+        # Use rule-based fallback
+        fallback_sentiment = self._rule_based_fallback(asset, momentum_7d, momentum_21d, rsi, volatility)
+        logger.info(f"{asset}: Using rule-based fallback sentiment: {fallback_sentiment}")
+        
+        return fallback_sentiment
+    
+    def _build_prompt(
+        self,
+        asset: str,
+        momentum_7d: float,
+        momentum_21d: float,
+        rsi: float,
+        volatility: float,
+        news_headlines: Optional[List[str]],
+        social_sentiment: Optional[float]
+    ) -> str:
+        """
+        Build a strict prompt that enforces JSON output format.
         
         Returns:
-            P (pick matrix), Q (view vector) with capped magnitudes
+            Prompt string for LLM
         """
-        logger.info(f"Generating Black-Litterman views (mode={'MOCK' if self.use_mock else 'REAL news+LLM'})")
+        news_context = ""
+        if news_headlines:
+            news_context = f"\nRecent News Headlines:\n" + "\n".join([f"- {h}" for h in news_headlines[:5]])
         
-        # Use provided sentiment or fall back to legacy method
-        if per_asset_sentiment is None:
-            # Legacy path - use mock sentiment from prices
-            sentiment = self.generate_mock_sentiment(prices)
-            latest_sentiment = sentiment.iloc[-1].values
-            n_assets = len(symbols)
-            P = np.eye(n_assets)
-            confidence = 0.5
-            latest_sentiment = np.nan_to_num(latest_sentiment, nan=0.0)
-            Q = latest_sentiment * confidence * np.abs(expected_returns)
-        else:
-            # Phase 5 dual-signal path: use per_asset_news_sentiment for BL views
-            n_assets = len(symbols)
-            P = np.eye(n_assets)
-            
-            # Build Q vector from sentiment scores
-            Q = np.zeros(n_assets)
-            matched_symbols = []
-            unmatched_symbols = []
-            
-            for i, sym in enumerate(symbols):
-                # FIX B: Normalize symbol key to match per_asset_sentiment dict keys
-                normalized_sym = self._normalize_symbol(sym)
-                
-                # Try direct lookup first, then normalized lookup
-                sentiment = per_asset_sentiment.get(sym, None)
-                if sentiment is None:
-                    # Try normalized key
-                    for key in per_asset_sentiment.keys():
-                        if self._normalize_symbol(key) == normalized_sym:
-                            sentiment = per_asset_sentiment[key]
-                            matched_symbols.append(f"{sym}<-{key}")
-                            break
-                
-                if sentiment is None:
-                    sentiment = 0.0
-                    unmatched_symbols.append(sym)
-                
-                # Scale by expected return magnitude but apply hard cap (Phase 5 requirement)
-                base_view_magnitude = np.abs(expected_returns[i]) if i < len(expected_returns) else 0.001
-                Q[i] = sentiment * base_view_magnitude
-            
-            # Log matched vs unmatched symbols for debugging
-            if matched_symbols:
-                logger.info(f"BL views: matched {len(matched_symbols)} symbols: {matched_symbols}")
-            if unmatched_symbols:
-                logger.warning(f"BL views: {len(unmatched_symbols)} unmatched symbols: {unmatched_symbols}")
-            
-            # PHASE 5 REQUIREMENT: Cap Q magnitudes to prevent explosion vs prior
-            # Limit view magnitudes to reasonable bounds (±10% annual max)
-            Q_CAP = 0.10  # Hard cap on view magnitude
-            Q = np.clip(Q, -Q_CAP, Q_CAP)
-            
-            logger.info(f"Generated {n_assets} views with Q magnitude cap={Q_CAP}. Q={Q}")
+        social_context = ""
+        if social_sentiment is not None:
+            social_context = f"\nSocial Media Sentiment Score: {social_sentiment:.2f} (-1 to 1)"
         
-        return P, Q
+        prompt = f"""You are a cryptocurrency market analyst. Analyze {asset} and provide a sentiment score.
 
+Technical Indicators:
+- 7-day momentum: {momentum_7d:.2%}
+- 21-day momentum: {momentum_21d:.2%}
+- RSI (14-day): {rsi:.1f}
+- Daily volatility: {volatility:.2%}
+{news_context}{social_context}
 
-    def get_confidence_matrix(self, n_assets: int, symbols: List[str] = None,
-                               base_confidence: float = 0.05) -> np.ndarray:
+Provide your analysis as a JSON object with this EXACT structure. NO other text allowed:
+{{
+    "sentiment_score": <float between -1 and 1, where 1 is very bullish, -1 is very bearish>,
+    "confidence": <float between 0 and 1>,
+    "view_return": <float representing expected return over next period, e.g., 0.05 for 5%>,
+    "reasoning": "<brief explanation>"
+}}
+
+Rules:
+1. Output ONLY valid JSON, no markdown, no code blocks, no explanations outside JSON
+2. sentiment_score must be between -1 and 1
+3. confidence must be between 0 and 1
+4. view_return should be realistic (typically between -0.3 and 0.3 for crypto)
+5. Base your analysis on the technical indicators provided
+
+Your response:"""
+        
+        return prompt
+    
+    def _call_llm(self, prompt: str, max_retries: int = 2) -> Optional[str]:
         """
-        Uncertainty matrix (Omega) for Black-Litterman views.
-        If symbols are given, uses the self-adjusting per-symbol confidence
-        from record_outcome(); otherwise uses a flat base_confidence.
+        Call the LLM with retry logic.
+        
+        Args:
+            prompt: The prompt to send
+            max_retries: Maximum retry attempts
+            
+        Returns:
+            Raw LLM response string or None
         """
-        if symbols is not None and len(symbols) == n_assets:
-            diag = [self.get_symbol_confidence(s, base_confidence) for s in symbols]
+        for attempt in range(max_retries + 1):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a helpful assistant that outputs ONLY valid JSON. No markdown, no code blocks."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    temperature=0.3,
+                    max_tokens=500,
+                    timeout=30
+                )
+                
+                if response and response.choices and len(response.choices) > 0:
+                    return response.choices[0].message.content.strip()
+                    
+            except Exception as e:
+                if attempt < max_retries:
+                    wait_time = 2 ** attempt
+                    logger.warning(f"LLM call attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s...")
+                    import time
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"LLM call failed after {max_retries + 1} attempts: {e}")
+                    raise
+        
+        return None
+    
+    def _parse_llm_response(self, response: str) -> Optional[Dict]:
+        """
+        Parse LLM response with robust JSON extraction using regex.
+        
+        Args:
+            response: Raw LLM response string
+            
+        Returns:
+            Parsed dictionary or None if parsing fails
+        """
+        if not response:
+            logger.warning("Empty LLM response")
+            return None
+        
+        # Try direct JSON parsing first
+        try:
+            data = json.loads(response)
+            return data
+        except json.JSONDecodeError:
+            pass
+        
+        # Try extracting JSON from markdown code blocks
+        json_block_pattern = r'```(?:json)?\s*({.*?})\s*```'
+        match = re.search(json_block_pattern, response, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(1))
+                return data
+            except json.JSONDecodeError:
+                pass
+        
+        # Try finding any JSON object in the response using regex
+        json_object_pattern = r'\{[^{}]*"sentiment_score"[^{}]*\}'
+        match = re.search(json_object_pattern, response, re.IGNORECASE | re.DOTALL)
+        if match:
+            try:
+                # Clean up the matched string
+                json_str = match.group(0)
+                # Remove any trailing commas before closing braces
+                json_str = re.sub(r',\s*}', '}', json_str)
+                data = json.loads(json_str)
+                return data
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse extracted JSON: {e}")
+        
+        # Last resort: try to extract numeric values using patterns
+        logger.info(f"Attempting pattern-based extraction from: {response[:200]}")
+        
+        sentiment_match = re.search(r'sentiment_score["\s:]+(-?[0-9.]+)', response, re.IGNORECASE)
+        confidence_match = re.search(r'confidence["\s:]+([0-9.]+)', response, re.IGNORECASE)
+        view_match = re.search(r'view_return["\s:]+(-?[0-9.]+)', response, re.IGNORECASE)
+        
+        if sentiment_match:
+            return {
+                'sentiment_score': float(sentiment_match.group(1)),
+                'confidence': float(confidence_match.group(1)) if confidence_match else 0.5,
+                'view_return': float(view_match.group(1)) if view_match else 0.0,
+                'reasoning': 'Pattern-extracted partial response'
+            }
+        
+        logger.warning(f"Could not parse any valid data from LLM response: {response[:300]}")
+        return None
+    
+    def _validate_sentiment_data(self, data: Dict) -> bool:
+        """
+        Validate that the parsed sentiment data has required fields and valid ranges.
+        
+        Args:
+            data: Parsed sentiment data dictionary
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        required_fields = ['sentiment_score', 'confidence', 'view_return']
+        
+        for field in required_fields:
+            if field not in data:
+                logger.warning(f"Missing required field: {field}")
+                return False
+        
+        # Validate ranges
+        if not (-1 <= data['sentiment_score'] <= 1):
+            logger.warning(f"sentiment_score out of range: {data['sentiment_score']}")
+            return False
+        
+        if not (0 <= data['confidence'] <= 1):
+            logger.warning(f"confidence out of range: {data['confidence']}")
+            return False
+        
+        # Check for zero/empty view_return (the original bug)
+        if data.get('view_return', 0) == 0:
+            logger.info("view_return is 0, but data structure is valid")
+        
+        return True
+    
+    def _rule_based_fallback(
+        self,
+        asset: str,
+        momentum_7d: float,
+        momentum_21d: float,
+        rsi: float,
+        volatility: float
+    ) -> Dict:
+        """
+        Rule-based sentiment calculation as fallback when LLM fails.
+        Uses recent price momentum to generate non-zero views for Black-Litterman.
+        
+        Args:
+            asset: Asset symbol
+            momentum_7d: 7-day price momentum
+            momentum_21d: 21-day price momentum
+            rsi: Relative Strength Index
+            volatility: Price volatility
+            
+        Returns:
+            Dictionary with sentiment data
+        """
+        # Combine momentum signals with weights
+        # Recent momentum gets higher weight
+        momentum_signal = 0.6 * momentum_7d + 0.4 * momentum_21d
+        
+        # RSI signal (overbought > 70, oversold < 30)
+        if rsi > 70:
+            rsi_signal = -0.3  # Overbought, expect pullback
+        elif rsi < 30:
+            rsi_signal = 0.3  # Oversold, expect bounce
         else:
-            diag = [base_confidence] * n_assets
-        return np.diag(diag)
+            rsi_signal = 0.0
+        
+        # Volatility adjustment (high vol = lower confidence)
+        vol_adjustment = min(1.0, 0.05 / (volatility + 0.01))
+        
+        # Combined sentiment score
+        sentiment_score = np.clip(momentum_signal + rsi_signal, -1, 1)
+        
+        # View return based on momentum (capped to realistic values)
+        view_return = np.clip(momentum_signal * 2, -0.3, 0.3)
+        
+        # Confidence based on signal agreement and volatility
+        signal_agreement = 1.0 if (momentum_7d * momentum_21d > 0) else 0.5
+        confidence = np.clip(signal_agreement * vol_adjustment, 0.2, 0.8)
+        
+        reasoning = (
+            f"Rule-based fallback: 7d mom={momentum_7d:.2%}, 21d mom={momentum_21d:.2%}, "
+            f"RSI={rsi:.1f}, vol={volatility:.2%}"
+        )
+        
+        logger.info(f"{asset}: {reasoning} -> sentiment={sentiment_score:.3f}, view={view_return:.3f}")
+        
+        return {
+            'sentiment_score': float(sentiment_score),
+            'confidence': float(confidence),
+            'view_return': float(view_return),
+            'reasoning': reasoning
+        }
+    
+    def _calculate_momentum(self, prices: pd.Series, period: int) -> float:
+        """Calculate price momentum over a period."""
+        if len(prices) < period:
+            return 0.0
+        return (prices.iloc[-1] / prices.iloc[-period] - 1)
+    
+    def _calculate_rsi(self, prices: pd.Series, period: int = 14) -> float:
+        """Calculate Relative Strength Index."""
+        if len(prices) < period + 1:
+            return 50.0  # Neutral
+        
+        delta = prices.diff()
+        gain = delta.where(delta > 0, 0).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        
+        rs = gain / (loss + 1e-10)
+        rsi = 100 - (100 / (1 + rs))
+        
+        return float(rsi.iloc[-1])
+    
+    def generate_views_for_portfolio(
+        self,
+        prices: pd.DataFrame,
+        assets: List[str],
+        news_data: Optional[Dict[str, List[str]]] = None,
+        max_views: int = 5,
+        q_magnitude_cap: float = 0.1
+    ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+        """
+        Generate view vectors for Black-Litterman model across portfolio assets.
+        
+        Args:
+            prices: DataFrame of asset prices
+            assets: List of asset symbols to analyze
+            news_data: Optional dict mapping assets to news headlines
+            max_views: Maximum number of views to generate
+            q_magnitude_cap: Cap on view magnitude
+            
+        Returns:
+            Tuple of (Q vector, P matrix indices, asset names for views)
+        """
+        views = []
+        confidences = []
+        view_assets = []
+        
+        for asset in assets:
+            if asset not in prices.columns:
+                continue
+                
+            price_data = prices[asset]
+            news = news_data.get(asset, []) if news_data else None
+            
+            result = self.analyze_sentiment(asset, price_data, news_headlines=news)
+            
+            view_return = result.get('view_return', 0.0)
+            confidence = result.get('confidence', 0.5)
+            
+            # Only include views with meaningful magnitude
+            if abs(view_return) > 0.01:  # At least 1% expected move
+                # Cap the magnitude
+                view_return = np.clip(view_return, -q_magnitude_cap, q_magnitude_cap)
+                
+                views.append(view_return)
+                confidences.append(confidence)
+                view_assets.append(asset)
+                
+                logger.info(f"{asset}: view_return={view_return:.4f}, confidence={confidence:.3f}")
+        
+        # Limit to max_views, prioritizing by confidence
+        if len(views) > max_views:
+            sorted_indices = np.argsort(confidences)[::-1][:max_views]
+            views = [views[i] for i in sorted_indices]
+            confidences = [confidences[i] for i in sorted_indices]
+            view_assets = [view_assets[i] for i in sorted_indices]
+        
+        Q = np.array(views) if views else np.zeros(min(max_views, len(assets)))
+        P_indices = np.arange(len(Q))  # Identity view matrix (each view on one asset)
+        
+        logger.info(f"Generated {len(Q)} views with Q magnitude cap={q_magnitude_cap}. Q={Q}")
+        
+        return Q, P_indices, view_assets
+    
+    def close(self):
+        """Clean up resources."""
+        self.client = None
 
 
-def main():
-    """Test sentiment analyzer (mock mode works offline)."""
-    np.random.seed(42)
-    dates = pd.date_range("2024-01-01", periods=200, freq="h")
-    prices = pd.DataFrame(
-        np.random.randn(200, 5).cumsum() + 100,
-        index=dates, columns=["BTC", "ETH", "SOL", "BNB", "XRP"],
-    )
-
-    analyzer = AISentimentAnalyzer()  # auto-detects mock vs real
-    sentiment = analyzer.generate_mock_sentiment(prices)
-    print("Latest mock sentiment:\n", sentiment.iloc[-1])
-
-    expected_returns = np.array([0.001] * 5)
-    symbols = ["BTC", "ETH", "SOL", "BNB", "XRP"]
-    P, Q = analyzer.generate_views(prices, expected_returns, symbols)
-    print("\nP shape:", P.shape, "Q:", Q)
-
-    # demo self-adjusting confidence
-    analyzer.record_outcome("BTC", predicted_sentiment=0.5, realized_return=0.02)
-    analyzer.record_outcome("BTC", predicted_sentiment=0.3, realized_return=-0.01)
-    print("\nBTC confidence after 2 outcomes:", analyzer.get_symbol_confidence("BTC"))
+def get_sentiment_views(
+    prices: pd.DataFrame,
+    assets: List[str],
+    api_key: Optional[str] = None,
+    max_views: int = 5,
+    q_cap: float = 0.1
+) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    """
+    Convenience function to get sentiment views for a portfolio.
+    
+    Args:
+        prices: DataFrame of asset prices
+        assets: List of asset symbols
+        api_key: Groq API key
+        max_views: Maximum views to generate
+        q_cap: Cap on view magnitude
+        
+    Returns:
+        Tuple of (Q vector, P indices, view assets)
+    """
+    analyzer = AISentimentAnalyzer(api_key=api_key)
+    try:
+        return analyzer.generate_views_for_portfolio(prices, assets, max_views=max_views, q_magnitude_cap=q_cap)
+    finally:
+        analyzer.close()
 
 
 if __name__ == "__main__":
-    main()
+    # Example usage with mock data
+    np.random.seed(42)
+    
+    # Create sample price data
+    dates = pd.date_range('2024-01-01', periods=60, freq='D')
+    assets = ['BTC', 'ETH', 'SOL', 'ADA', 'DOT']
+    
+    prices = pd.DataFrame(
+        np.random.randn(60, 5).cumsum() + 100,
+        index=dates,
+        columns=assets
+    )
+    
+    print("\n=== Testing AI Sentiment Analyzer ===")
+    
+    # Test with mock API (will use fallback)
+    analyzer = AISentimentAnalyzer(api_key="mock_key")
+    
+    for asset in assets[:3]:
+        result = analyzer.analyze_sentiment(asset, prices[asset])
+        print(f"\n{asset}:")
+        print(f"  Sentiment: {result['sentiment_score']:.3f}")
+        print(f"  Confidence: {result['confidence']:.3f}")
+        print(f"  View Return: {result['view_return']:.3f}")
+        print(f"  Reasoning: {result['reasoning']}")
+    
+    print("\n=== Testing Portfolio Views Generation ===")
+    Q, P_idx, view_assets = analyzer.generate_views_for_portfolio(
+        prices, assets, max_views=5, q_magnitude_cap=0.1
+    )
+    
+    print(f"Q vector: {Q}")
+    print(f"View assets: {view_assets}")
+    
+    analyzer.close()

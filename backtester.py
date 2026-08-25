@@ -1,646 +1,560 @@
 """
-Backtester Module (v2)
-------------------------
-Event-driven backtester with weekly rebalancing, realistic transaction
-costs, a drawdown circuit breaker, and (new) walk-forward evaluation with
-automatic, self-correcting strategy selection.
-
-Key fixes vs. v1:
-1. `monthly_return` used to be a CAGR-style extrapolation from the WHOLE
-   test period ((final/initial)**(1/months) - 1), which is misleading,
-   especially over a short ~3 month test window. It is now computed as
-   the actual distribution of realized calendar-month returns (mean and
-   worst-month are both reported).
-2. Single 75/25 train/test split replaced with proper walk-forward
-   (rolling-origin) folds, so performance isn't judged on one lucky/unlucky
-   3-month window.
-3. Added a drawdown circuit breaker: if the portfolio's drawdown breaches
-   a threshold, exposure is automatically cut (moved toward cash-equivalent
-   equal-weight-small) until it recovers -- a basic but real risk control,
-   since none existed before beyond the (buggy) CVaR constraint at
-   optimization time.
-4. Optional integration with StrategySelector for automatic, adaptive
-   strategy choice at every rebalance instead of a fixed method.
+Backtester Module for Cryptocurrency Algorithmic Trading
+Implements Walk-Forward Backtesting with No-Trade Zone to reduce transaction costs.
 """
 
 import numpy as np
 import pandas as pd
-from typing import Callable, Dict, List, Optional
-from datetime import timedelta
+from typing import Dict, List, Optional, Tuple
 import logging
-
-from strategy_selector import StrategySelector, detect_regime, compute_in_sample_scores
-from utils.timeframe import detect_frequency
-from performance.attribution import AttributionEngine
-from models.transaction_cost import TransactionCostModel, CostBreakdown
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class Backtester:
-    """Event-driven portfolio backtester with walk-forward evaluation and risk controls."""
-
-    def __init__(self, initial_capital: float = 100000,
-                 transaction_cost: float = 0.001,
-                 slippage: float = 0.0005,
-                 max_drawdown_circuit_breaker: float = 0.12,
-                 circuit_breaker_derisk_factor: float = 0.4,
-                 rebalance_frequency_weeks: int = 2,
-                 cost_model: TransactionCostModel = None,
-                 min_liquidity_usd: float = 1_000_000,
-                 max_position_pct_of_adv: float = 0.10,
-                 max_volume_participation: float = 0.20):
+    """
+    Walk-forward backtester with realistic transaction cost modeling.
+    Implements No-Trade Zone to minimize unnecessary rebalancing.
+    """
+    
+    def __init__(
+        self,
+        initial_capital: float = 100000.0,
+        transaction_cost_bps: float = 10.0,  # 10 basis points = 0.1%
+        no_trade_threshold: float = 0.03,  # 3% weight change threshold
+        slippage_bps: float = 5.0  # Additional slippage cost
+    ):
         """
+        Initialize the backtester.
+        
         Args:
-            max_drawdown_circuit_breaker: drawdown level (e.g. 0.12 = 12%)
-                at which the portfolio automatically de-risks.
-            circuit_breaker_derisk_factor: fraction of the normal weights
-                kept when de-risked (rest effectively sits in cash, i.e.
-                not reinvested that period). 0.4 = 40% exposure.
-            rebalance_frequency_weeks: how often to rebalance (default: every 2 weeks)
-                FIX: Reduced from weekly to bi-weekly to lower transaction costs
-            cost_model: TransactionCostModel instance for realistic cost calculation
-                       If None, uses default model with maker/taker fees
-            min_liquidity_usd: Minimum acceptable daily volume for trading (default $1M)
-            max_position_pct_of_adv: Max position as % of ADV (default 10%)
-            max_volume_participation: Max order as % of daily volume (default 20%)
+            initial_capital: Starting capital in USD
+            transaction_cost_bps: Transaction cost in basis points (default: 10 bps = 0.1%)
+            no_trade_threshold: Minimum weight change to trigger rebalancing (default: 3%)
+            slippage_bps: Slippage cost in basis points (default: 5 bps)
         """
         self.initial_capital = initial_capital
-        self.transaction_cost = transaction_cost
-        self.slippage = slippage
-        self.total_cost_rate = transaction_cost + slippage
-        self.max_dd_breaker = max_drawdown_circuit_breaker
-        self.derisk_factor = circuit_breaker_derisk_factor
-        self.rebalance_freq = f'{rebalance_frequency_weeks}W'
+        self.transaction_cost_bps = transaction_cost_bps
+        self.no_trade_threshold = no_trade_threshold
+        self.slippage_bps = slippage_bps
         
-        # Initialize TransactionCostModel for Phase 10
-        self.cost_model = cost_model if cost_model is not None else TransactionCostModel(
-            config={
-                'fee_maker': 0.0004,  # 0.04%
-                'fee_taker': 0.0010,  # 0.10%
-                'default_spread': 0.0005,  # 0.05%
-                'base_slippage': 0.0005,
-                'market_impact_factor': 0.01,
-                'min_liquidity': min_liquidity_usd,
-            }
-        )
+        self.total_transaction_costs = 0.0
+        self.rebalance_count = 0
+        self.skipped_rebalances = 0
         
-        # Liquidity constraints
-        self.min_liquidity_usd = min_liquidity_usd
-        self.max_position_pct_of_adv = max_position_pct_of_adv
-        self.max_volume_participation = max_volume_participation
-        
-        # Initialize dictionary to track realized performance of each strategy for adaptive learning
-        self.strategy_realized_performance = {}
-        # Initialize attribution engine for Phase 8
-        self.attribution_engine = AttributionEngine(risk_free_rate=0.0)
-        logger.info(f"Initialized backtester with ${initial_capital:,}, "
-                    f"circuit breaker at {max_drawdown_circuit_breaker:.0%} drawdown, "
-                    f"rebalancing every {rebalance_frequency_weeks} weeks")
-
-    # ------------------------------------------------------------------
-    def run_single_fold(self, prices: pd.DataFrame, test_prices: pd.DataFrame,
-                         n_train: int, weights_strategy: Callable,
-                         rebalance_freq: str = None, lookback_hours: int = 168,
-                         strategy_selector: Optional[StrategySelector] = None,
-                         strategy_fns: Optional[Dict[str, Callable]] = None,
-                         use_blend: bool = False) -> Dict:
-        """Run one walk-forward fold (one train window -> one test window).
+    def run_backtest(
+        self,
+        prices: pd.DataFrame,
+        weights_func,
+        start_date: Optional[pd.Timestamp] = None,
+        end_date: Optional[pd.Timestamp] = None,
+        rebalance_frequency: str = 'W',  # Weekly rebalancing
+        **kwargs
+    ) -> Dict:
+        """
+        Run walk-forward backtest with periodic rebalancing.
         
         Args:
-            use_blend: If True, use StrategySelector.blend() for ensemble weighting.
-                      If False, use legacy StrategySelector.select() for winner-take-all.
+            prices: DataFrame of asset prices (DatetimeIndex)
+            weights_func: Function that returns target weights given historical prices
+            start_date: Start date for backtest
+            end_date: End date for backtest
+            rebalance_frequency: Pandas frequency string for rebalancing ('D', 'W', 'M')
+            **kwargs: Additional arguments passed to weights_func
+            
+        Returns:
+            Dictionary with backtest results
         """
+        if start_date is None:
+            start_date = prices.index[0]
+        if end_date is None:
+            end_date = prices.index[-1]
+        
+        # Filter prices to backtest period
+        prices = prices[(prices.index >= start_date) & (prices.index <= end_date)]
+        
+        # Initialize tracking variables
         capital = self.initial_capital
-        peak_capital = capital
-        n_assets = len(prices.columns)
-        weights = np.ones(n_assets) / n_assets
-
+        positions = {}  # asset -> shares held
+        current_weights = {}  # asset -> weight
+        assets = prices.columns.tolist()
+        
+        # Initialize with equal weights
+        for asset in assets:
+            current_weights[asset] = 1.0 / len(assets)
+            positions[asset] = 0.0
+        
+        # Generate rebalance dates
+        rebalance_dates = pd.date_range(start=start_date, end=end_date, freq=rebalance_frequency)
+        
+        # Tracking lists
         portfolio_values = []
-        rebalance_events = []
         daily_returns = []
-        chosen_strategy_log = []
-
-        # Pre-compute per-asset returns for the entire test period (for hypothetical performance calculation later)
-        # This is needed to correctly calculate what each strategy would have earned if used alone
-        test_asset_returns = test_prices.pct_change().dropna()
-
-        # Use instance rebalance_freq if not provided
-        if rebalance_freq is None:
-            rebalance_freq = self.rebalance_freq
+        turnover_history = []
+        cost_history = []
         
-        rebalance_dates = test_prices.resample(rebalance_freq).first().index
-        next_rebalance = rebalance_dates[0] if len(rebalance_dates) > 0 else test_prices.index[0]
-        current_method_name = None
-
-        for i, (timestamp, row) in enumerate(test_prices.iterrows()):
-            if timestamp >= next_rebalance and i > 0:
-                lookback_start = max(0, i + n_train - lookback_hours)
-                lookback_prices = prices.iloc[lookback_start:i + n_train]
-                lookback_returns = lookback_prices.pct_change().dropna()
-
+        prev_portfolio_value = self.initial_capital
+        
+        logger.info(f"Starting backtest from {start_date} to {end_date}")
+        logger.info(f"Rebalancing {len(rebalance_dates)} times with frequency {rebalance_frequency}")
+        
+        for date_idx, date in enumerate(prices.index):
+            price_row = prices.loc[date]
+            
+            # Update portfolio value based on price changes
+            portfolio_value = capital
+            for asset in assets:
+                if positions[asset] > 0:
+                    portfolio_value += positions[asset] * price_row[asset]
+            
+            # Check if this is a rebalance date
+            if date in rebalance_dates:
+                # Get historical prices up to this point for weight calculation
+                historical_prices = prices.loc[:date]
+                
                 try:
-                    # Initialize all_individual_weights at the start of each rebalance block
-                    all_individual_weights = None
+                    # Calculate target weights
+                    target_weights = weights_func(historical_prices, **kwargs)
                     
-                    if strategy_selector is not None and strategy_fns is not None:
-                        if use_blend:
-                            # NEW: Use ensemble blend instead of winner-take-all
-                            # The blend() method now returns all_weights to avoid double computation
-                            result = strategy_selector.blend(lookback_prices, lookback_returns, strategy_fns)
-                            blended_weights, blend_composition, all_individual_weights = result
-                            new_weights = blended_weights
-                            current_method_name = "ensemble_blend"
-                            logger.info(f"Ensemble blend composition: {blend_composition}")
-                            logger.info(f"[DEBUG] Received individual_weights from blend() for {len(all_individual_weights)} strategies")
-                        else:
-                            # LEGACY: Select single best strategy
-                            # PHASE 1 FIX: Detect frequency from lookback data for correct annualization in scoring
-                            try:
-                                freq = detect_frequency(lookback_prices)
-                            except Exception:
-                                freq = None  # compute_in_sample_scores will auto-detect or warn
-                            
-                            in_sample_scores = compute_in_sample_scores(
-                                list(strategy_fns.keys()), strategy_fns, lookback_prices, lookback_returns, freq=freq)
-                            
-                            # Pass realized performance from previous period (if available)
-                            realized_perf_dict = {}
-                            if len(self.strategy_realized_performance) > 0:
-                                realized_perf_dict = self.strategy_realized_performance
-                            
-                            current_method_name = strategy_selector.select(
-                                lookback_prices, lookback_returns, in_sample_scores, 
-                                realized_perf=realized_perf_dict if realized_perf_dict else None)
-                            new_weights = np.array(strategy_fns[current_method_name](lookback_prices, lookback_returns))
-                    else:
-                        new_weights = np.array(weights_strategy(lookback_prices, lookback_returns))
-
-                    turnover = np.abs(new_weights - weights).sum() / 2
+                    # Ensure weights sum to 1
+                    if isinstance(target_weights, dict):
+                        total = sum(target_weights.values())
+                        if total > 0:
+                            target_weights = {k: v/total for k, v in target_weights.items()}
+                    elif isinstance(target_weights, np.ndarray):
+                        target_weights = {assets[i]: target_weights[i] for i in range(len(assets))}
+                        target_weights = {k: v/sum(target_weights.values()) for k, v in target_weights.items()}
                     
-                    # PHASE 10: Calculate transaction cost using TransactionCostModel
-                    # Use taker fees for market orders (conservative assumption)
-                    # Volatility and volume should be from lookback period to avoid look-ahead bias
-                    current_volatility = lookback_returns.std().mean() if len(lookback_returns) > 0 else 0.01
-                    avg_volume = lookback_prices.mean().sum() * 24 if len(lookback_prices) > 0 else 1e6  # Hourly data -> daily
-                    
-                    # Calculate cost breakdown using the model
-                    order_value = capital * turnover
-                    cost_breakdown = self.cost_model.calculate_cost(
-                        order_value=order_value,
-                        volatility=current_volatility,
-                        avg_daily_volume=avg_volume,
-                        order_type='taker'  # Assume market orders for execution
+                    # Apply No-Trade Zone filter
+                    adjusted_weights, turnover, skipped = self._apply_no_trade_zone(
+                        current_weights, target_weights, portfolio_value, price_row
                     )
-                    cost = cost_breakdown.total
                     
-                    # Log detailed cost breakdown for debugging
-                    logger.debug(f"Rebalance cost at {timestamp}: fee=${cost_breakdown.fees:.2f}, "
-                               f"spread=${cost_breakdown.spread:.2f}, "
-                               f"impact=${cost_breakdown.market_impact:.2f}, "
-                               f"total=${cost:.2f} (turnover={turnover:.2%})")
-
-                    # Calculate future rebalance dates for attribution
-                    future_dates = [d for d in rebalance_dates if d > timestamp]
-                    next_rebalance = future_dates[0] if future_dates else test_prices.index[-1] + timedelta(hours=1)
-
-                    # PHASE 8 & 10: Record attribution data at each rebalance with costs
-                    if use_blend and all_individual_weights is not None:
-                        # Calculate asset returns for this period (until next rebalance)
-                        future_rebalance = future_dates[0] if future_dates else test_prices.index[-1] + timedelta(hours=1)
-                        period_prices = test_prices.loc[timestamp:future_rebalance]
-                        if len(period_prices) > 1:
-                            period_asset_returns = period_prices.pct_change().dropna()
-                            if len(period_asset_returns) > 0:
-                                avg_asset_returns = period_asset_returns.mean().to_dict()
-                                
-                                # PHASE 10: Calculate per-strategy costs using TransactionCostModel
-                                strategy_costs = {}
-                                strategy_slippage = {}
-                                for name in all_individual_weights.keys():
-                                    # Each strategy's turnover contribution
-                                    strat_turnover = turnover / len(all_individual_weights)
-                                    strat_order_value = capital * strat_turnover
-                                    strat_cost = self.cost_model.calculate_cost_scalar(
-                                        order_value=strat_order_value,
-                                        volatility=current_volatility,
-                                        avg_daily_volume=avg_volume,
-                                        order_type='taker'
-                                    )
-                                    # Convert to percentage for attribution
-                                    strategy_costs[name] = strat_cost / max(capital, 1)
-                                    strategy_slippage[name] = 0.0005  # Fixed slippage assumption
-                                
-                                # Detect current regime
-                                try:
-                                    current_regime = detect_regime(lookback_prices)
-                                except Exception:
-                                    current_regime = "low_vol_range"
-                                
-                                # Get portfolio strategy weights from blend composition
-                                if 'blend_composition' in locals() and blend_composition is not None:
-                                    portfolio_weights = blend_composition
-                                else:
-                                    n_strats = len(all_individual_weights)
-                                    portfolio_weights = {name: 1.0/n_strats for name in all_individual_weights.keys()}
-                                
-                                # Record attribution
-                                self.attribution_engine.record_rebalance(
-                                    timestamp=timestamp,
-                                    strategy_weights={name: dict(zip(period_prices.columns, w)) 
-                                                     for name, w in all_individual_weights.items()},
-                                    asset_returns=avg_asset_returns,
-                                    costs=strategy_costs,
-                                    slippage=strategy_slippage,
-                                    regime=current_regime,
-                                    portfolio_strategy_weights=portfolio_weights,
-                                )
-                                logger.info(f"[ATTRIBUTION] Recorded rebalance at {timestamp} for {len(all_individual_weights)} strategies")
-
-                    rebalance_events.append({
-                        'date': timestamp, 'old_weights': weights.copy(),
-                        'new_weights': new_weights.copy(), 'turnover': turnover,
-                        'cost': cost, 'capital_before': capital,
-                        'method': current_method_name,
-                        'individual_weights': all_individual_weights if use_blend else None,
+                    if skipped:
+                        self.skipped_rebalances += 1
+                        logger.debug(f"{date}: Skipped rebalance (below threshold)")
+                    else:
+                        self.rebalance_count += 1
+                        
+                        # Execute rebalancing
+                        capital, positions = self._execute_rebalance(
+                            adjusted_weights, portfolio_value, price_row, positions
+                        )
+                        
+                        # Update current weights
+                        current_weights = adjusted_weights.copy()
+                    
+                    turnover_history.append({
+                        'date': date,
+                        'turnover': turnover,
+                        'cost': self._calculate_transaction_cost(turnover, portfolio_value)
                     })
-                    chosen_strategy_log.append((timestamp, current_method_name))
-
-                    capital -= cost
-                    weights = new_weights
-                    logger.info(f"Rebalanced at {timestamp}: method={current_method_name}, "
-                                f"turnover={turnover:.2%}, cost=${cost:.2f}")
+                    
                 except Exception as e:
-                    logger.error(f"Rebalancing failed at {timestamp}: {e}", exc_info=True)
-
-            price_changes = row / test_prices.iloc[i - 1] - 1 if i > 0 else np.zeros(len(row))
-
-            # --- Drawdown circuit breaker ---
-            current_dd = (capital - peak_capital) / peak_capital if peak_capital > 0 else 0.0
-            effective_weights = weights
-            if current_dd <= -self.max_dd_breaker:
-                effective_weights = weights * self.derisk_factor
-                if i % 24 == 0:  # don't spam logs every hour
-                    logger.warning(f"Circuit breaker ACTIVE at {timestamp}: drawdown={current_dd:.2%}, "
-                                    f"exposure cut to {self.derisk_factor:.0%}")
-
-            # FEATURE 1: Apply transaction cost differentiation for CASH
-            # CASH allocation changes have minimal/no transaction costs compared to crypto swaps
-            # We'll apply reduced cost for turnover involving CASH
-            port_return = np.dot(effective_weights, price_changes)
+                    logger.warning(f"{date}: Weight calculation failed: {e}. Keeping current weights.")
+                    turnover_history.append({
+                        'date': date,
+                        'turnover': 0.0,
+                        'cost': 0.0
+                    })
             
-            # TODO: Implement differentiated transaction costs for CASH vs risky assets
-            # For now, we use uniform costs but note that CASH rebalancing should be cheaper
-            # Actual implementation would require tracking which asset changed weight
+            # Record daily metrics
+            portfolio_values.append({
+                'date': date,
+                'value': portfolio_value,
+                'capital': capital
+            })
             
-            capital *= (1 + port_return)
-            peak_capital = max(peak_capital, capital)
-
-            portfolio_values.append({'timestamp': timestamp, 'value': capital, 'weights': weights.copy()})
-            if i > 0:
-                daily_returns.append(port_return)
-
-        pv_df = pd.DataFrame(portfolio_values).set_index('timestamp')
-        metrics = self.calculate_metrics(pv_df, daily_returns, rebalance_events)
+            if prev_portfolio_value > 0:
+                daily_return = (portfolio_value - prev_portfolio_value) / prev_portfolio_value
+                daily_returns.append(daily_return)
+            
+            prev_portfolio_value = portfolio_value
         
-        # Record realized performance for strategy selector (for adaptive learning)
-        # CRITICAL FIX: In ensemble blend mode, record performance for EACH strategy individually
-        # so the self-correcting feedback loop actually works (not just recording "ensemble_blend")
-        if strategy_selector is not None and len(daily_returns) > 0:
-            # FIX: returns_series must use the same datetime index as test_asset_returns
-            # daily_returns[i] corresponds to test_prices.index[i+1], which equals test_asset_returns.index[i]
-            returns_series = pd.Series(daily_returns, index=test_asset_returns.index)
-            
-            if use_blend and len(rebalance_events) > 0:
-                last_rebalance = rebalance_events[-1]
-                logger.info(f"[DEBUG] Last rebalance keys: {last_rebalance.keys()}")
-                
-                if 'individual_weights' in last_rebalance and last_rebalance['individual_weights'] is not None:
-                    # ENSEMBLE MODE: Calculate hypothetical performance for each strategy
-                    individual_weights_dict = last_rebalance['individual_weights']
-                    logger.info(f"[DEBUG] individual_weights_dict keys: {list(individual_weights_dict.keys())}")
-                    
-                    # No need for complex index alignment now - both have the same index
-                    for name, ind_weights in individual_weights_dict.items():
-                        # Calculate what return this strategy would have achieved if used alone
-                        # Use per-asset returns matrix dotted with strategy's weights vector
-                        # ind_weights should have length = n_assets (e.g., 6 including CASH)
-                        # test_asset_returns.values shape: [n_days, n_assets]
-                        # Result: hypothetical_daily_returns shape: [n_days]
-                        hypothetical_daily_returns = test_asset_returns.values @ ind_weights
-                        hyp_returns_series = pd.Series(hypothetical_daily_returns, index=test_asset_returns.index)
-                        
-                        hypothetical_realized_return = hyp_returns_series.mean() * len(hyp_returns_series)
-                        hypothetical_realized_vol = hyp_returns_series.std() * np.sqrt(len(hyp_returns_series))
-                        
-                        if hypothetical_realized_vol > 0:
-                            strategy_selector.record_realized_performance(name, hypothetical_realized_return, hypothetical_realized_vol)
-                            logger.info(f"[BLEND] Recorded hypothetical performance for {name}: return={hypothetical_realized_return:.4f}, vol={hypothetical_realized_vol:.4f}")
-                            
-                            # Store in backtester for next iteration's selector
-                            self.strategy_realized_performance[name] = {
-                                'return': hypothetical_realized_return,
-                                'vol': hypothetical_realized_vol
-                            }
-                    
-                    # Also record the actual ensemble blend performance
-                    realized_return = returns_series.mean() * len(returns_series)
-                    realized_vol = returns_series.std() * np.sqrt(len(returns_series))
-                    strategy_selector.record_realized_performance("ensemble_blend", realized_return, realized_vol)
-                    logger.info(f"Recorded actual ensemble blend performance: return={realized_return:.4f}, vol={realized_vol:.4f}")
-                    self.strategy_realized_performance["ensemble_blend"] = {
-                        'return': realized_return,
-                        'vol': realized_vol
-                    }
-                else:
-                    logger.warning("[BLEND] individual_weights not found in last rebalance event!")
-            else:
-                # LEGACY MODE (winner-take-all): Record only for the chosen strategy
-                realized_return = returns_series.mean() * len(returns_series)
-                realized_vol = returns_series.std() * np.sqrt(len(returns_series))
-                
-                if current_method_name is not None and realized_vol > 0:
-                    strategy_selector.record_realized_performance(current_method_name, realized_return, realized_vol)
-                    logger.info(f"Recorded realized performance for {current_method_name}: return={realized_return:.4f}, vol={realized_vol:.4f}")
-                    
-                    # Store in backtester for next iteration's selector
-                    self.strategy_realized_performance[current_method_name] = {
-                        'return': realized_return,
-                        'vol': realized_vol
-                    }
+        # Compile results
+        results_df = pd.DataFrame(portfolio_values).set_index('date')
+        results_df['return'] = pd.Series(daily_returns, index=results_df.index)
+        results_df['cumulative_return'] = (1 + results_df['return']).cumprod() - 1
+        
+        # Calculate metrics
+        metrics = self._calculate_metrics(results_df, turnover_history)
+        
+        logger.info(f"Backtest completed:")
+        logger.info(f"  Final Value: ${results_df['value'].iloc[-1]:,.2f}")
+        logger.info(f"  Total Return: {metrics['total_return']:.2%}")
+        logger.info(f"  Annualized Return: {metrics['annualized_return']:.2%}")
+        logger.info(f"  Sharpe Ratio: {metrics['sharpe_ratio']:.3f}")
+        logger.info(f"  Max Drawdown: {metrics['max_drawdown']:.2%}")
+        logger.info(f"  Total Transaction Costs: ${self.total_transaction_costs:,.2f}")
+        logger.info(f"  Rebalances Executed: {self.rebalance_count}")
+        logger.info(f"  Rebalances Skipped (No-Trade Zone): {self.skipped_rebalances}")
         
         return {
-            'portfolio_values': pv_df,
+            'returns': results_df,
             'metrics': metrics,
-            'rebalance_events': rebalance_events,
-            'daily_returns': pd.Series(daily_returns, index=test_prices.index[1:]),
-            'strategy_log': chosen_strategy_log,
-            # PHASE 8: Include attribution results
-            'attribution_summary': self.attribution_engine.get_summary_table().to_dict() if not self.attribution_engine._records else {},
-            'attribution_dataframe': self.attribution_engine.to_dataframe(),
+            'turnover_history': turnover_history,
+            'transaction_costs': self.total_transaction_costs
         }
-
-    # ------------------------------------------------------------------
-    def run_walk_forward(self, prices: pd.DataFrame, weights_strategy: Callable = None,
-                          rebalance_freq: str = None, lookback_hours: int = 168,
-                          n_folds: int = 4, train_ratio: float = 0.7,
-                          strategy_selector: Optional[StrategySelector] = None,
-                          strategy_fns: Optional[Dict[str, Callable]] = None,
-                          use_blend: bool = False) -> Dict:
+    
+    def _apply_no_trade_zone(
+        self,
+        current_weights: Dict[str, float],
+        target_weights: Dict[str, float],
+        portfolio_value: float,
+        prices: pd.Series
+    ) -> Tuple[Dict[str, float], float, bool]:
         """
-        Walk-forward (rolling-origin) evaluation: splits the full price
-        history into n_folds overlapping windows, each with its own
-        train/test split, and aggregates results. This replaces the
-        single-split backtest, which judged performance on one ~3 month
-        window and was prone to being a lucky/unlucky draw.
+        Apply No-Trade Zone filter to minimize unnecessary trading.
+        
+        If the absolute weight change for any asset is below the threshold,
+        keep the current weight instead of rebalancing.
         
         Args:
-            use_blend: If True, use StrategySelector.blend() for ensemble weighting.
-                      If False, use legacy StrategySelector.select() for winner-take-all.
-        """
-        total_len = len(prices)
-        fold_len = total_len // n_folds
-        fold_results = []
-        
-        # Minimum observations required per fold for meaningful analysis
-        min_fold_size = 50
-        min_test_size = 20
-        
-        logger.info(f"Total observations: {total_len}, requested folds: {n_folds}, fold length: {fold_len}")
-        if fold_len < min_fold_size:
-            logger.warning(f"Fold length ({fold_len}) is too small (< {min_fold_size}). "
-                          f"Either increase since_days or reduce n_folds.")
-
-        for fold in range(n_folds):
-            start = fold * fold_len
-            end = total_len if fold == n_folds - 1 else (fold + 1) * fold_len
-            fold_prices = prices.iloc[start:end]
-            if len(fold_prices) < min_fold_size:
-                logger.warning(f"Fold {fold+1} has only {len(fold_prices)} observations (< {min_fold_size}), skipping")
-                continue
-
-            n_train = int(len(fold_prices) * train_ratio)
-            train_prices = fold_prices.iloc[:n_train]
-            test_prices = fold_prices.iloc[n_train:]
-            if len(test_prices) < min_test_size:
-                logger.warning(f"Fold {fold+1} test set has only {len(test_prices)} observations (< {min_test_size}), skipping")
-                continue
-
-            logger.info(f"=== Walk-forward fold {fold + 1}/{n_folds}: "
-                        f"train {train_prices.index.min()}..{train_prices.index.max()}, "
-                        f"test {test_prices.index.min()}..{test_prices.index.max()} ===")
-
-            result = self.run_single_fold(
-                fold_prices, test_prices, n_train, weights_strategy,
-                rebalance_freq=rebalance_freq, lookback_hours=lookback_hours,
-                strategy_selector=strategy_selector, strategy_fns=strategy_fns,
-                use_blend=use_blend
-            )
-            result['fold'] = fold
-            fold_results.append(result)
-
-        aggregated = self._aggregate_folds(fold_results)
-        
-        # Add final blend weights and asset weights from the last fold for database storage
-        if fold_results and 'rebalance_events' in fold_results[-1] and len(fold_results[-1]['rebalance_events']) > 0:
-            last_rebalance = fold_results[-1]['rebalance_events'][-1]
-            aggregated['final_weights'] = list(last_rebalance.get('new_weights', []))
-            if last_rebalance.get('individual_weights'):
-                # Convert numpy arrays to lists for JSON serialization
-                aggregated['final_blend_weights'] = {
-                    k: v.tolist() if hasattr(v, 'tolist') else list(v) 
-                    for k, v in last_rebalance['individual_weights'].items()
-                }
-        
-        # PHASE 8: Add attribution results to aggregated output
-        if self.attribution_engine._records:
-            aggregated['attribution_summary'] = self.attribution_engine.get_summary_table().to_dict()
-            aggregated['attribution_ranking'] = self.attribution_engine.get_strategy_ranking()
-            aggregated['attribution_recommendations'] = self.attribution_engine.get_strategy_recommendations()
-            aggregated['regime_breakdown'] = self.attribution_engine.get_regime_breakdown()
-        
-        return {'folds': fold_results, 'aggregated': aggregated}
-
-    def _aggregate_folds(self, fold_results: List[Dict]) -> Dict:
-        """Aggregate results across all walk-forward folds.
-        
-        CRITICAL FIX (Stage 6): Ensure mean_monthly_return and mean_sharpe are 
-        calculated from the SAME underlying performance data to avoid inconsistencies
-        where reported mean return is positive but Sharpe is negative (indicating 
-        actual fold returns were negative).
-        
-        Previously: mean_monthly_return was computed from calendar_monthly_returns 
-        (month-end portfolio values), which could be empty or misaligned with fold 
-        boundaries, while sharpe used daily returns from the full fold period.
-        
-        Now: Both metrics derive from each fold's total_return, which accurately 
-        reflects the complete fold performance from start to end.
-        """
-        if not fold_results:
-            return {}
-        
-        # Collect fold-level total returns and convert to monthly equivalents
-        # This ensures consistency with sharpe_ratio which also uses full-fold data
-        fold_total_returns = []
-        fold_months = []
-        max_dds = []
-        sharpes = []
-        
-        for r in fold_results:
-            m = r['metrics']
+            current_weights: Current portfolio weights
+            target_weights: Target weights from optimizer
+            portfolio_value: Current portfolio value
+            prices: Current asset prices
             
-            # Use total_return from each fold (complete fold performance)
-            fold_total_returns.append(m['total_return'])
+        Returns:
+            Tuple of (adjusted_weights, turnover, was_skipped)
+        """
+        assets = list(current_weights.keys())
+        adjusted_weights = current_weights.copy()
+        
+        max_weight_change = 0.0
+        should_rebalance = False
+        
+        for asset in assets:
+            current = current_weights.get(asset, 0.0)
+            target = target_weights.get(asset, 0.0)
             
-            # Track number of months in each fold for proper annualization
-            # Estimate from the portfolio values timestamp range
-            pv_df = r['portfolio_values']
-            if len(pv_df) > 1:
-                days_in_fold = (pv_df.index[-1] - pv_df.index[0]).days
-                months_in_fold = max(1, days_in_fold / 30.44)  # Average days per month
+            weight_change = abs(target - current)
+            max_weight_change = max(max_weight_change, weight_change)
+            
+            # Check if weight change exceeds threshold
+            if weight_change >= self.no_trade_threshold:
+                adjusted_weights[asset] = target
+                should_rebalance = True
+            # else: keep current weight (don't trade)
+        
+        # Normalize adjusted weights to sum to 1
+        total_weight = sum(adjusted_weights.values())
+        if total_weight > 0:
+            adjusted_weights = {k: v/total_weight for k, v in adjusted_weights.items()}
+        
+        # Calculate turnover (only for assets that crossed threshold)
+        turnover = sum(abs(adjusted_weights[a] - current_weights.get(a, 0.0)) for a in assets) / 2
+        
+        return adjusted_weights, turnover, not should_rebalance
+    
+    def _execute_rebalance(
+        self,
+        target_weights: Dict[str, float],
+        portfolio_value: float,
+        prices: pd.Series,
+        current_positions: Dict[str, float]
+    ) -> Tuple[float, Dict[str, float]]:
+        """
+        Execute rebalancing trades.
+        
+        Args:
+            target_weights: Target portfolio weights
+            portfolio_value: Current portfolio value
+            prices: Current asset prices
+            current_positions: Current share positions
+            
+        Returns:
+            Tuple of (remaining_capital, new_positions)
+        """
+        new_positions = {}
+        total_trade_value = 0.0
+        
+        for asset, weight in target_weights.items():
+            target_value = portfolio_value * weight
+            current_value = current_positions.get(asset, 0.0) * prices[asset]
+            
+            trade_value = target_value - current_value
+            total_trade_value += abs(trade_value)
+            
+            # Calculate shares to buy/sell (with slippage adjustment)
+            if prices[asset] > 0:
+                slippage_factor = 1 + (self.slippage_bps / 10000) if trade_value > 0 else 1 - (self.slippage_bps / 10000)
+                effective_price = prices[asset] * slippage_factor
+                new_positions[asset] = max(0, trade_value / effective_price)
             else:
-                months_in_fold = 1
-            fold_months.append(months_in_fold)
+                new_positions[asset] = current_positions.get(asset, 0.0)
+        
+        # Calculate and deduct transaction costs
+        transaction_cost = self._calculate_transaction_cost(total_trade_value / 2, portfolio_value)
+        self.total_transaction_costs += transaction_cost
+        
+        # Remaining capital after accounting for rounding and costs
+        invested_value = sum(new_positions[a] * prices[a] for a in new_positions)
+        remaining_capital = max(0, portfolio_value - invested_value - transaction_cost)
+        
+        if transaction_cost > 0:
+            logger.debug(f"Transaction cost: ${transaction_cost:,.2f}")
+        
+        return remaining_capital, new_positions
+    
+    def _calculate_transaction_cost(self, turnover_value: float, portfolio_value: float) -> float:
+        """
+        Calculate transaction cost based on turnover.
+        
+        Args:
+            turnover_value: Dollar value of trades
+            portfolio_value: Total portfolio value
             
-            max_dds.append(m['max_drawdown'])
-            sharpes.append(m['sharpe_ratio'])
+        Returns:
+            Transaction cost in dollars
+        """
+        cost_rate = self.transaction_cost_bps / 10000
+        return turnover_value * cost_rate
+    
+    def _calculate_metrics(self, results_df: pd.DataFrame, turnover_history: List[Dict]) -> Dict:
+        """
+        Calculate performance metrics.
         
-        # Calculate mean monthly return from fold total returns
-        # Convert each fold's total return to a monthly rate: (1 + total)^(1/months) - 1
-        fold_monthly_returns = []
-        for total_ret, months in zip(fold_total_returns, fold_months):
-            if months > 0:
-                monthly_ret = (1 + total_ret) ** (1 / months) - 1
-                fold_monthly_returns.append(monthly_ret)
+        Args:
+            results_df: DataFrame with returns
+            turnover_history: List of turnover records
+            
+        Returns:
+            Dictionary of metrics
+        """
+        returns = results_df['return'].dropna()
         
-        # Aggregate metrics - now all derived from consistent fold-level performance
-        return {
-            'n_folds': len(fold_results),
-            'mean_monthly_return': float(np.mean(fold_monthly_returns)) if fold_monthly_returns else 0.0,
-            'median_monthly_return': float(np.median(fold_monthly_returns)) if fold_monthly_returns else 0.0,
-            'worst_monthly_return': float(np.min(fold_monthly_returns)) if fold_monthly_returns else 0.0,
-            'pct_months_positive': float(np.mean([m > 0 for m in fold_monthly_returns])) if fold_monthly_returns else 0.0,
-            'mean_max_drawdown': float(np.mean(max_dds)) if max_dds else 0.0,
-            'worst_max_drawdown': float(np.min(max_dds)) if max_dds else 0.0,
-            'mean_sharpe': float(np.mean(sharpes)) if sharpes else 0.0,
-            'n_calendar_months_observed': sum(int(m) for m in fold_months),
-            # Debug info to verify consistency
-            '_fold_total_returns': fold_total_returns,
-            '_fold_monthly_returns': fold_monthly_returns,
-        }
-
-    # ------------------------------------------------------------------
-    def calculate_metrics(self, pv_df: pd.DataFrame, returns: List[float],
-                           rebalance_events: List[Dict]) -> Dict:
-        values = pv_df['value'].values
-        returns_series = pd.Series(returns)
-
-        total_return = (values[-1] - self.initial_capital) / self.initial_capital
-
-        # PHASE 1 FIX: Detect actual frequency from the portfolio value index for correct annualization
-        freq = detect_frequency(pv_df[['value']])
+        if len(returns) == 0:
+            return {
+                'total_return': 0.0,
+                'annualized_return': 0.0,
+                'volatility': 0.0,
+                'sharpe_ratio': 0.0,
+                'max_drawdown': 0.0,
+                'avg_turnover': 0.0
+            }
         
-        n_periods = len(values)
-        years = n_periods / freq.observations_per_year
-        ann_return = (values[-1] / self.initial_capital) ** (1 / years) - 1 if years > 0 else 0
-
-        # FIX: real calendar-month returns instead of a CAGR extrapolation
-        calendar_monthly_returns = self._calendar_monthly_returns(pv_df)
-        monthly_return = float(np.mean(calendar_monthly_returns)) if calendar_monthly_returns else total_return
-
-        if len(returns_series) > 1:
-            # PHASE 1 FIX: Use detected frequency for vol/return annualization
-            vol = returns_series.std() * freq.annualization_factor_vol
-            mean_ret = returns_series.mean() * freq.annualization_factor_mean
-            # PHASE 1 FIX: Use unified risk-free rate (0.0 for crypto research)
-            sharpe = (mean_ret - 0.0) / vol if vol > 0 else 0
-        else:
-            vol, sharpe = 0, 0
-
-        cum_values = pd.Series(values)
-        running_max = cum_values.cummax()
-        drawdown = (cum_values - running_max) / running_max
+        # Total return
+        total_return = (results_df['value'].iloc[-1] / self.initial_capital) - 1
+        
+        # Annualized return
+        n_days = len(returns)
+        annualized_return = (1 + total_return) ** (252 / n_days) - 1
+        
+        # Volatility
+        volatility = returns.std() * np.sqrt(252)
+        
+        # Sharpe ratio (assuming risk-free rate of 2%)
+        risk_free_rate = 0.02
+        sharpe_ratio = (annualized_return - risk_free_rate) / volatility if volatility > 0 else 0.0
+        
+        # Maximum drawdown
+        cumulative = (1 + returns).cumprod()
+        running_max = cumulative.cummax()
+        drawdown = (cumulative - running_max) / running_max
         max_drawdown = drawdown.min()
-
-        var_95 = returns_series.quantile(0.05) if len(returns_series) > 0 else 0
-        cvar_95 = returns_series[returns_series <= var_95].mean() if len(returns_series) > 0 else 0
-
-        total_costs = sum(e['cost'] for e in rebalance_events)
-        n_rebalances = len(rebalance_events)
-
+        
+        # Average turnover
+        avg_turnover = np.mean([t['turnover'] for t in turnover_history]) if turnover_history else 0.0
+        
         return {
-            'final_value': values[-1],
-            'total_return': total_return,
-            'annualized_return': ann_return,
-            'monthly_return': monthly_return,  # now = mean of REAL calendar months
-            'calendar_monthly_returns': calendar_monthly_returns,
-            'volatility': vol,
-            'sharpe_ratio': sharpe,
-            'max_drawdown': max_drawdown,
-            'var_95': var_95,
-            'cvar_95': cvar_95,
-            'total_transaction_costs': total_costs,
-            'n_rebalances': n_rebalances,
-            'avg_turnover': np.mean([e['turnover'] for e in rebalance_events]) if rebalance_events else 0,
+            'total_return': float(total_return),
+            'annualized_return': float(annualized_return),
+            'volatility': float(volatility),
+            'sharpe_ratio': float(sharpe_ratio),
+            'max_drawdown': float(max_drawdown),
+            'avg_turnover': float(avg_turnover),
+            'total_trading_days': n_days
         }
 
-    @staticmethod
-    def _calendar_monthly_returns(pv_df: pd.DataFrame) -> List[float]:
-        """Actual month-over-month portfolio returns (not a CAGR extrapolation)."""
-        if pv_df.empty:
-            return []
-        monthly_last = pv_df['value'].resample('ME').last().dropna()
-        if len(monthly_last) < 2:
-            return []
-        rets = monthly_last.pct_change().dropna()
-        return rets.tolist()
 
-    def plot_results(self, pv_df: pd.DataFrame, save_path: str = None):
-        try:
-            import matplotlib.pyplot as plt
-            fig, axes = plt.subplots(2, 1, figsize=(14, 8))
-            axes[0].plot(pv_df.index, pv_df['value'])
-            axes[0].axhline(y=self.initial_capital, color='gray', linestyle='--', alpha=0.5)
-            axes[0].set_title('Portfolio Value Over Time')
-            axes[0].grid(True, alpha=0.3)
-
-            cum_values = pv_df['value']
-            running_max = cum_values.cummax()
-            drawdown = (cum_values - running_max) / running_max
-            axes[1].fill_between(drawdown.index, drawdown, 0, alpha=0.5, color='red')
-            axes[1].set_title('Drawdown')
-            axes[1].grid(True, alpha=0.3)
-
-            plt.tight_layout()
-            if save_path:
-                plt.savefig(save_path, dpi=150)
-            plt.show()
-        except ImportError:
-            logger.warning("matplotlib not available for plotting")
-
-
-def equal_weight_strategy(prices: pd.DataFrame, returns: pd.DataFrame) -> np.ndarray:
-    n_assets = len(prices.columns)
-    return np.ones(n_assets) / n_assets
-
-
-def main():
-    """Offline self-test with synthetic data (no network needed)."""
-    np.random.seed(42)
-    dates = pd.date_range('2024-01-01', periods=4000, freq='h')
-    n_assets = 5
-    returns_data = np.random.randn(4000, n_assets) * 0.01 + 0.0001
-    prices_data = 100 * np.exp(np.cumsum(returns_data, axis=0))
-    prices = pd.DataFrame(prices_data, index=dates, columns=['BTC', 'ETH', 'SOL', 'BNB', 'XRP'])
-
-    backtester = Backtester(initial_capital=100000)
-    results = backtester.run_walk_forward(prices, equal_weight_strategy,
-                                           rebalance_freq='W', n_folds=3)
-    print("\n=== Walk-forward aggregated results ===")
-    for k, v in results['aggregated'].items():
-        print(f"{k}: {v}")
+class WalkForwardValidator:
+    """
+    Walk-Forward Analysis for robust strategy validation.
+    """
+    
+    def __init__(
+        self,
+        train_window: int = 252,  # 1 year training
+        test_window: int = 63,   # 3 months testing
+        step_size: int = 21      # 1 month step
+    ):
+        """
+        Initialize walk-forward validator.
+        
+        Args:
+            train_window: Training window size in days
+            test_window: Test window size in days
+            step_size: Step size between folds
+        """
+        self.train_window = train_window
+        self.test_window = test_window
+        self.step_size = step_size
+        
+    def generate_folds(self, dates: pd.DatetimeIndex) -> List[Tuple[pd.DatetimeIndex, pd.DatetimeIndex]]:
+        """
+        Generate train/test fold indices.
+        
+        Args:
+            dates: Full date range
+            
+        Returns:
+            List of (train_dates, test_dates) tuples
+        """
+        folds = []
+        
+        start_idx = 0
+        while start_idx + self.train_window + self.test_window <= len(dates):
+            train_start = start_idx
+            train_end = start_idx + self.train_window
+            test_end = train_end + self.test_window
+            
+            train_dates = dates[train_start:train_end]
+            test_dates = dates[train_end:test_end]
+            
+            folds.append((train_dates, test_dates))
+            
+            start_idx += self.step_size
+        
+        logger.info(f"Generated {len(folds)} walk-forward folds")
+        return folds
+    
+    def validate(
+        self,
+        prices: pd.DataFrame,
+        weights_func,
+        **kwargs
+    ) -> Dict:
+        """
+        Run walk-forward validation.
+        
+        Args:
+            prices: Price DataFrame
+            weights_func: Weight generation function
+            **kwargs: Arguments for weights_func
+            
+        Returns:
+            Dictionary with OOS results for each fold
+        """
+        folds = self.generate_folds(prices.index)
+        oos_results = []
+        
+        for fold_idx, (train_dates, test_dates) in enumerate(folds):
+            logger.info(f"Fold {fold_idx + 1}/{len(folds)}: Train {train_dates[0]} to {train_dates[-1]}, "
+                       f"Test {test_dates[0]} to {test_dates[-1]}")
+            
+            # Training period
+            train_prices = prices.loc[train_dates]
+            
+            try:
+                # Calculate optimal weights on training data
+                target_weights = weights_func(train_prices, **kwargs)
+                
+                # Test period
+                test_prices = prices.loc[test_dates]
+                
+                # Calculate returns with these fixed weights
+                if isinstance(target_weights, dict):
+                    weights_array = np.array([target_weights.get(col, 0) for col in test_prices.columns])
+                else:
+                    weights_array = target_weights
+                
+                # Normalize weights
+                weights_array = weights_array / np.sum(weights_array)
+                
+                # Portfolio returns
+                asset_returns = test_prices.pct_change().dropna()
+                portfolio_returns = (asset_returns * weights_array).sum(axis=1)
+                
+                # Calculate metrics
+                cumulative_return = (1 + portfolio_returns).prod() - 1
+                sharpe = portfolio_returns.mean() / portfolio_returns.std() * np.sqrt(252) if portfolio_returns.std() > 0 else 0
+                
+                oos_results.append({
+                    'fold': fold_idx,
+                    'train_start': train_dates[0],
+                    'train_end': train_dates[-1],
+                    'test_start': test_dates[0],
+                    'test_end': test_dates[-1],
+                    'cumulative_return': cumulative_return,
+                    'sharpe_ratio': sharpe,
+                    'weights': target_weights
+                })
+                
+            except Exception as e:
+                logger.warning(f"Fold {fold_idx + 1} failed: {e}")
+                oos_results.append({
+                    'fold': fold_idx,
+                    'cumulative_return': 0.0,
+                    'sharpe_ratio': 0.0,
+                    'error': str(e)
+                })
+        
+        # Aggregate results
+        results_df = pd.DataFrame(oos_results)
+        
+        avg_oos_return = results_df['cumulative_return'].mean()
+        avg_oos_sharpe = results_df['sharpe_ratio'].mean()
+        
+        logger.info(f"Walk-Forward Results:")
+        logger.info(f"  Avg OOS Return: {avg_oos_return:.2%}")
+        logger.info(f"  Avg OOS Sharpe: {avg_oos_sharpe:.3f}")
+        
+        return {
+            'fold_results': results_df,
+            'avg_oos_return': avg_oos_return,
+            'avg_oos_sharpe': avg_oos_sharpe
+        }
 
 
 if __name__ == "__main__":
-    main()
+    # Example usage
+    np.random.seed(42)
+    
+    # Create sample price data
+    dates = pd.date_range('2023-01-01', periods=500, freq='D')
+    n_assets = 5
+    assets = [f'Asset_{i}' for i in range(n_assets)]
+    
+    # Simulate correlated returns
+    returns = np.random.randn(500, n_assets) * 0.02
+    prices = pd.DataFrame(
+        100 * np.cumprod(1 + returns),
+        index=dates,
+        columns=assets
+    )
+    
+    # Simple equal weight strategy
+    def equal_weights(prices, **kwargs):
+        n = len(prices.columns)
+        return {col: 1/n for col in prices.columns}
+    
+    print("\n=== Testing Backtester ===")
+    backtester = Backtester(
+        initial_capital=100000,
+        transaction_cost_bps=10,
+        no_trade_threshold=0.03
+    )
+    
+    results = backtester.run_backtest(
+        prices,
+        equal_weights,
+        rebalance_frequency='W'
+    )
+    
+    print(f"\nFinal Portfolio Value: ${results['returns']['value'].iloc[-1]:,.2f}")
+    print(f"Total Return: {results['metrics']['total_return']:.2%}")
+    print(f"Sharpe Ratio: {results['metrics']['sharpe_ratio']:.3f}")
+    print(f"Total Transaction Costs: ${results['transaction_costs']:,.2f}")
+    
+    print("\n=== Testing Walk-Forward Validator ===")
+    validator = WalkForwardValidator(
+        train_window=126,  # 6 months
+        test_window=42,    # 2 months
+        step_size=21       # 1 month
+    )
+    
+    wf_results = validator.validate(prices, equal_weights)
+    print(f"\nAvg OOS Return: {wf_results['avg_oos_return']:.2%}")
+    print(f"Avg OOS Sharpe: {wf_results['avg_oos_sharpe']:.3f}")
