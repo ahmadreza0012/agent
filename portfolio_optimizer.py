@@ -20,15 +20,19 @@ class PortfolioOptimizer:
     Uses Ledoit-Wolf shrinkage for stable covariance estimation.
     """
     
-    def __init__(self, risk_free_rate: float = 0.02):
+    def __init__(self, n_assets: int = None, asset_names: List[str] = None, risk_free_rate: float = 0.02):
         """
         Initialize the optimizer.
         
         Args:
+            n_assets: Number of assets (optional, for compatibility)
+            asset_names: List of asset names (optional, for compatibility)
             risk_free_rate: Annual risk-free rate (default: 2%)
         """
         self.risk_free_rate = risk_free_rate
         self.daily_rf_rate = risk_free_rate / 252
+        self.n_assets = n_assets
+        self.asset_names = asset_names or []
         
     def compute_returns(self, prices: pd.DataFrame) -> pd.DataFrame:
         """
@@ -90,33 +94,48 @@ class PortfolioOptimizer:
     
     def mean_variance_optimization(
         self,
-        returns: pd.DataFrame,
+        expected_returns: Optional[np.ndarray] = None,
+        cov_matrix: Optional[np.ndarray] = None,
+        returns: Optional[pd.DataFrame] = None,
         target_return: Optional[float] = None,
         max_volatility: Optional[float] = None,
         min_weight: float = 0.0,
         max_weight: float = 1.0,
-        allow_short: bool = False
+        allow_short: bool = False,
+        risk_free_rate: float = None,
+        method: str = 'max_sharpe'
     ) -> Dict[str, np.ndarray]:
         """
         Mean-Variance Optimization (MVO) with Ledoit-Wolf covariance.
         
         Args:
-            returns: DataFrame of asset returns
+            expected_returns: Array of expected returns (optional, if not provided uses returns.mean())
+            cov_matrix: Covariance matrix (optional, if not provided computed from returns)
+            returns: DataFrame of asset returns (used if expected_returns/cov_matrix not provided)
             target_return: Target portfolio return (for efficient frontier)
             max_volatility: Maximum allowed portfolio volatility
             min_weight: Minimum weight per asset
             max_weight: Maximum weight per asset
             allow_short: Allow short selling
+            risk_free_rate: Risk-free rate for Sharpe calculation (uses instance default if None)
             
         Returns:
             Dictionary with weights, expected_return, volatility, sharpe_ratio
         """
-        n_assets = returns.shape[1]
-        assets = returns.columns.tolist()
+        if returns is not None:
+            n_assets = returns.shape[1]
+            assets = returns.columns.tolist()
+            # Use Ledoit-Wolf for stable covariance
+            cov_matrix = self.ledoit_wolf_covariance(returns)
+            mu = returns.mean().values * 252  # Annualized returns
+        elif expected_returns is not None and cov_matrix is not None:
+            n_assets = len(expected_returns)
+            assets = self.asset_names[:n_assets] if self.asset_names else [f'Asset_{i}' for i in range(n_assets)]
+            mu = expected_returns
+        else:
+            raise ValueError("Either 'returns' or both 'expected_returns' and 'cov_matrix' must be provided")
         
-        # Use Ledoit-Wolf for stable covariance
-        cov_matrix = self.ledoit_wolf_covariance(returns)
-        mu = returns.mean().values * 252  # Annualized returns
+        rf = risk_free_rate if risk_free_rate is not None else self.risk_free_rate
         
         # Decision variables
         w = cp.Variable(n_assets)
@@ -124,7 +143,7 @@ class PortfolioOptimizer:
         # Portfolio metrics
         portfolio_return = mu @ w
         portfolio_volatility = cp.sqrt(cp.quad_form(w, cov_matrix) * 252)  # Annualized
-        sharpe_ratio = (portfolio_return - self.risk_free_rate) / portfolio_volatility
+        sharpe_ratio = (portfolio_return - rf) / portfolio_volatility
         
         # Constraints
         constraints = [
@@ -501,6 +520,92 @@ class PortfolioOptimizer:
             return self.risk_parity(returns, **kwargs)
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
+
+
+def trend_following_strategy(prices: pd.DataFrame, returns: pd.DataFrame, 
+                              short_window: int = 20, long_window: int = 100) -> np.ndarray:
+    """
+    Trend-following strategy using dual moving average crossover.
+    
+    Args:
+        prices: DataFrame of asset prices
+        returns: DataFrame of asset returns
+        short_window: Short moving average window (in bars)
+        long_window: Long moving average window (in bars)
+        
+    Returns:
+        Array of portfolio weights summing to 1.0
+    """
+    n_assets = len(prices.columns)
+    
+    # Calculate moving averages for each asset
+    ma_short = prices.rolling(window=short_window).mean()
+    ma_long = prices.rolling(window=long_window).mean()
+    
+    # Generate signals: 1 if short > long (uptrend), 0 otherwise
+    signals = (ma_short > ma_long).astype(float)
+    
+    # Get latest signal
+    latest_signals = signals.iloc[-1].values
+    
+    # If no uptrend detected, use equal weight
+    if latest_signals.sum() == 0:
+        return np.ones(n_assets) / n_assets
+    
+    # Normalize signals to weights
+    weights = latest_signals / latest_signals.sum()
+    return weights
+
+
+def mean_reversion_strategy(prices: pd.DataFrame, returns: pd.DataFrame,
+                             lookback_window: int = 50, z_score_threshold: float = 1.5) -> np.ndarray:
+    """
+    Mean-reversion strategy using z-score of price deviations.
+    
+    Args:
+        prices: DataFrame of asset prices
+        returns: DataFrame of asset returns
+        lookback_window: Window for calculating mean and std (in bars)
+        z_score_threshold: Threshold for entry/exit signals
+        
+    Returns:
+        Array of portfolio weights summing to 1.0
+    """
+    n_assets = len(prices.columns)
+    
+    # Calculate rolling mean and std
+    rolling_mean = prices.rolling(window=lookback_window).mean()
+    rolling_std = prices.rolling(window=lookback_window).std()
+    
+    # Calculate z-score
+    z_scores = (prices - rolling_mean) / (rolling_std + 1e-10)
+    
+    # Get latest z-scores
+    latest_z = z_scores.iloc[-1].values
+    
+    # Generate signals: buy when z < -threshold (oversold), sell when z > threshold (overbought)
+    # For long-only: overweight oversold assets
+    signals = np.zeros(n_assets)
+    oversold_mask = latest_z < -z_score_threshold
+    neutral_mask = np.abs(latest_z) <= z_score_threshold
+    
+    # Overweight oversold assets
+    signals[oversold_mask] = 1.0
+    # Equal weight for neutral assets if no oversold
+    if signals.sum() == 0:
+        signals[neutral_mask] = 1.0
+    
+    # Normalize to weights
+    if signals.sum() > 0:
+        weights = signals / signals.sum()
+    else:
+        weights = np.ones(n_assets) / n_assets
+    
+    # Cap extreme concentration (no single asset > 80%)
+    weights = np.clip(weights, 0, 0.8)
+    weights = weights / weights.sum()  # Re-normalize after clipping
+    
+    return weights
 
 
 def generate_quantitative_features(prices: pd.DataFrame, lookback: int = 14) -> pd.DataFrame:
