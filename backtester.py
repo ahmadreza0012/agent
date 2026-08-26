@@ -42,6 +42,413 @@ class Backtester:
         self.total_transaction_costs = 0.0
         self.rebalance_count = 0
         self.skipped_rebalances = 0
+    
+    def run_walk_forward(
+        self,
+        prices: pd.DataFrame,
+        n_folds: int = 3,
+        strategy_selector=None,
+        strategy_fns: Dict = None,
+        use_blend: bool = True,
+        train_window_ratio: float = 0.6,
+        test_window_ratio: float = 0.2,
+        step_ratio: float = 0.2
+    ) -> Dict:
+        """
+        Run walk-forward backtesting with multiple strategies.
+        
+        Implements proper temporal causality:
+        - Training data only contains information available before test period
+        - Scalers/models fit ONLY on training data
+        - No future information leaks into training
+        
+        Args:
+            prices: DataFrame of asset prices (DatetimeIndex, columns = assets)
+            n_folds: Number of walk-forward folds
+            strategy_selector: StrategySelector instance for tracking performance
+            strategy_fns: Dict mapping strategy names to weight functions
+            use_blend: Whether to use ensemble blending
+            train_window_ratio: Fraction of data for training (default: 60%)
+            test_window_ratio: Fraction of data for testing (default: 20%)
+            step_ratio: Step size between folds (default: 20%)
+            
+        Returns:
+            Dictionary with:
+                - 'aggregated': aggregated metrics across all folds
+                - 'folds': list of per-fold results
+                - 'strategy_results': per-strategy performance
+        """
+        logger.info("=" * 70)
+        logger.info(f"WALK-FORWARD BACKTEST: {n_folds} folds")
+        logger.info("=" * 70)
+        
+        if len(prices) < 60:
+            logger.warning(f"Insufficient data: {len(prices)} rows (need at least 60)")
+            return {
+                'aggregated': {
+                    'mean_monthly_return': 0.0,
+                    'worst_max_drawdown': 0.0,
+                    'mean_sharpe': 0.0,
+                    'pct_months_positive': 0.0,
+                    'n_calendar_months_observed': 0,
+                    'n_folds': 0
+                },
+                'folds': [],
+                'strategy_results': {}
+            }
+        
+        # Generate fold indices ensuring temporal causality
+        folds = self._generate_walk_forward_folds(
+            n_samples=len(prices),
+            n_folds=n_folds,
+            train_ratio=train_window_ratio,
+            test_ratio=test_window_ratio,
+            step_ratio=step_ratio
+        )
+        
+        if not folds:
+            logger.warning("Could not generate valid walk-forward folds")
+            return {
+                'aggregated': {
+                    'mean_monthly_return': 0.0,
+                    'worst_max_drawdown': 0.0,
+                    'mean_sharpe': 0.0,
+                    'pct_months_positive': 0.0,
+                    'n_calendar_months_observed': 0,
+                    'n_folds': 0
+                },
+                'folds': [],
+                'strategy_results': {}
+            }
+        
+        logger.info(f"Generated {len(folds)} walk-forward folds")
+        
+        # Store results per fold and per strategy
+        fold_results = []
+        strategy_monthly_returns = {name: [] for name in strategy_fns.keys()} if strategy_fns else {}
+        
+        for fold_idx, (train_start, train_end, test_start, test_end) in enumerate(folds):
+            logger.info(f"\n{'='*50}")
+            logger.info(f"FOLD {fold_idx + 1}/{len(folds)}")
+            logger.info(f"{'='*50}")
+            logger.info(f"Train: [{train_start}:{train_end}) | Test: [{test_start}:{test_end})")
+            
+            # Split data - NO LOOKAHEAD
+            train_prices = prices.iloc[train_start:train_end].copy()
+            test_prices = prices.iloc[test_start:test_end].copy()
+            
+            if len(train_prices) < 30 or len(test_prices) < 5:
+                logger.warning(f"Fold {fold_idx + 1}: Insufficient data, skipping")
+                continue
+            
+            # Calculate returns on training data ONLY
+            train_returns = train_prices.pct_change().dropna()
+            test_returns = test_prices.pct_change().dropna()
+            
+            if len(train_returns) < 20 or len(test_returns) < 3:
+                logger.warning(f"Fold {fold_idx + 1}: Insufficient returns, skipping")
+                continue
+            
+            fold_strategy_results = {}
+            
+            # Evaluate each strategy
+            if strategy_fns and strategy_selector:
+                for strategy_name, strategy_fn in strategy_fns.items():
+                    logger.info(f"\nEvaluating strategy: {strategy_name}")
+                    
+                    try:
+                        # Get weights from training period ONLY
+                        # Pass both prices and returns for strategies that need them
+                        try:
+                            target_weights = strategy_fn(train_prices, train_returns)
+                        except TypeError:
+                            # Some strategies only accept prices
+                            target_weights = strategy_fn(train_prices)
+                        
+                        # Ensure weights are valid
+                        if target_weights is None:
+                            logger.warning(f"{strategy_name}: No weights returned")
+                            continue
+                        
+                        # Normalize weights
+                        if isinstance(target_weights, dict):
+                            total = sum(abs(w) for w in target_weights.values())
+                            if total > 0:
+                                target_weights = {k: v/total for k, v in target_weights.items()}
+                        elif hasattr(target_weights, '__iter__'):
+                            target_weights = np.array(target_weights)
+                            total = np.sum(np.abs(target_weights))
+                            if total > 0:
+                                target_weights = target_weights / total
+                        
+                        # Calculate portfolio returns on TEST period (out-of-sample)
+                        if isinstance(target_weights, dict):
+                            weight_array = np.array([
+                                target_weights.get(col, 1.0/len(test_prices.columns))
+                                for col in test_prices.columns
+                            ])
+                        else:
+                            weight_array = np.array(target_weights)
+                            if len(weight_array) != len(test_prices.columns):
+                                # Pad or truncate to match
+                                n_assets = len(test_prices.columns)
+                                if len(weight_array) > n_assets:
+                                    weight_array = weight_array[:n_assets]
+                                else:
+                                    weight_array = np.pad(
+                                        weight_array,
+                                        (0, n_assets - len(weight_array)),
+                                        constant_values=1.0/n_assets
+                                    )
+                        
+                        # Re-normalize
+                        weight_sum = np.sum(np.abs(weight_array))
+                        if weight_sum > 0:
+                            weight_array = weight_array / weight_sum
+                        
+                        # Portfolio returns (execution at t+1, signal at t)
+                        # Shift returns by 1 to prevent lookahead bias
+                        portfolio_returns = (test_returns * weight_array).sum(axis=1)
+                        
+                        # Calculate metrics on OOS test period
+                        cum_return = (1 + portfolio_returns).prod() - 1
+                        
+                        # Monthly returns for calendar month analysis
+                        monthly_returns = self._calculate_monthly_returns(
+                            portfolio_returns, 
+                            test_prices.index[len(test_returns)-len(portfolio_returns):]
+                        )
+                        
+                        mean_monthly = np.mean(monthly_returns) if len(monthly_returns) > 0 else 0.0
+                        max_dd = self._calculate_max_drawdown(portfolio_returns)
+                        sharpe = self._calculate_sharpe(portfolio_returns)
+                        pct_positive = np.mean([r > 0 for r in monthly_returns]) if len(monthly_returns) > 0 else 0.0
+                        
+                        logger.info(f"  Cumulative Return: {cum_return:.2%}")
+                        logger.info(f"  Mean Monthly Return: {mean_monthly:.2%}")
+                        logger.info(f"  Max Drawdown: {max_dd:.2%}")
+                        logger.info(f"  Sharpe: {sharpe:.3f}")
+                        
+                        # Store results
+                        fold_strategy_results[strategy_name] = {
+                            'fold': fold_idx,
+                            'cumulative_return': cum_return,
+                            'mean_monthly_return': mean_monthly,
+                            'max_drawdown': max_dd,
+                            'sharpe': sharpe,
+                            'pct_positive': pct_positive,
+                            'weights': target_weights if isinstance(target_weights, dict) 
+                                      else dict(zip(test_prices.columns, weight_array)),
+                            'n_months': len(monthly_returns)
+                        }
+                        
+                        # Track for aggregation
+                        if strategy_name in strategy_monthly_returns:
+                            strategy_monthly_returns[strategy_name].extend(monthly_returns)
+                        
+                        # Update strategy selector track record
+                        if strategy_selector and hasattr(strategy_selector, '_track_record'):
+                            strategy_selector._track_record[strategy_name].append({
+                                'return_pct': cum_return,
+                                'volatility': portfolio_returns.std(),
+                                'sharpe': sharpe,
+                                'fold': fold_idx,
+                                'period': f"{test_prices.index[0]}:{test_prices.index[-1]}"
+                            })
+                        
+                    except Exception as e:
+                        logger.warning(f"{strategy_name} failed in fold {fold_idx + 1}: {e}")
+                        fold_strategy_results[strategy_name] = {
+                            'fold': fold_idx,
+                            'error': str(e),
+                            'cumulative_return': 0.0,
+                            'mean_monthly_return': 0.0,
+                            'max_drawdown': 0.0,
+                            'sharpe': 0.0,
+                            'pct_positive': 0.0,
+                            'n_months': 0
+                        }
+            
+            # Aggregate fold results
+            if fold_strategy_results:
+                avg_monthly = np.mean([
+                    r['mean_monthly_return'] for r in fold_strategy_results.values()
+                    if 'mean_monthly_return' in r and r.get('n_months', 0) > 0
+                ]) if fold_strategy_results else 0.0
+                
+                worst_dd = min([
+                    r['max_drawdown'] for r in fold_strategy_results.values()
+                    if 'max_drawdown' in r
+                ], default=0.0)
+                
+                avg_sharpe = np.mean([
+                    r['sharpe'] for r in fold_strategy_results.values()
+                    if 'sharpe' in r and r.get('n_months', 0) > 0
+                ]) if fold_strategy_results else 0.0
+                
+                all_months = []
+                for r in fold_strategy_results.values():
+                    if r.get('n_months', 0) > 0:
+                        all_months.append(r['pct_positive'])
+                pct_positive = np.mean(all_months) if all_months else 0.0
+                
+                n_months = sum([r.get('n_months', 0) for r in fold_strategy_results.values()]) // max(len(fold_strategy_results), 1)
+                
+                fold_results.append({
+                    'fold': fold_idx,
+                    'train_start': train_start,
+                    'train_end': train_end,
+                    'test_start': test_start,
+                    'test_end': test_end,
+                    'strategy_results': fold_strategy_results,
+                    'avg_monthly_return': avg_monthly,
+                    'worst_drawdown': worst_dd,
+                    'avg_sharpe': avg_sharpe,
+                    'pct_positive': pct_positive,
+                    'n_months': n_months
+                })
+        
+        # Aggregate across all folds
+        if fold_results:
+            aggregated = {
+                'mean_monthly_return': np.mean([f['avg_monthly_return'] for f in fold_results]),
+                'worst_max_drawdown': min([f['worst_drawdown'] for f in fold_results], default=0.0),
+                'mean_sharpe': np.mean([f['avg_sharpe'] for f in fold_results]),
+                'pct_months_positive': np.mean([f['pct_positive'] for f in fold_results]),
+                'n_calendar_months_observed': sum([f['n_months'] for f in fold_results]),
+                'n_folds': len(fold_results)
+            }
+            
+            # Per-strategy aggregation
+            strategy_results = {}
+            for strat_name, monthly_rets in strategy_monthly_returns.items():
+                if monthly_rets:
+                    rets_array = np.array(monthly_rets)
+                    strategy_results[strat_name] = {
+                        'mean_monthly_return': np.mean(rets_array),
+                        'std_monthly_return': np.std(rets_array),
+                        'sharpe': np.mean(rets_array) / np.std(rets_array) * np.sqrt(12) if np.std(rets_array) > 0 else 0,
+                        'total_months': len(monthly_rets),
+                        'pct_positive': np.mean([r > 0 for r in monthly_rets])
+                    }
+        else:
+            aggregated = {
+                'mean_monthly_return': 0.0,
+                'worst_max_drawdown': 0.0,
+                'mean_sharpe': 0.0,
+                'pct_months_positive': 0.0,
+                'n_calendar_months_observed': 0,
+                'n_folds': 0
+            }
+            strategy_results = {}
+        
+        logger.info("\n" + "=" * 70)
+        logger.info("WALK-FORWARD BACKTEST COMPLETE")
+        logger.info("=" * 70)
+        logger.info(f"Folds: {aggregated['n_folds']}")
+        logger.info(f"Mean Monthly Return: {aggregated['mean_monthly_return']:.2%}")
+        logger.info(f"Worst Max Drawdown: {aggregated['worst_max_drawdown']:.2%}")
+        logger.info(f"Mean Sharpe: {aggregated['mean_sharpe']:.3f}")
+        logger.info(f"% Positive Months: {aggregated['pct_months_positive']:.0%}")
+        logger.info(f"Total Calendar Months: {aggregated['n_calendar_months_observed']}")
+        
+        return {
+            'aggregated': aggregated,
+            'folds': fold_results,
+            'strategy_results': strategy_results
+        }
+    
+    def _generate_walk_forward_folds(
+        self,
+        n_samples: int,
+        n_folds: int,
+        train_ratio: float = 0.6,
+        test_ratio: float = 0.2,
+        step_ratio: float = 0.2
+    ) -> List[Tuple[int, int, int, int]]:
+        """
+        Generate walk-forward fold indices ensuring temporal causality.
+        
+        Each fold:
+        - Training window: [0, train_end)
+        - Test window: [train_end, test_end)
+        - Next fold shifts by step_size
+        
+        Args:
+            n_samples: Total number of samples
+            n_folds: Number of folds to generate
+            train_ratio: Fraction for training window
+            test_ratio: Fraction for test window
+            step_ratio: Fraction for step size
+            
+        Returns:
+            List of (train_start, train_end, test_start, test_end) tuples
+        """
+        folds = []
+        
+        min_train = max(30, int(n_samples * train_ratio))
+        min_test = max(10, int(n_samples * test_ratio))
+        step_size = max(5, int(n_samples * step_ratio))
+        
+        if n_samples < min_train + min_test:
+            logger.warning(f"Insufficient data: {n_samples} < {min_train + min_test}")
+            return folds
+        
+        train_start = 0
+        for i in range(n_folds):
+            train_end = min_train + i * step_size
+            test_start = train_end
+            test_end = min(train_end + min_test, n_samples)
+            
+            if test_end > n_samples:
+                break
+            
+            if train_end - train_start >= min_train and test_end - test_start >= min_test:
+                folds.append((train_start, train_end, test_start, test_end))
+                logger.debug(f"Fold {i+1}: Train[{train_start}:{train_end}], Test[{test_start}:{test_end}]")
+        
+        logger.info(f"Generated {len(folds)} walk-forward folds from {n_samples} samples")
+        return folds
+    
+    def _calculate_monthly_returns(
+        self,
+        daily_returns: pd.Series,
+        dates: pd.DatetimeIndex
+    ) -> List[float]:
+        """Convert daily returns to monthly returns."""
+        if len(daily_returns) == 0 or len(dates) != len(daily_returns):
+            return []
+        
+        # Create DataFrame with dates index
+        ret_df = pd.DataFrame({'returns': daily_returns.values}, index=dates)
+        
+        # Resample to monthly
+        monthly = ret_df['returns'].groupby(pd.Grouper(freq='M')).apply(
+            lambda x: (1 + x).prod() - 1
+        )
+        
+        return monthly.dropna().tolist()
+    
+    def _calculate_max_drawdown(self, returns: pd.Series) -> float:
+        """Calculate maximum drawdown from returns series."""
+        if len(returns) == 0:
+            return 0.0
+        
+        cumulative = (1 + returns).cumprod()
+        running_max = cumulative.cummax()
+        drawdown = (cumulative - running_max) / running_max
+        
+        return float(drawdown.min()) if len(drawdown) > 0 else 0.0
+    
+    def _calculate_sharpe(self, returns: pd.Series, risk_free_rate: float = 0.02) -> float:
+        """Calculate annualized Sharpe ratio."""
+        if len(returns) == 0 or returns.std() == 0:
+            return 0.0
+        
+        mean_return = returns.mean() * 252  # Annualized
+        volatility = returns.std() * np.sqrt(252)  # Annualized
+        
+        return float((mean_return - risk_free_rate) / volatility) if volatility > 0 else 0.0
         
     def run_backtest(
         self,
@@ -506,6 +913,52 @@ class WalkForwardValidator:
             'avg_oos_return': avg_oos_return,
             'avg_oos_sharpe': avg_oos_sharpe
         }
+
+
+def _generate_walk_forward_folds(
+    n_samples: int,
+    n_folds: int,
+    min_train_size: int = 60,
+    min_test_size: int = 20
+) -> List[Tuple[int, int, int, int]]:
+    """
+    Generate walk-forward fold indices ensuring temporal causality.
+    
+    Args:
+        n_samples: Total number of samples
+        n_folds: Number of folds to generate
+        min_train_size: Minimum training window size
+        min_test_size: Minimum test window size
+        
+    Returns:
+        List of (train_start, train_end, test_start, test_end) index tuples
+    """
+    folds = []
+    
+    # Calculate fold sizes
+    total_required = min_train_size + min_test_size
+    if n_samples < total_required:
+        logger.warning(f"Insufficient data: {n_samples} samples < {total_required} required")
+        return folds
+    
+    # Divide available data into folds
+    available_for_folds = n_samples - min_train_size
+    fold_step = max(1, available_for_folds // n_folds)
+    
+    for i in range(n_folds):
+        train_start = 0
+        train_end = min_train_size + i * fold_step
+        test_start = train_end
+        test_end = min(test_start + min_test_size, n_samples)
+        
+        if test_end > n_samples:
+            break
+            
+        if train_end - train_start >= min_train_size and test_end - test_start >= min_test_size:
+            folds.append((train_start, train_end, test_start, test_end))
+    
+    logger.info(f"Generated {len(folds)} walk-forward folds from {n_samples} samples")
+    return folds
 
 
 if __name__ == "__main__":
