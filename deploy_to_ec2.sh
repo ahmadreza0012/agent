@@ -53,10 +53,11 @@ set -e
 echo "=== Starting application deployment ==="
 
 # Update system
-sudo yum update -y 2>/dev/null || sudo apt-get update -y
+sudo dnf update -y 2>/dev/null || sudo yum update -y 2>/dev/null || sudo apt-get update -y
 
-# Install dependencies
+# Install dependencies (Amazon Linux 2023 uses dnf)
 echo "Installing system dependencies..."
+sudo dnf install -y python3 python3-pip git tmux htop 2>/dev/null || \
 sudo yum install -y python3 python3-pip git tmux htop 2>/dev/null || \
 sudo apt-get install -y python3 python3-pip git tmux htop
 
