@@ -69,11 +69,11 @@ jobs:
             
             echo "📦 Updating trading agent..."
             
-            # Navigate to project directory
-            cd ~/trading-agent || {
-              echo "Creating trading-agent directory..."
-              mkdir -p ~/trading-agent
-              cd ~/trading-agent
+            # Navigate to project directory (CHANGED to ~/agent)
+            cd ~/agent || {
+              echo "Creating agent directory..."
+              mkdir -p ~/agent
+              cd ~/agent
             }
             
             # Backup current .env if exists
@@ -87,8 +87,11 @@ jobs:
               echo "🔄 Pulling latest changes..."
               git pull origin main || git pull origin master
             else
-              echo "⚠️ Git repository not found on server. Using rsync method..."
-              exit 0
+              echo "⚠️ Git repository not found on server. Cloning..."
+              cd ~/
+              rm -rf ~/agent
+              git clone https://github.com/ahmadreza0012/agent.git
+              cd ~/agent
             fi
             
             # Activate virtual environment
@@ -114,18 +117,29 @@ jobs:
               echo "⚠️ IMPORTANT: Update .env with your API keys!"
             fi
             
+            # Kill existing bot process
+            echo "🛑 Stopping existing bot..."
+            screen -S bot -X quit || true
+            pkill -f "python.*main.py" || true
+            
+            # Start bot in screen session
+            echo "🚀 Starting bot in screen session..."
+            screen -S bot -dm bash -c "cd ~/agent && source venv/bin/activate && python main.py"
+            
             echo "✅ Deployment completed successfully!"
             
             # Show status
             echo ""
             echo "📊 Current status:"
+            screen -ls
+            echo ""
             ps aux | grep -E "[m]ain.py|[a]gent" | head -5 || echo "No running process found"
             
             echo ""
             echo "📝 Next steps:"
             echo "1. Update .env file with your API keys if needed"
-            echo "2. Restart the application: tmux attach -s trading-agent || tmux new -s trading-agent"
-            echo "3. Run: source venv/bin/activate && python main.py"
+            echo "2. To see bot logs: screen -r bot"
+            echo "3. To detach from screen: Ctrl+A, then D"
           EOF
           
           echo "✅ Deployment script executed!"
@@ -134,12 +148,15 @@ jobs:
         run: |
           echo "🔍 Verifying deployment..."
           ssh -i ~/.ssh/ec2_key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
-            cd ~/trading-agent
+            cd ~/agent
             if [ -f main.py ] && [ -d venv ]; then
               echo "✅ Verification successful!"
               echo "Project files: $(ls -la | wc -l) files"
               echo "Virtual environment: OK"
               echo "Requirements installed: $(pip list | wc -l) packages"
+              echo ""
+              echo "Bot status:"
+              screen -ls | grep "bot" || echo "Bot not running in screen"
             else
               echo "❌ Verification failed!"
               exit 1
