@@ -33,6 +33,12 @@ jobs:
             # Navigate to home directory
             cd /home/ec2-user
             
+            # Install git if not available
+            echo "🔧 Installing system dependencies..."
+            if ! command -v git &> /dev/null; then
+              sudo dnf install -y git || sudo yum install -y git
+            fi
+            
             # Check if agent directory exists
             if [ -d "agent" ]; then
               echo "📁 Agent directory exists. Updating..."
