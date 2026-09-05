@@ -1,1 +1,4 @@
-Nothing needs to be added to .gitignore since only a shell script file (`deploy_to_ec2.sh`) was modified and no build artifacts, dependencies, or temporary files were included in the changes.
+```
+# CI/CD
+.github/
+```
