@@ -1,41 +1,66 @@
 ```
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Logs and temp files
-*.log
-*.tmp
-
-# Environment
+# Environment and configuration
 .env
 .env.local
 *.env.*
 
-# Editors
-.vscode/
-.idea/
+# Logs
+*.log
 
-# Dependencies
-.venv/
-venv/
-node_modules/
+# Temporary files
+*.tmp
+
+# Editor/IDE files
+.vscode/
 
 # Build artifacts
-dist/
 build/
-target/
+dist/
 
-# Testing
-.coverage
-htmlcov/
-.coverage.*
-.nyc_output
-coverage-final.json
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
 
-# OS generated files
+# System files
 .DS_Store
 Thumbs.db
+
+# Coverage reports
+coverage/
+htmlcov/
+*.coverage
+
+# Package manager caches
+.npm/
+.yarn/
+.pip/
+.mypy_cache/
+.pytest_cache/
+
+# Compressed archives
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
