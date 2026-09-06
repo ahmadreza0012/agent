@@ -76,6 +76,27 @@ jobs:
             echo "🚀 Starting bot in screen session..."
             screen -S bot -dm bash -c "cd /home/ec2-user/agent && python3 main.py"
             
+            # Start Web API for monitoring and control
+            echo "🌐 Starting Web API for monitoring..."
+            cd /home/ec2-user/agent
+            
+            # Install Flask dependencies if not already installed
+            pip3 install flask flask-cors --quiet || true
+            
+            # Stop any existing Web API process
+            pkill -f "python.*web_api.py" || true
+            
+            # Start Web API in background
+            nohup python3 web_api.py > web_api.log 2>&1 &
+            echo $! > .web_api.pid
+            sleep 2
+            
+            if ps -p $(cat .web_api.pid) > /dev/null 2>&1; then
+              echo "✅ Web API started successfully on port 5000"
+            else
+              echo "⚠️ Web API failed to start, check web_api.log"
+            fi
+            
             echo "========================================="
             echo "✅ Deployment completed successfully!"
             echo "========================================="
