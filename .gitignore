@@ -1,4 +1,10 @@
+```gitignore
+# Compiled Python files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Original rules preserved
+*.log
 ```
-# Documentation
-QUICK_DEPLOYMENT_FLOW.md
-```.pyc
