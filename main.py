@@ -240,10 +240,38 @@ def run_trading_cycle():
             
             # PHASE 5: Use per_asset_news_sentiment from system_state if available
             per_asset_sentiment = system_state.get('per_asset_news_sentiment', None)
-            P, Q = ai_sentiment.generate_views(prices_risky, expected_returns_hist, risky_symbols, 
-                                                per_asset_sentiment=per_asset_sentiment)
-            cov_risky = returns_risky.cov().values * freq.annualization_factor_mean
+            
+            # Build headlines map for Black-Litterman views
+            news_fetcher_instance = ai_sentiment.news_fetcher
+            all_headlines = news_fetcher_instance.fetch_all()
+            headlines_map = {}
+            for sym in risky_symbols:
+                base_sym = ai_sentiment._normalize_symbol(sym)
+                headlines_map[base_sym] = news_fetcher_instance.get_headlines_for_symbol(
+                    base_sym, all_headlines, max_items=8
+                )
+            
+            # Generate per-asset sentiment for Black-Litterman
+            asset_sentiment_for_bl = ai_sentiment.generate_per_asset_news_sentiment(
+                risky_symbols, headlines_map
+            )
+            
+            # Use generate_views_for_portfolio instead of non-existent generate_views
+            Q, P_indices, view_assets = ai_sentiment.generate_views_for_portfolio(
+                prices_risky, risky_symbols, 
+                news_data={k: [h for hl in headlines_map.values() for h in hl]},  # Flatten headlines
+                max_views=3, q_magnitude_cap=0.08
+            )
+            
+            # Create P matrix (identity for simple views)
             n_risky = len(risky_symbols)
+            P = np.zeros((len(Q), n_risky))
+            for i, asset in enumerate(view_assets):
+                if asset in risky_symbols:
+                    asset_idx = risky_symbols.index(asset)
+                    P[i, asset_idx] = 1.0
+            
+            cov_risky = returns_risky.cov().values * freq.annualization_factor_mean
             market_caps = np.ones(n_risky)
             omega = ai_sentiment.get_confidence_matrix(n_risky, risky_symbols, base_confidence=0.05)
             
@@ -263,20 +291,37 @@ def run_trading_cycle():
         
         def ml_strategy(prices, returns):
             """ML-based return forecasting with frequency-aware windows"""
-            # PHASE 4 FIX: Pass freq to ml_forecast_returns for automatic window sizing
-            ml_expected_returns = optimizer.ml_forecast_returns(
-                returns, 
-                lookback=None,  # Auto-detect from freq (default ~7 days)
-                forecast_horizon=None,  # Auto-detect from freq (default ~1 day)
-                freq=freq
+            from ml.ml_predictor import CryptoMLPredictor
+            
+            # PHASE 4 FIX: Use CryptoMLPredictor instead of non-existent ml_forecast_returns
+            predictor = CryptoMLPredictor(
+                model_type='ridge',
+                lookback_period=max(14, int(freq.window_7d)),  # Use freq-aware lookback
+                prediction_horizon=max(1, int(freq.window_1d)),  # Use freq-aware horizon
+                min_oos_r2=0.0
             )
             
-            # PHASE 1 FIX: Correctly annualize ML forecasts (no forced positive floor)
-            ml_expected_returns = ml_expected_returns * freq.annualization_factor_mean
-            
-            cov_matrix = returns.cov().values * freq.annualization_factor_mean
-            return optimizer.mean_variance_optimization(ml_expected_returns, cov_matrix, 
-                                                        risk_free_rate=0.0, method='max_sharpe')
+            # Generate features and fit model
+            try:
+                fit_result = predictor.fit(prices)
+                
+                if predictor.is_disabled or fit_result.get('disabled', False):
+                    logger.info("ML disabled due to poor OOS performance, using equal weights")
+                    return np.ones(n_assets) / n_assets
+                
+                # Get predictions and convert to expected returns
+                predictions = predictor.predict(prices)
+                ml_expected_returns = predictions.iloc[0].values
+                
+                # Annualize ML forecasts
+                ml_expected_returns = ml_expected_returns * freq.annualization_factor_mean
+                
+                cov_matrix = returns.cov().values * freq.annualization_factor_mean
+                return optimizer.mean_variance_optimization(ml_expected_returns, cov_matrix, 
+                                                            risk_free_rate=0.0, method='max_sharpe')
+            except Exception as e:
+                logger.warning(f"ML strategy failed: {e}, using equal weights")
+                return np.ones(n_assets) / n_assets
         
         strategy_fns = {
             'mvo': mvo_strategy,

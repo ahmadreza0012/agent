@@ -445,14 +445,19 @@ class Backtester:
         daily_returns: pd.Series,
         dates: pd.DatetimeIndex
     ) -> pd.Series:
-        """Convert daily returns to monthly returns. Returns a pd.Series (may be empty)."""
+        """
+        Convert daily returns to monthly returns. Returns a pd.Series (may be empty).
+        
+        If insufficient data for full months, returns the cumulative return for the available period
+        as a single "pseudo-month" to ensure we always have some metric for decision making.
+        """
         if len(daily_returns) == 0 or len(dates) != len(daily_returns):
             return pd.Series([], dtype=float)
         
         # Create DataFrame with dates index
         ret_df = pd.DataFrame({'returns': daily_returns.values}, index=dates)
         
-        # Resample to monthly - use 'ME' for month-end (newer pandas) or 'M' for older
+        # Try to resample to monthly
         try:
             monthly = ret_df['returns'].groupby(pd.Grouper(freq='ME')).apply(
                 lambda x: (1 + x).prod() - 1
@@ -462,6 +467,14 @@ class Backtester:
             monthly = ret_df['returns'].groupby(pd.Grouper(freq='M')).apply(
                 lambda x: (1 + x).prod() - 1
             )
+        
+        # If no full months but we have data, create a pseudo-month from cumulative return
+        if len(monthly.dropna()) == 0 and len(daily_returns) > 0:
+            # Calculate cumulative return for the entire period as a single pseudo-month
+            cumulative_return = (1 + daily_returns).prod() - 1
+            # Use the last date as the index for this pseudo-month
+            monthly = pd.Series([cumulative_return], index=[dates[-1]])
+            logger.info(f"Created pseudo-month return: {cumulative_return:.4f} from {len(daily_returns)} days")
         
         return monthly.dropna()
     
