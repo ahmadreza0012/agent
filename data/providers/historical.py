@@ -242,8 +242,17 @@ class HistoricalDataProvider(DataProvider):
             logger.warning("All dataframes were empty or None")
             return pd.DataFrame()
         
-        # Forward fill then backward fill for missing values
-        prices = prices.ffill().bfill()
+        # CRITICAL: Only forward-fill is allowed to prevent lookahead bias
+        # NEVER use bfill() as it introduces future information
+        prices = prices.ffill()
+        
+        # Log warning if we still have NaN values after ffill
+        nan_count = prices.isna().sum().sum()
+        if nan_count > 0:
+            logger.warning(
+                f"Data alignment resulted in {nan_count} NaN values after forward-fill. "
+                f"These represent genuine missing data that should be handled downstream."
+            )
         
         logger.info(f"Aligned data: {len(prices)} rows, {len(prices.columns)} columns")
         return prices

@@ -307,13 +307,22 @@ class CryptoDataFetcher:
     def align_data(self, raw_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """
         Align data from different symbols to common timestamps.
-        Compatible interface with main.py trading cycle.
+        
+        CRITICAL: This method ONLY uses forward-fill (ffill) to prevent lookahead bias.
+        Backward-fill (bfill) is NOT used because it would introduce future information
+        into historical data, invalidating backtests and live trading decisions.
+        
+        Missing values that cannot be forward-filled remain as NaN and should be
+        handled by the feature engineering layer or rejected by data quality checks.
         
         Args:
             raw_data: Dictionary mapping symbol to DataFrame
             
         Returns:
             Aligned DataFrame with columns for each symbol
+            
+        Raises:
+            ValueError: If no valid data is available
         """
         if not raw_data:
             logger.warning("No data to align")
@@ -329,8 +338,17 @@ class CryptoDataFetcher:
             logger.warning("All dataframes were empty or None")
             return pd.DataFrame()
         
-        # Forward fill then backward fill for missing values
-        prices = prices.ffill().bfill()
+        # CRITICAL: Only forward-fill is allowed to prevent lookahead bias
+        # NEVER use bfill() as it introduces future information
+        prices = prices.ffill()
+        
+        # Log warning if we still have NaN values after ffill
+        nan_count = prices.isna().sum().sum()
+        if nan_count > 0:
+            logger.warning(
+                f"Data alignment resulted in {nan_count} NaN values after forward-fill. "
+                f"These represent genuine missing data that should be handled downstream."
+            )
         
         logger.info(f"Aligned data: {len(prices)} rows, {len(prices.columns)} columns")
         return prices
