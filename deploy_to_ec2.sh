@@ -73,7 +73,8 @@ if [ ! -d ".git" ]; then
     git clone https://github.com/ahmadreza0012/agent.git . 2>/dev/null || true
 else
     echo "Updating repository..."
-    git fetch origin main
+    git fetch --all
+    git checkout main 2>/dev/null || git checkout -b main
     git reset --hard origin/main
 fi
 
