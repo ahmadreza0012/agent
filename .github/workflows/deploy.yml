@@ -31,26 +31,32 @@ jobs:
             echo "========================================="
             
             # Navigate to home directory
-            cd /home/ec2-user
+            cd ~
             
+            # Get the username dynamically
+            CURRENT_USER=$(whoami)
+            AGENT_DIR="/home/$CURRENT_USER/agent"
+
             # Install git if not available
             echo "🔧 Installing system dependencies..."
             if ! command -v git &> /dev/null; then
               sudo dnf install -y git || sudo yum install -y git
             fi
-            
+
             # Check if agent directory exists
             if [ -d "agent" ]; then
               echo "📁 Agent directory exists. Updating..."
               cd agent
-              git fetch origin main
+              git fetch --all
+              git checkout main 2>/dev/null || git checkout -b main
               git reset --hard origin/main
             else
               echo "📁 Cloning agent repository..."
-              git clone https://github.com/ahmadreza0012/agent.git
+              git clone --branch main https://github.com/ahmadreza0012/agent.git
               cd agent
+              AGENT_DIR="$(pwd)"
             fi
-            
+
             # Install dependencies if needed
             echo "📦 Installing Python dependencies..."
             if command -v pip3 &> /dev/null; then
@@ -60,44 +66,44 @@ jobs:
               sudo dnf install -y python3-pip
               pip3 install -r requirements.txt
             fi
-            
+
             # Create .env file if it doesn't exist
             if [ ! -f .env ]; then
               echo "📝 Creating .env file from example..."
               cp .env.example .env
               echo "⚠️ IMPORTANT: Please update .env file with your API keys!"
             fi
-            
+
             # Stop existing bot process
             echo "🛑 Stopping existing bot (if running)..."
             screen -S bot -X quit || true
             pkill -f "python.*main.py" || true
-            
+
             # Start the bot in a screen session
             echo "🚀 Starting bot in screen session..."
-            screen -S bot -dm bash -c "cd /home/ec2-user/agent && python3 main.py"
-            
+            screen -S bot -dm bash -c "cd $AGENT_DIR && python3 main.py"
+
             # Start Web API for monitoring and control
             echo "🌐 Starting Web API for monitoring..."
-            cd /home/ec2-user/agent
-            
+            cd $AGENT_DIR
+
             # Install Flask dependencies if not already installed
             pip3 install flask flask-cors --quiet || true
-            
+
             # Stop any existing Web API process
             pkill -f "python.*web_api.py" || true
-            
+
             # Start Web API in background
             nohup python3 web_api.py > web_api.log 2>&1 &
             echo $! > .web_api.pid
             sleep 2
-            
+
             if ps -p $(cat .web_api.pid) > /dev/null 2>&1; then
               echo "✅ Web API started successfully on port 5000"
             else
               echo "⚠️ Web API failed to start, check web_api.log"
             fi
-            
+
             echo "========================================="
             echo "✅ Deployment completed successfully!"
             echo "========================================="
@@ -106,7 +112,7 @@ jobs:
             screen -ls
             echo ""
             echo "📝 To view bot logs:"
-            echo "   ssh -i ~/.ssh/ec2_key.pem ec2-user@${{ secrets.EC2_HOST }}"
+            echo "   ssh -i ~/.ssh/ec2_key.pem \${{ secrets.EC2_USER }}@\${{ secrets.EC2_HOST }}"
             echo "   screen -r bot"
             echo ""
             echo "📝 To detach from screen: Ctrl+A, then D"
@@ -116,7 +122,9 @@ jobs:
         run: |
           echo "🔍 Verifying deployment..."
           ssh -i ~/.ssh/ec2_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            cd /home/ec2-user/agent
+            CURRENT_USER=$(whoami)
+            AGENT_DIR="/home/$CURRENT_USER/agent"
+            cd $AGENT_DIR
             if [ -f main.py ]; then
               echo "✅ main.py found"
               echo "✅ Project files: $(ls -la | wc -l) files"
