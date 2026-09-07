@@ -1,9 +1,25 @@
 {
-  "last_updated": "2026-09-07T16:32:26.061380",
-  "session_id": "20260907_163224",
-  "total_cycles": 1,
+  "last_updated": "2026-09-07T16:42:38.039816",
+  "session_id": "20260907_164231",
+  "total_cycles": 3,
   "total_errors": 0,
   "history": [
+    {
+      "mean_monthly_return": NaN,
+      "worst_max_drawdown": -0.2320454857507684,
+      "mean_sharpe": NaN,
+      "pct_months_positive": 0.0,
+      "n_calendar_months_observed": 0,
+      "n_folds": 2
+    },
+    {
+      "mean_monthly_return": NaN,
+      "worst_max_drawdown": -0.2320454857507684,
+      "mean_sharpe": NaN,
+      "pct_months_positive": 0.0,
+      "n_calendar_months_observed": 0,
+      "n_folds": 2
+    },
     {
       "mean_monthly_return": NaN,
       "worst_max_drawdown": -0.2320454857507684,
@@ -30,6 +46,42 @@
         "decision": "insufficient_data",
         "sleep_hours": 2,
         "duration_seconds": 1.6801419258117676,
+        "stages": "1-4 COMPLETE"
+      }
+    },
+    {
+      "cycle_number": 1,
+      "timestamp": "2026-09-07T16:40:59.272371",
+      "results": {
+        "backtest_results": {
+          "mean_monthly_return": NaN,
+          "worst_max_drawdown": -0.2320454857507684,
+          "mean_sharpe": NaN,
+          "pct_months_positive": 0.0,
+          "n_calendar_months_observed": 0,
+          "n_folds": 2
+        },
+        "decision": "insufficient_data",
+        "sleep_hours": 2,
+        "duration_seconds": 1.7045457363128662,
+        "stages": "1-4 COMPLETE"
+      }
+    },
+    {
+      "cycle_number": 1,
+      "timestamp": "2026-09-07T16:42:38.039809",
+      "results": {
+        "backtest_results": {
+          "mean_monthly_return": NaN,
+          "worst_max_drawdown": -0.2320454857507684,
+          "mean_sharpe": NaN,
+          "pct_months_positive": 0.0,
+          "n_calendar_months_observed": 0,
+          "n_folds": 2
+        },
+        "decision": "insufficient_data",
+        "sleep_hours": 2,
+        "duration_seconds": 1.7242774963378906,
         "stages": "1-4 COMPLETE"
       }
     }

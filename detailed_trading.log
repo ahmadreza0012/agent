@@ -159,3 +159,339 @@ Evaluating strategy: funding_arb
 2026-09-07 16:32:26,061 - root - INFO - [decision] {"decision_type": "insufficient_data", "reason": "Only 0 months", "metrics": {"n_months": 0, "required": 3}}
 2026-09-07 16:32:26,061 - root - INFO - [cycle_end] {"cycle_number": 1, "results": {"backtest_results": {"mean_monthly_return": NaN, "worst_max_drawdown": -0.2320454857507684, "mean_sharpe": NaN, "pct_months_positive": 0.0, "n_calendar_months_observed": 0, "n_folds": 2}, "decision": "insufficient_data", "sleep_hours": 2, "duration_seconds": 1.6801419258117676, "stages": "1-4 COMPLETE"}, "duration_seconds": 1.6801419258117676}
 2026-09-07 16:32:26,061 - main - INFO - Sleeping 2h before next cycle...
+2026-09-07 16:40:52,564 - db_manager - INFO - Created database directory: /app/data
+2026-09-07 16:40:52,565 - db_manager - INFO - Database tables initialized successfully
+2026-09-07 16:40:52,565 - __main__ - INFO - Database initialized successfully
+2026-09-07 16:40:52,566 - db_manager - INFO - Loaded strategy history for 0 strategies from database
+2026-09-07 16:40:52,566 - __main__ - INFO - Starting FastAPI server on port 8000...
+2026-09-07 16:40:52,566 - __main__ - INFO - STAGES 1-4 ACTIVE + DATABASE PERSISTENCE: All critical fixes and improvements deployed
+2026-09-07 16:40:57,567 - root - INFO - [cycle_start] {"cycle_number": 1, "timestamp": "2026-09-07T16:40:57.566753"}
+2026-09-07 16:40:57,567 - __main__ - INFO - ======================================================================
+2026-09-07 16:40:57,567 - __main__ - INFO - TRADING CYCLE #1 - ALL STAGES ACTIVE
+2026-09-07 16:40:57,567 - __main__ - INFO - ======================================================================
+2026-09-07 16:40:57,570 - data.providers.historical - INFO - Initialized HistoricalDataProvider for 5 symbols
+2026-09-07 16:40:57,570 - ai_sentiment - WARNING - Groq library not installed. Install with: pip install groq
+2026-09-07 16:40:57,574 - data.providers.historical - INFO - Fetching 1d data for BTC/USDT (365 days)
+2026-09-07 16:40:58,257 - data.providers.historical - INFO - ✅ Retrieved 366 candles from yfinance for BTC/USDT
+2026-09-07 16:40:58,257 - data.providers.historical - INFO - Fetching 1d data for ETH/USDT (365 days)
+2026-09-07 16:40:58,293 - data.providers.historical - INFO - ✅ Retrieved 366 candles from yfinance for ETH/USDT
+2026-09-07 16:40:58,293 - data.providers.historical - INFO - Fetching 1d data for SOL/USDT (365 days)
+2026-09-07 16:40:58,332 - data.providers.historical - INFO - ✅ Retrieved 366 candles from yfinance for SOL/USDT
+2026-09-07 16:40:58,332 - data.providers.historical - INFO - Fetching 1d data for BNB/USDT (365 days)
+2026-09-07 16:40:58,374 - data.providers.historical - INFO - ✅ Retrieved 366 candles from yfinance for BNB/USDT
+2026-09-07 16:40:58,374 - data.providers.historical - INFO - Fetching 1d data for XRP/USDT (365 days)
+2026-09-07 16:40:58,416 - data.providers.historical - INFO - ✅ Retrieved 366 candles from yfinance for XRP/USDT
+2026-09-07 16:40:58,420 - data.providers.historical - INFO - Aligned data: 366 rows, 5 columns
+2026-09-07 16:40:58,422 - utils.timeframe - INFO - Detected median bar delta: 24.00 hours
+2026-09-07 16:40:58,422 - __main__ - INFO - Detected data frequency: 1d (annualization: mean=365.0, vol=19.10)
+2026-09-07 16:40:58,422 - __main__ - INFO - Creating StrategySelector with methods: ['mvo', 'risk_parity', 'cvar', 'black_litterman', 'ml', 'trend_following', 'mean_reversion', 'funding_arb']
+2026-09-07 16:40:58,422 - strategy_selector - INFO - StrategySelector (PHASE 7) initialized with 8 strategies, track_record_len=6, decay_rate=0.1, min_weight=5%, max_weight=40%
+2026-09-07 16:40:58,423 - db_manager - INFO - Loaded strategy history for 0 strategies from database
+2026-09-07 16:40:58,423 - __main__ - INFO - ==================================================
+2026-09-07 16:40:58,423 - __main__ - INFO - PHASE 5: Generating dual-signal sentiment
+2026-09-07 16:40:58,423 - __main__ - INFO - ==================================================
+2026-09-07 16:40:58,537 - news_fetcher - INFO - Fetched 25 headlines from https://www.coindesk.com/arc/outboundfeeds/rss/
+2026-09-07 16:40:58,775 - news_fetcher - INFO - Fetched 30 headlines from https://cointelegraph.com/rss
+2026-09-07 16:40:59,009 - news_fetcher - WARNING - Could not fetch/parse feed https://cryptopanic.com/news/rss/: HTTP Error 403: Forbidden
+2026-09-07 16:40:59,009 - news_fetcher - INFO - Fetched 0 headlines from https://cryptopanic.com/news/rss/
+2026-09-07 16:40:59,211 - ai_sentiment - INFO - BTC: news sentiment = 0.000 from 8 headlines
+2026-09-07 16:40:59,211 - ai_sentiment - INFO - ETH: news sentiment = 0.000 from 4 headlines
+2026-09-07 16:40:59,211 - ai_sentiment - INFO - SOL: news sentiment = 0.000 from 2 headlines
+2026-09-07 16:40:59,211 - __main__ - INFO - asset_sentiment_scores = {'BTC': np.float64(0.0), 'ETH': np.float64(0.0), 'SOL': np.float64(0.0), 'BNB': 0.0, 'XRP': 0.0}
+2026-09-07 16:40:59,211 - ai_sentiment - INFO - Market tone: 0.000 from 5 assets
+2026-09-07 16:40:59,212 - __main__ - INFO - market_tone_score = 0.000
+2026-09-07 16:40:59,212 - strategy_selector - INFO - [PHASE 7] Sentiment score: 0.000
+2026-09-07 16:40:59,212 - __main__ - INFO - [Phase 5] Dual-signal sentiment logged: per_asset_news_sentiment={'BTC': np.float64(0.0), 'ETH': np.float64(0.0), 'SOL': np.float64(0.0), 'BNB': 0.0, 'XRP': 0.0}, market_tone_score=0.000
+2026-09-07 16:40:59,212 - __main__ - INFO - Track record sizes: {'mvo': 0, 'risk_parity': 0, 'cvar': 0, 'black_litterman': 0, 'ml': 0, 'trend_following': 0, 'mean_reversion': 0, 'funding_arb': 0}
+2026-09-07 16:40:59,212 - backtester - INFO - ======================================================================
+2026-09-07 16:40:59,212 - backtester - INFO - WALK-FORWARD BACKTEST: 3 folds
+2026-09-07 16:40:59,212 - backtester - INFO - ======================================================================
+2026-09-07 16:40:59,212 - backtester - INFO - Generated 2 walk-forward folds from 366 samples
+2026-09-07 16:40:59,212 - backtester - INFO - Generated 2 walk-forward folds
+2026-09-07 16:40:59,212 - backtester - INFO - 
+==================================================
+2026-09-07 16:40:59,212 - backtester - INFO - FOLD 1/2
+2026-09-07 16:40:59,213 - backtester - INFO - ==================================================
+2026-09-07 16:40:59,213 - backtester - INFO - Train: [0:219) | Test: [219:292)
+2026-09-07 16:40:59,220 - backtester - INFO - 
+Evaluating strategy: mvo
+2026-09-07 16:40:59,231 - portfolio_optimizer - ERROR - MVO failed: Problem does not follow DCP rules. Specifically:
+The objective is not DCP. Its following subexpressions are not:
+PowerApprox(QuadForm(var1, [[0.24 0.31 ... 0.30 0.00]
+ [0.31 0.50 ... 0.43 0.00]
+ ...
+ [0.30 0.43 ... 0.52 0.00]
+ [0.00 0.00 ... 0.00 0.00]]) * 252.0, 0.5). Using equal weights as fallback.
+2026-09-07 16:40:59,231 - backtester - WARNING - mvo failed in fold 1: bad operand type for abs(): 'list'
+2026-09-07 16:40:59,231 - backtester - INFO - 
+Evaluating strategy: risk_parity
+2026-09-07 16:40:59,232 - backtester - WARNING - risk_parity failed in fold 1: 'numpy.ndarray' object has no attribute 'columns'
+2026-09-07 16:40:59,232 - backtester - INFO - 
+Evaluating strategy: cvar
+2026-09-07 16:40:59,232 - backtester - WARNING - cvar failed in fold 1: run_trading_cycle.<locals>.cvar_strategy() missing 1 required positional argument: 'returns'
+2026-09-07 16:40:59,232 - backtester - INFO - 
+Evaluating strategy: black_litterman
+2026-09-07 16:40:59,234 - backtester - WARNING - black_litterman failed in fold 1: 'AISentimentAnalyzer' object has no attribute 'generate_views'
+2026-09-07 16:40:59,234 - backtester - INFO - 
+Evaluating strategy: ml
+2026-09-07 16:40:59,234 - backtester - WARNING - ml failed in fold 1: 'PortfolioOptimizer' object has no attribute 'ml_forecast_returns'
+2026-09-07 16:40:59,234 - backtester - INFO - 
+Evaluating strategy: trend_following
+2026-09-07 16:40:59,237 - backtester - INFO -   Cumulative Return: -17.52%
+2026-09-07 16:40:59,237 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:40:59,237 - backtester - INFO -   Max Drawdown: -23.20%
+2026-09-07 16:40:59,237 - backtester - INFO -   Sharpe: -2.293
+2026-09-07 16:40:59,238 - backtester - INFO - 
+Evaluating strategy: mean_reversion
+2026-09-07 16:40:59,241 - backtester - INFO -   Cumulative Return: -12.87%
+2026-09-07 16:40:59,241 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:40:59,241 - backtester - INFO -   Max Drawdown: -19.93%
+2026-09-07 16:40:59,241 - backtester - INFO -   Sharpe: -1.724
+2026-09-07 16:40:59,241 - backtester - INFO - 
+Evaluating strategy: funding_arb
+2026-09-07 16:40:59,243 - backtester - INFO -   Cumulative Return: -17.52%
+2026-09-07 16:40:59,244 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:40:59,244 - backtester - INFO -   Max Drawdown: -23.20%
+2026-09-07 16:40:59,244 - backtester - INFO -   Sharpe: -2.293
+2026-09-07 16:40:59,245 - backtester - INFO - 
+==================================================
+2026-09-07 16:40:59,245 - backtester - INFO - FOLD 2/2
+2026-09-07 16:40:59,245 - backtester - INFO - ==================================================
+2026-09-07 16:40:59,245 - backtester - INFO - Train: [0:292) | Test: [292:365)
+2026-09-07 16:40:59,250 - backtester - INFO - 
+Evaluating strategy: mvo
+2026-09-07 16:40:59,254 - portfolio_optimizer - ERROR - MVO failed: Problem does not follow DCP rules. Specifically:
+The objective is not DCP. Its following subexpressions are not:
+PowerApprox(QuadForm(var24, [[0.21 0.27 ... 0.26 0.00]
+ [0.27 0.43 ... 0.37 0.00]
+ ...
+ [0.26 0.37 ... 0.43 0.00]
+ [0.00 0.00 ... 0.00 0.00]]) * 252.0, 0.5). Using equal weights as fallback.
+2026-09-07 16:40:59,254 - backtester - WARNING - mvo failed in fold 2: bad operand type for abs(): 'list'
+2026-09-07 16:40:59,254 - backtester - INFO - 
+Evaluating strategy: risk_parity
+2026-09-07 16:40:59,255 - backtester - WARNING - risk_parity failed in fold 2: 'numpy.ndarray' object has no attribute 'columns'
+2026-09-07 16:40:59,255 - backtester - INFO - 
+Evaluating strategy: cvar
+2026-09-07 16:40:59,255 - backtester - WARNING - cvar failed in fold 2: run_trading_cycle.<locals>.cvar_strategy() missing 1 required positional argument: 'returns'
+2026-09-07 16:40:59,255 - backtester - INFO - 
+Evaluating strategy: black_litterman
+2026-09-07 16:40:59,256 - backtester - WARNING - black_litterman failed in fold 2: 'AISentimentAnalyzer' object has no attribute 'generate_views'
+2026-09-07 16:40:59,256 - backtester - INFO - 
+Evaluating strategy: ml
+2026-09-07 16:40:59,256 - backtester - WARNING - ml failed in fold 2: 'PortfolioOptimizer' object has no attribute 'ml_forecast_returns'
+2026-09-07 16:40:59,256 - backtester - INFO - 
+Evaluating strategy: trend_following
+2026-09-07 16:40:59,259 - backtester - INFO -   Cumulative Return: 34.64%
+2026-09-07 16:40:59,259 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:40:59,259 - backtester - INFO -   Max Drawdown: -4.51%
+2026-09-07 16:40:59,259 - backtester - INFO -   Sharpe: 3.478
+2026-09-07 16:40:59,259 - backtester - INFO - 
+Evaluating strategy: mean_reversion
+2026-09-07 16:40:59,263 - backtester - INFO -   Cumulative Return: 34.93%
+2026-09-07 16:40:59,263 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:40:59,263 - backtester - INFO -   Max Drawdown: -7.02%
+2026-09-07 16:40:59,263 - backtester - INFO -   Sharpe: 2.836
+2026-09-07 16:40:59,264 - backtester - INFO - 
+Evaluating strategy: funding_arb
+2026-09-07 16:40:59,265 - backtester - INFO -   Cumulative Return: 34.64%
+2026-09-07 16:40:59,265 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:40:59,266 - backtester - INFO -   Max Drawdown: -4.51%
+2026-09-07 16:40:59,266 - backtester - INFO -   Sharpe: 3.478
+2026-09-07 16:40:59,266 - backtester - INFO - 
+======================================================================
+2026-09-07 16:40:59,266 - backtester - INFO - WALK-FORWARD BACKTEST COMPLETE
+2026-09-07 16:40:59,266 - backtester - INFO - ======================================================================
+2026-09-07 16:40:59,266 - backtester - INFO - Folds: 2
+2026-09-07 16:40:59,266 - backtester - INFO - Mean Monthly Return: nan%
+2026-09-07 16:40:59,267 - backtester - INFO - Worst Max Drawdown: -23.20%
+2026-09-07 16:40:59,267 - backtester - INFO - Mean Sharpe: nan
+2026-09-07 16:40:59,267 - backtester - INFO - % Positive Months: 0%
+2026-09-07 16:40:59,267 - backtester - INFO - Total Calendar Months: 0
+2026-09-07 16:40:59,270 - strategy_selector - INFO - REGIME: crisis (max_dd=-23.20%, vol=36.29%)
+2026-09-07 16:40:59,270 - __main__ - INFO - ======================================================================
+2026-09-07 16:40:59,270 - __main__ - INFO - BACKTEST RESULTS (ALL STAGES)
+2026-09-07 16:40:59,270 - __main__ - INFO - ======================================================================
+2026-09-07 16:40:59,270 - __main__ - INFO - Regime: crisis
+2026-09-07 16:40:59,270 - __main__ - INFO - Mean monthly return: nan%
+2026-09-07 16:40:59,270 - __main__ - INFO - Max Drawdown: -23.20%
+2026-09-07 16:40:59,270 - __main__ - INFO - Sharpe Ratio: nan
+2026-09-07 16:40:59,270 - __main__ - INFO - % Positive Months: 0.00%
+2026-09-07 16:40:59,270 - __main__ - INFO - Folds: 2 | Months: 0
+2026-09-07 16:40:59,271 - root - INFO - [strategy_performance] {"strategy_name": "portfolio", "metrics": {"mean_monthly_return": NaN, "max_drawdown": -0.2320454857507684, "sharpe_ratio": NaN, "pct_positive_months": 0.0, "n_folds": 2, "n_months": 0, "regime": "crisis", "sentiment": 0.0}}
+2026-09-07 16:40:59,271 - __main__ - WARNING - ⚠️ Only 0 months of data (need 3)
+2026-09-07 16:40:59,271 - root - INFO - [decision] {"decision_type": "insufficient_data", "reason": "Only 0 months", "metrics": {"n_months": 0, "required": 3}}
+2026-09-07 16:40:59,272 - db_manager - INFO - Saved cycle 1 to database (decision: insufficient_data)
+2026-09-07 16:40:59,272 - __main__ - INFO - Cycle 1 saved to database
+2026-09-07 16:40:59,272 - root - INFO - [cycle_end] {"cycle_number": 1, "results": {"backtest_results": {"mean_monthly_return": NaN, "worst_max_drawdown": -0.2320454857507684, "mean_sharpe": NaN, "pct_months_positive": 0.0, "n_calendar_months_observed": 0, "n_folds": 2}, "decision": "insufficient_data", "sleep_hours": 2, "duration_seconds": 1.7045457363128662, "stages": "1-4 COMPLETE"}, "duration_seconds": 1.7045457363128662}
+2026-09-07 16:40:59,272 - __main__ - INFO - Sleeping 2h before next cycle...
+2026-09-07 16:42:31,313 - db_manager - INFO - Database tables initialized successfully
+2026-09-07 16:42:31,313 - __main__ - INFO - Database initialized successfully
+2026-09-07 16:42:31,313 - db_manager - INFO - Loaded strategy history for 3 strategies from database
+2026-09-07 16:42:31,313 - __main__ - INFO - Database loaded with 1 cycles (StrategySelector not yet initialized)
+2026-09-07 16:42:31,314 - __main__ - INFO - Starting FastAPI server on port 8000...
+2026-09-07 16:42:31,314 - __main__ - INFO - STAGES 1-4 ACTIVE + DATABASE PERSISTENCE: All critical fixes and improvements deployed
+2026-09-07 16:42:36,314 - root - INFO - [cycle_start] {"cycle_number": 1, "timestamp": "2026-09-07T16:42:36.314373"}
+2026-09-07 16:42:36,314 - __main__ - INFO - ======================================================================
+2026-09-07 16:42:36,314 - __main__ - INFO - TRADING CYCLE #1 - ALL STAGES ACTIVE
+2026-09-07 16:42:36,314 - __main__ - INFO - ======================================================================
+2026-09-07 16:42:36,317 - data.providers.historical - INFO - Initialized HistoricalDataProvider for 5 symbols
+2026-09-07 16:42:36,317 - ai_sentiment - WARNING - Groq library not installed. Install with: pip install groq
+2026-09-07 16:42:36,321 - data.providers.historical - INFO - Fetching 1d data for BTC/USDT (365 days)
+2026-09-07 16:42:37,003 - data.providers.historical - INFO - ✅ Retrieved 366 candles from yfinance for BTC/USDT
+2026-09-07 16:42:37,004 - data.providers.historical - INFO - Fetching 1d data for ETH/USDT (365 days)
+2026-09-07 16:42:37,038 - data.providers.historical - INFO - ✅ Retrieved 366 candles from yfinance for ETH/USDT
+2026-09-07 16:42:37,039 - data.providers.historical - INFO - Fetching 1d data for SOL/USDT (365 days)
+2026-09-07 16:42:37,074 - data.providers.historical - INFO - ✅ Retrieved 366 candles from yfinance for SOL/USDT
+2026-09-07 16:42:37,074 - data.providers.historical - INFO - Fetching 1d data for BNB/USDT (365 days)
+2026-09-07 16:42:37,110 - data.providers.historical - INFO - ✅ Retrieved 366 candles from yfinance for BNB/USDT
+2026-09-07 16:42:37,110 - data.providers.historical - INFO - Fetching 1d data for XRP/USDT (365 days)
+2026-09-07 16:42:37,146 - data.providers.historical - INFO - ✅ Retrieved 366 candles from yfinance for XRP/USDT
+2026-09-07 16:42:37,149 - data.providers.historical - INFO - Aligned data: 366 rows, 5 columns
+2026-09-07 16:42:37,152 - utils.timeframe - INFO - Detected median bar delta: 24.00 hours
+2026-09-07 16:42:37,152 - __main__ - INFO - Detected data frequency: 1d (annualization: mean=365.0, vol=19.10)
+2026-09-07 16:42:37,152 - __main__ - INFO - Creating StrategySelector with methods: ['mvo', 'risk_parity', 'cvar', 'black_litterman', 'ml', 'trend_following', 'mean_reversion', 'funding_arb']
+2026-09-07 16:42:37,152 - strategy_selector - INFO - StrategySelector (PHASE 7) initialized with 8 strategies, track_record_len=6, decay_rate=0.1, min_weight=5%, max_weight=40%
+2026-09-07 16:42:37,152 - db_manager - INFO - Loaded strategy history for 3 strategies from database
+2026-09-07 16:42:37,152 - __main__ - INFO - Restored 1 historical records for 'funding_arb' from DB
+2026-09-07 16:42:37,152 - __main__ - INFO - Restored 1 historical records for 'mean_reversion' from DB
+2026-09-07 16:42:37,152 - __main__ - INFO - Restored 1 historical records for 'trend_following' from DB
+2026-09-07 16:42:37,153 - __main__ - INFO - Loaded 3 strategy records from database into StrategySelector
+2026-09-07 16:42:37,153 - __main__ - INFO - ==================================================
+2026-09-07 16:42:37,153 - __main__ - INFO - PHASE 5: Generating dual-signal sentiment
+2026-09-07 16:42:37,153 - __main__ - INFO - ==================================================
+2026-09-07 16:42:37,310 - news_fetcher - INFO - Fetched 25 headlines from https://www.coindesk.com/arc/outboundfeeds/rss/
+2026-09-07 16:42:37,548 - news_fetcher - INFO - Fetched 30 headlines from https://cointelegraph.com/rss
+2026-09-07 16:42:37,775 - news_fetcher - WARNING - Could not fetch/parse feed https://cryptopanic.com/news/rss/: HTTP Error 403: Forbidden
+2026-09-07 16:42:37,775 - news_fetcher - INFO - Fetched 0 headlines from https://cryptopanic.com/news/rss/
+2026-09-07 16:42:37,976 - ai_sentiment - INFO - BTC: news sentiment = 0.000 from 8 headlines
+2026-09-07 16:42:37,977 - ai_sentiment - INFO - ETH: news sentiment = 0.000 from 4 headlines
+2026-09-07 16:42:37,977 - ai_sentiment - INFO - SOL: news sentiment = 0.000 from 2 headlines
+2026-09-07 16:42:37,977 - __main__ - INFO - asset_sentiment_scores = {'BTC': np.float64(0.0), 'ETH': np.float64(0.0), 'SOL': np.float64(0.0), 'BNB': 0.0, 'XRP': 0.0}
+2026-09-07 16:42:37,977 - ai_sentiment - INFO - Market tone: 0.000 from 5 assets
+2026-09-07 16:42:37,977 - __main__ - INFO - market_tone_score = 0.000
+2026-09-07 16:42:37,977 - strategy_selector - INFO - [PHASE 7] Sentiment score: 0.000
+2026-09-07 16:42:37,977 - __main__ - INFO - [Phase 5] Dual-signal sentiment logged: per_asset_news_sentiment={'BTC': np.float64(0.0), 'ETH': np.float64(0.0), 'SOL': np.float64(0.0), 'BNB': 0.0, 'XRP': 0.0}, market_tone_score=0.000
+2026-09-07 16:42:37,977 - __main__ - INFO - Track record sizes: {'mvo': 0, 'risk_parity': 0, 'cvar': 0, 'black_litterman': 0, 'ml': 0, 'trend_following': 1, 'mean_reversion': 1, 'funding_arb': 1}
+2026-09-07 16:42:37,977 - backtester - INFO - ======================================================================
+2026-09-07 16:42:37,977 - backtester - INFO - WALK-FORWARD BACKTEST: 3 folds
+2026-09-07 16:42:37,977 - backtester - INFO - ======================================================================
+2026-09-07 16:42:37,977 - backtester - INFO - Generated 2 walk-forward folds from 366 samples
+2026-09-07 16:42:37,977 - backtester - INFO - Generated 2 walk-forward folds
+2026-09-07 16:42:37,977 - backtester - INFO - 
+==================================================
+2026-09-07 16:42:37,978 - backtester - INFO - FOLD 1/2
+2026-09-07 16:42:37,978 - backtester - INFO - ==================================================
+2026-09-07 16:42:37,978 - backtester - INFO - Train: [0:219) | Test: [219:292)
+2026-09-07 16:42:37,986 - backtester - INFO - 
+Evaluating strategy: mvo
+2026-09-07 16:42:37,994 - portfolio_optimizer - ERROR - MVO failed: Problem does not follow DCP rules. Specifically:
+The objective is not DCP. Its following subexpressions are not:
+PowerApprox(QuadForm(var1, [[0.24 0.31 ... 0.30 0.00]
+ [0.31 0.50 ... 0.43 0.00]
+ ...
+ [0.30 0.43 ... 0.52 0.00]
+ [0.00 0.00 ... 0.00 0.00]]) * 252.0, 0.5). Using equal weights as fallback.
+2026-09-07 16:42:37,994 - backtester - WARNING - mvo failed in fold 1: bad operand type for abs(): 'list'
+2026-09-07 16:42:37,994 - backtester - INFO - 
+Evaluating strategy: risk_parity
+2026-09-07 16:42:37,995 - backtester - WARNING - risk_parity failed in fold 1: 'numpy.ndarray' object has no attribute 'columns'
+2026-09-07 16:42:37,995 - backtester - INFO - 
+Evaluating strategy: cvar
+2026-09-07 16:42:37,995 - backtester - WARNING - cvar failed in fold 1: run_trading_cycle.<locals>.cvar_strategy() missing 1 required positional argument: 'returns'
+2026-09-07 16:42:37,995 - backtester - INFO - 
+Evaluating strategy: black_litterman
+2026-09-07 16:42:37,997 - backtester - WARNING - black_litterman failed in fold 1: 'AISentimentAnalyzer' object has no attribute 'generate_views'
+2026-09-07 16:42:37,997 - backtester - INFO - 
+Evaluating strategy: ml
+2026-09-07 16:42:37,997 - backtester - WARNING - ml failed in fold 1: 'PortfolioOptimizer' object has no attribute 'ml_forecast_returns'
+2026-09-07 16:42:37,997 - backtester - INFO - 
+Evaluating strategy: trend_following
+2026-09-07 16:42:38,001 - backtester - INFO -   Cumulative Return: -17.52%
+2026-09-07 16:42:38,001 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:42:38,001 - backtester - INFO -   Max Drawdown: -23.20%
+2026-09-07 16:42:38,001 - backtester - INFO -   Sharpe: -2.293
+2026-09-07 16:42:38,001 - backtester - INFO - 
+Evaluating strategy: mean_reversion
+2026-09-07 16:42:38,005 - backtester - INFO -   Cumulative Return: -12.87%
+2026-09-07 16:42:38,006 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:42:38,006 - backtester - INFO -   Max Drawdown: -19.93%
+2026-09-07 16:42:38,006 - backtester - INFO -   Sharpe: -1.724
+2026-09-07 16:42:38,006 - backtester - INFO - 
+Evaluating strategy: funding_arb
+2026-09-07 16:42:38,008 - backtester - INFO -   Cumulative Return: -17.52%
+2026-09-07 16:42:38,008 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:42:38,008 - backtester - INFO -   Max Drawdown: -23.20%
+2026-09-07 16:42:38,008 - backtester - INFO -   Sharpe: -2.293
+2026-09-07 16:42:38,009 - backtester - INFO - 
+==================================================
+2026-09-07 16:42:38,009 - backtester - INFO - FOLD 2/2
+2026-09-07 16:42:38,010 - backtester - INFO - ==================================================
+2026-09-07 16:42:38,010 - backtester - INFO - Train: [0:292) | Test: [292:365)
+2026-09-07 16:42:38,014 - backtester - INFO - 
+Evaluating strategy: mvo
+2026-09-07 16:42:38,019 - portfolio_optimizer - ERROR - MVO failed: Problem does not follow DCP rules. Specifically:
+The objective is not DCP. Its following subexpressions are not:
+PowerApprox(QuadForm(var24, [[0.21 0.27 ... 0.26 0.00]
+ [0.27 0.43 ... 0.37 0.00]
+ ...
+ [0.26 0.37 ... 0.43 0.00]
+ [0.00 0.00 ... 0.00 0.00]]) * 252.0, 0.5). Using equal weights as fallback.
+2026-09-07 16:42:38,019 - backtester - WARNING - mvo failed in fold 2: bad operand type for abs(): 'list'
+2026-09-07 16:42:38,019 - backtester - INFO - 
+Evaluating strategy: risk_parity
+2026-09-07 16:42:38,020 - backtester - WARNING - risk_parity failed in fold 2: 'numpy.ndarray' object has no attribute 'columns'
+2026-09-07 16:42:38,020 - backtester - INFO - 
+Evaluating strategy: cvar
+2026-09-07 16:42:38,020 - backtester - WARNING - cvar failed in fold 2: run_trading_cycle.<locals>.cvar_strategy() missing 1 required positional argument: 'returns'
+2026-09-07 16:42:38,020 - backtester - INFO - 
+Evaluating strategy: black_litterman
+2026-09-07 16:42:38,021 - backtester - WARNING - black_litterman failed in fold 2: 'AISentimentAnalyzer' object has no attribute 'generate_views'
+2026-09-07 16:42:38,022 - backtester - INFO - 
+Evaluating strategy: ml
+2026-09-07 16:42:38,022 - backtester - WARNING - ml failed in fold 2: 'PortfolioOptimizer' object has no attribute 'ml_forecast_returns'
+2026-09-07 16:42:38,022 - backtester - INFO - 
+Evaluating strategy: trend_following
+2026-09-07 16:42:38,026 - backtester - INFO -   Cumulative Return: 34.64%
+2026-09-07 16:42:38,026 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:42:38,026 - backtester - INFO -   Max Drawdown: -4.51%
+2026-09-07 16:42:38,026 - backtester - INFO -   Sharpe: 3.478
+2026-09-07 16:42:38,027 - backtester - INFO - 
+Evaluating strategy: mean_reversion
+2026-09-07 16:42:38,030 - backtester - INFO -   Cumulative Return: 34.93%
+2026-09-07 16:42:38,030 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:42:38,030 - backtester - INFO -   Max Drawdown: -7.02%
+2026-09-07 16:42:38,030 - backtester - INFO -   Sharpe: 2.836
+2026-09-07 16:42:38,030 - backtester - INFO - 
+Evaluating strategy: funding_arb
+2026-09-07 16:42:38,032 - backtester - INFO -   Cumulative Return: 34.64%
+2026-09-07 16:42:38,032 - backtester - INFO -   Mean Monthly Return: 0.00%
+2026-09-07 16:42:38,032 - backtester - INFO -   Max Drawdown: -4.51%
+2026-09-07 16:42:38,032 - backtester - INFO -   Sharpe: 3.478
+2026-09-07 16:42:38,033 - backtester - INFO - 
+======================================================================
+2026-09-07 16:42:38,033 - backtester - INFO - WALK-FORWARD BACKTEST COMPLETE
+2026-09-07 16:42:38,033 - backtester - INFO - ======================================================================
+2026-09-07 16:42:38,033 - backtester - INFO - Folds: 2
+2026-09-07 16:42:38,033 - backtester - INFO - Mean Monthly Return: nan%
+2026-09-07 16:42:38,033 - backtester - INFO - Worst Max Drawdown: -23.20%
+2026-09-07 16:42:38,033 - backtester - INFO - Mean Sharpe: nan
+2026-09-07 16:42:38,033 - backtester - INFO - % Positive Months: 0%
+2026-09-07 16:42:38,033 - backtester - INFO - Total Calendar Months: 0
+2026-09-07 16:42:38,037 - strategy_selector - INFO - REGIME: crisis (max_dd=-23.20%, vol=36.29%)
+2026-09-07 16:42:38,037 - __main__ - INFO - ======================================================================
+2026-09-07 16:42:38,037 - __main__ - INFO - BACKTEST RESULTS (ALL STAGES)
+2026-09-07 16:42:38,037 - __main__ - INFO - ======================================================================
+2026-09-07 16:42:38,037 - __main__ - INFO - Regime: crisis
+2026-09-07 16:42:38,037 - __main__ - INFO - Mean monthly return: nan%
+2026-09-07 16:42:38,037 - __main__ - INFO - Max Drawdown: -23.20%
+2026-09-07 16:42:38,037 - __main__ - INFO - Sharpe Ratio: nan
+2026-09-07 16:42:38,037 - __main__ - INFO - % Positive Months: 0.00%
+2026-09-07 16:42:38,037 - __main__ - INFO - Folds: 2 | Months: 0
+2026-09-07 16:42:38,038 - root - INFO - [strategy_performance] {"strategy_name": "portfolio", "metrics": {"mean_monthly_return": NaN, "max_drawdown": -0.2320454857507684, "sharpe_ratio": NaN, "pct_positive_months": 0.0, "n_folds": 2, "n_months": 0, "regime": "crisis", "sentiment": 0.0}}
+2026-09-07 16:42:38,038 - __main__ - WARNING - ⚠️ Only 0 months of data (need 3)
+2026-09-07 16:42:38,038 - root - INFO - [decision] {"decision_type": "insufficient_data", "reason": "Only 0 months", "metrics": {"n_months": 0, "required": 3}}
+2026-09-07 16:42:38,039 - db_manager - INFO - Saved cycle 1 to database (decision: insufficient_data)
+2026-09-07 16:42:38,039 - __main__ - INFO - Cycle 1 saved to database
+2026-09-07 16:42:38,039 - root - INFO - [cycle_end] {"cycle_number": 1, "results": {"backtest_results": {"mean_monthly_return": NaN, "worst_max_drawdown": -0.2320454857507684, "mean_sharpe": NaN, "pct_months_positive": 0.0, "n_calendar_months_observed": 0, "n_folds": 2}, "decision": "insufficient_data", "sleep_hours": 2, "duration_seconds": 1.7242774963378906, "stages": "1-4 COMPLETE"}, "duration_seconds": 1.7242774963378906}
+2026-09-07 16:42:38,040 - __main__ - INFO - Sleeping 2h before next cycle...
