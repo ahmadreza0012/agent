@@ -299,7 +299,8 @@ class TestCacheRoundtrip:
             assert loaded.row_count == ohlcv.row_count
             
             # Verify data equality
-            pd.testing.assert_frame_equal(loaded.df, ohlcv.df)
+            # Note: CSV roundtrip loses frequency info, so we check values only
+            pd.testing.assert_frame_equal(loaded.df, ohlcv.df, check_freq=False)
 
 
 if __name__ == '__main__':
