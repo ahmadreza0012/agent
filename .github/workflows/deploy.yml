@@ -1,0 +1,141 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/ec2_key.pem
+          chmod 600 ~/.ssh/ec2_key.pem
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy to EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
+            
+            echo "========================================="
+            echo "🚀 Starting deployment to EC2..."
+            echo "========================================="
+            
+            # Navigate to home directory
+            cd ~
+            
+            # Get the username dynamically
+            CURRENT_USER=$(whoami)
+            AGENT_DIR="/home/$CURRENT_USER/agent"
+
+            # Install git if not available
+            echo "🔧 Installing system dependencies..."
+            if ! command -v git &> /dev/null; then
+              sudo dnf install -y git || sudo yum install -y git
+            fi
+
+            # Check if agent directory exists
+            if [ -d "agent" ]; then
+              echo "📁 Agent directory exists. Updating..."
+              cd agent
+              git fetch --all
+              git checkout main 2>/dev/null || git checkout -b main
+              git reset --hard origin/main
+            else
+              echo "📁 Cloning agent repository..."
+              git clone --branch main https://github.com/ahmadreza0012/agent.git
+              cd agent
+              AGENT_DIR="$(pwd)"
+            fi
+
+            # Install dependencies if needed
+            echo "📦 Installing Python dependencies..."
+            if command -v pip3 &> /dev/null; then
+              pip3 install -r requirements.txt
+            else
+              echo "⚠️ pip3 not found, installing..."
+              sudo dnf install -y python3-pip
+              pip3 install -r requirements.txt
+            fi
+
+            # Create .env file if it doesn't exist
+            if [ ! -f .env ]; then
+              echo "📝 Creating .env file from example..."
+              cp .env.example .env
+              echo "⚠️ IMPORTANT: Please update .env file with your API keys!"
+            fi
+
+            # Stop existing bot process
+            echo "🛑 Stopping existing bot (if running)..."
+            screen -S bot -X quit || true
+            pkill -f "python.*main.py" || true
+
+            # Start the bot in a screen session
+            echo "🚀 Starting bot in screen session..."
+            screen -S bot -dm bash -c "cd $AGENT_DIR && python3 main.py"
+
+            # Start Web API for monitoring and control
+            echo "🌐 Starting Web API for monitoring..."
+            cd $AGENT_DIR
+
+            # Install Flask dependencies if not already installed
+            pip3 install flask flask-cors --quiet || true
+
+            # Stop any existing Web API process
+            pkill -f "python.*web_api.py" || true
+
+            # Start Web API in background
+            nohup python3 web_api.py > web_api.log 2>&1 &
+            echo $! > .web_api.pid
+            sleep 2
+
+            if ps -p $(cat .web_api.pid) > /dev/null 2>&1; then
+              echo "✅ Web API started successfully on port 5000"
+            else
+              echo "⚠️ Web API failed to start, check web_api.log"
+            fi
+
+            echo "========================================="
+            echo "✅ Deployment completed successfully!"
+            echo "========================================="
+            echo ""
+            echo "📊 Bot Status:"
+            screen -ls
+            echo ""
+            echo "📝 To view bot logs:"
+            echo "   ssh -i ~/.ssh/ec2_key.pem \${{ secrets.EC2_USER }}@\${{ secrets.EC2_HOST }}"
+            echo "   screen -r bot"
+            echo ""
+            echo "📝 To detach from screen: Ctrl+A, then D"
+          EOF
+
+      - name: Verify deployment
+        run: |
+          echo "🔍 Verifying deployment..."
+          ssh -i ~/.ssh/ec2_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            CURRENT_USER=$(whoami)
+            AGENT_DIR="/home/$CURRENT_USER/agent"
+            cd $AGENT_DIR
+            if [ -f main.py ]; then
+              echo "✅ main.py found"
+              echo "✅ Project files: $(ls -la | wc -l) files"
+            else
+              echo "❌ Verification failed - main.py not found"
+              exit 1
+            fi
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f ~/.ssh/ec2_key.pem
+          echo "🧹 Cleanup completed"
