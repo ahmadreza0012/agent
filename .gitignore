@@ -1,10 +1,15 @@
-```gitignore
-# Compiled Python files
+```
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Original rules preserved
+# Logs
 *.log
+
+# Environment
+.env
+.env.local
+*.env.*
 ```

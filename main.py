@@ -158,11 +158,26 @@ def run_trading_cycle():
         min_sharpe = -2.5  # Allow more negative Sharpe in high-vol regimes (was -1.0)
         
         # Initialize components
-        data_fetcher = DataFetcher(symbols=symbols)
+        # Use HistoricalDataProvider (yfinance/CoinGecko) instead of Binance to avoid HTTP 451 restrictions
+        from data.providers import HistoricalDataProvider
+        
+        data_fetcher = HistoricalDataProvider(symbols=symbols)
         ai_sentiment = AISentiment()
         
         # Fetch and prepare data
-        raw_data = data_fetcher.fetch_all_symbols(since_days=since_days)
+        raw_data_ohlcv = data_fetcher.fetch_all_symbols(symbols, timeframe='1d', since_days=since_days)
+        
+        # Convert OHLCVData objects to DataFrames for compatibility with existing code
+        raw_data = {}
+        for symbol, ohlcv in raw_data_ohlcv.items():
+            if ohlcv and not ohlcv.df.empty:
+                # Standardize column names to lowercase for compatibility
+                df = ohlcv.df.copy()
+                df.columns = [col.lower() for col in df.columns]
+                raw_data[symbol] = df
+            else:
+                raw_data[symbol] = None
+        
         df_prices = data_fetcher.align_data(raw_data)
         import pandas as pd
         cash_column = pd.DataFrame([1.0] * len(df_prices), index=df_prices.index, columns=['CASH'])

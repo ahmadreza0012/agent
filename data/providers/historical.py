@@ -216,3 +216,34 @@ class HistoricalDataProvider(DataProvider):
                 logger.error(f"Failed to fetch {symbol}: {e}")
         
         return data
+    
+    def align_data(self, raw_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+        """
+        Align data from different symbols to common timestamps.
+        Compatible interface with main.py trading cycle.
+        
+        Args:
+            raw_data: Dictionary mapping symbol to DataFrame
+            
+        Returns:
+            Aligned DataFrame with columns for each symbol
+        """
+        if not raw_data:
+            logger.warning("No data to align")
+            return pd.DataFrame()
+        
+        # Get closing prices
+        prices = pd.DataFrame()
+        for symbol, df in raw_data.items():
+            if df is not None and not df.empty:
+                prices[symbol] = df['close']
+        
+        if prices.empty:
+            logger.warning("All dataframes were empty or None")
+            return pd.DataFrame()
+        
+        # Forward fill then backward fill for missing values
+        prices = prices.ffill().bfill()
+        
+        logger.info(f"Aligned data: {len(prices)} rows, {len(prices.columns)} columns")
+        return prices
