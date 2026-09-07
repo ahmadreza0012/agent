@@ -43,7 +43,8 @@ jobs:
             if [ -d "agent" ]; then
               echo "📁 Agent directory exists. Updating..."
               cd agent
-              git pull origin main || git pull origin master
+              git fetch origin main
+              git reset --hard origin/main
             else
               echo "📁 Cloning agent repository..."
               git clone https://github.com/ahmadreza0012/agent.git
