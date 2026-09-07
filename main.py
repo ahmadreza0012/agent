@@ -404,14 +404,18 @@ def run_trading_cycle():
                 "sentiment": float(system_state.get("market_tone_score", 0.0))
             })
 
-            # Decision logic
-            if n_months < 3:
-                logger.warning(f"⚠️ Only {n_months} months of data (need 3)")
-                auto_logger.log_decision("insufficient_data", f"Only {n_months} months", {
-                    "n_months": n_months, "required": 3
+            # Decision logic - FIX: Use fold count instead of months for daily data
+            # With daily data and 20-day test periods, we may have 0 calendar months but valid folds
+            n_folds = eval_data.get('n_folds', 0)
+            
+            if n_folds < 1:
+                logger.warning(f"⚠️ Only {n_folds} folds (need at least 1)")
+                auto_logger.log_decision("insufficient_data", f"Only {n_folds} folds", {
+                    "n_folds": n_folds, "required": 1,
+                    "n_months": n_months
                 })
                 system_state["status"] = "insufficient_data"
-                system_state["last_result"] = f"INSUFFICIENT_DATA - {n_months} months"
+                system_state["last_result"] = f"INSUFFICIENT_DATA - {n_folds} folds"
                 sleep_hours = 2
             # FIX C: Honest decision gate - require non-negative return and Sharpe
             elif mean_return >= target_return and max_dd <= max_allowed_dd and sharpe >= min_sharpe \

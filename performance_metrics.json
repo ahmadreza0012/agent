@@ -1,7 +1,7 @@
 {
-  "last_updated": "2026-09-07T16:42:38.039816",
-  "session_id": "20260907_164231",
-  "total_cycles": 3,
+  "last_updated": "2026-09-07T19:14:33.460976",
+  "session_id": "20260907_191426",
+  "total_cycles": 4,
   "total_errors": 0,
   "history": [
     {
@@ -26,6 +26,14 @@
       "mean_sharpe": NaN,
       "pct_months_positive": 0.0,
       "n_calendar_months_observed": 0,
+      "n_folds": 2
+    },
+    {
+      "mean_monthly_return": NaN,
+      "worst_max_drawdown": 0.0,
+      "mean_sharpe": NaN,
+      "pct_months_positive": 0.0,
+      "n_calendar_months_observed": 2,
       "n_folds": 2
     }
   ],
@@ -82,6 +90,24 @@
         "decision": "insufficient_data",
         "sleep_hours": 2,
         "duration_seconds": 1.7242774963378906,
+        "stages": "1-4 COMPLETE"
+      }
+    },
+    {
+      "cycle_number": 1,
+      "timestamp": "2026-09-07T19:14:33.460970",
+      "results": {
+        "backtest_results": {
+          "mean_monthly_return": NaN,
+          "worst_max_drawdown": 0.0,
+          "mean_sharpe": NaN,
+          "pct_months_positive": 0.0,
+          "n_calendar_months_observed": 2,
+          "n_folds": 2
+        },
+        "decision": "targets_not_met",
+        "sleep_hours": 4,
+        "duration_seconds": 1.8001770973205566,
         "stages": "1-4 COMPLETE"
       }
     }

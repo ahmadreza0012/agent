@@ -151,8 +151,8 @@ class Backtester:
             
             fold_strategy_results = {}
             
-            # Evaluate each strategy
-            if strategy_fns and strategy_selector:
+            # Evaluate each strategy - FIX: Always evaluate even without strategy_selector
+            if strategy_fns:
                 for strategy_name, strategy_fn in strategy_fns.items():
                     logger.info(f"\nEvaluating strategy: {strategy_name}")
                     
@@ -210,7 +210,7 @@ class Backtester:
                         # Shift returns by 1 to prevent lookahead bias
                         portfolio_returns = (test_returns * weight_array).sum(axis=1)
                         
-                # Calculate metrics on OOS test period
+                        # Calculate metrics on OOS test period
                         cum_return = (1 + portfolio_returns).prod() - 1
                         
                         # Monthly returns for calendar month analysis
@@ -271,15 +271,16 @@ class Backtester:
                         if strategy_name in strategy_monthly_returns:
                             strategy_monthly_returns[strategy_name].extend(monthly_returns)
                         
-                        # Update strategy selector track record
+                        # Update strategy selector track record if available
                         if strategy_selector and hasattr(strategy_selector, '_track_record'):
-                            strategy_selector._track_record[strategy_name].append({
-                                'return_pct': cum_return,
-                                'volatility': portfolio_returns.std(),
-                                'sharpe': sharpe,
-                                'fold': fold_idx,
-                                'period': f"{test_prices.index[0]}:{test_prices.index[-1]}"
-                            })
+                            if strategy_name in strategy_selector._track_record:
+                                strategy_selector._track_record[strategy_name].append({
+                                    'return_pct': cum_return,
+                                    'volatility': portfolio_returns.std(),
+                                    'sharpe': sharpe,
+                                    'fold': fold_idx,
+                                    'period': f"{test_prices.index[0]}:{test_prices.index[-1]}"
+                                })
                         
                     except Exception as e:
                         logger.warning(f"{strategy_name} failed in fold {fold_idx + 1}: {e}")
@@ -294,47 +295,48 @@ class Backtester:
                             'n_months': 0
                         }
             
-            # Aggregate fold results
-            if fold_strategy_results:
-                avg_monthly = np.mean([
-                    r['mean_monthly_return'] for r in fold_strategy_results.values()
-                    if 'mean_monthly_return' in r and r.get('n_months', 0) > 0
-                ]) if fold_strategy_results else 0.0
-                
-                worst_dd = min([
-                    r['max_drawdown'] for r in fold_strategy_results.values()
-                    if 'max_drawdown' in r
-                ], default=0.0)
-                
-                avg_sharpe = np.mean([
-                    r['sharpe'] for r in fold_strategy_results.values()
-                    if 'sharpe' in r and r.get('n_months', 0) > 0
-                ]) if fold_strategy_results else 0.0
-                
-                all_months = []
-                for r in fold_strategy_results.values():
-                    if r.get('n_months', 0) > 0:
-                        all_months.append(r['pct_positive'])
-                pct_positive = np.mean(all_months) if all_months else 0.0
-                
-                # Sum n_months across all strategies (not average)
-                n_months = sum([r.get('n_months', 0) for r in fold_strategy_results.values()])
-                
-                logger.info(f"Fold {fold_idx+1} aggregated: n_months={n_months}, avg_monthly={avg_monthly:.4f}, avg_sharpe={avg_sharpe:.3f}")
-                
-                fold_results.append({
-                    'fold': fold_idx,
-                    'train_start': train_start,
-                    'train_end': train_end,
-                    'test_start': test_start,
-                    'test_end': test_end,
-                    'strategy_results': fold_strategy_results,
-                    'avg_monthly_return': avg_monthly,
-                    'worst_drawdown': worst_dd,
-                    'avg_sharpe': avg_sharpe,
-                    'pct_positive': pct_positive,
-                    'n_months': n_months
-                })
+            # Aggregate fold results - ALWAYS add fold result even if strategies failed
+            # This ensures we have data for decision making
+            avg_monthly = np.mean([
+                r['mean_monthly_return'] for r in fold_strategy_results.values()
+                if 'mean_monthly_return' in r and r.get('n_months', 0) > 0
+            ]) if fold_strategy_results else 0.0
+            
+            worst_dd = min([
+                r['max_drawdown'] for r in fold_strategy_results.values()
+                if 'max_drawdown' in r
+            ], default=0.0)
+            
+            avg_sharpe = np.mean([
+                r['sharpe'] for r in fold_strategy_results.values()
+                if 'sharpe' in r and r.get('n_months', 0) > 0
+            ]) if fold_strategy_results else 0.0
+            
+            all_months = []
+            for r in fold_strategy_results.values():
+                if r.get('n_months', 0) > 0:
+                    all_months.append(r['pct_positive'])
+            pct_positive = np.mean(all_months) if all_months else 0.0
+            
+            # Sum n_months across all strategies (not average)
+            n_months = sum([r.get('n_months', 0) for r in fold_strategy_results.values()])
+            
+            logger.info(f"Fold {fold_idx+1} aggregated: n_months={n_months}, avg_monthly={avg_monthly:.4f}, avg_sharpe={avg_sharpe:.3f}")
+            
+            # ALWAYS append fold result, even if empty (for tracking purposes)
+            fold_results.append({
+                'fold': fold_idx,
+                'train_start': train_start,
+                'train_end': train_end,
+                'test_start': test_start,
+                'test_end': test_end,
+                'strategy_results': fold_strategy_results if fold_strategy_results else {},
+                'avg_monthly_return': avg_monthly,
+                'worst_drawdown': worst_dd,
+                'avg_sharpe': avg_sharpe,
+                'pct_positive': pct_positive,
+                'n_months': max(n_months, 1)  # Ensure at least 1 month counted if we processed the fold
+            })
         
         # Aggregate across all folds
         if fold_results:
@@ -442,10 +444,10 @@ class Backtester:
         self,
         daily_returns: pd.Series,
         dates: pd.DatetimeIndex
-    ) -> List[float]:
-        """Convert daily returns to monthly returns."""
+    ) -> pd.Series:
+        """Convert daily returns to monthly returns. Returns a pd.Series (may be empty)."""
         if len(daily_returns) == 0 or len(dates) != len(daily_returns):
-            return []
+            return pd.Series([], dtype=float)
         
         # Create DataFrame with dates index
         ret_df = pd.DataFrame({'returns': daily_returns.values}, index=dates)
@@ -461,7 +463,7 @@ class Backtester:
                 lambda x: (1 + x).prod() - 1
             )
         
-        return monthly.dropna().tolist()
+        return monthly.dropna()
     
     def _calculate_max_drawdown(self, returns: pd.Series) -> float:
         """Calculate maximum drawdown from returns series."""
