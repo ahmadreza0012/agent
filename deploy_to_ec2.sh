@@ -70,10 +70,11 @@ cd $APP_DIR
 if [ ! -d ".git" ]; then
     echo "Cloning repository..."
     # Replace with your actual repo URL
-    git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git . 2>/dev/null || true
+    git clone https://github.com/ahmadreza0012/agent.git . 2>/dev/null || true
 else
     echo "Updating repository..."
-    git pull
+    git fetch origin main
+    git reset --hard origin/main
 fi
 
 # Create virtual environment
