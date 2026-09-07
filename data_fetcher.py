@@ -53,6 +53,21 @@ class CryptoDataFetcher:
         except Exception as e:
             raise ConnectionError(f"Failed to initialize exchange: {e}")
     
+    def is_binance_restricted(self) -> bool:
+        """Check if Binance is restricted from current location by attempting a test request."""
+        try:
+            # Try to load markets as a test
+            self.exchange.load_markets()
+            return False
+        except ccxt.NetworkError as e:
+            error_str = str(e)
+            if '451' in error_str or 'restricted location' in error_str.lower():
+                logger.warning(f"Binance is restricted from current location: {e}")
+                return True
+            return False
+        except Exception:
+            return False
+    
     def _respect_rate_limit(self):
         """Ensure we don't exceed rate limits by adding delays between requests."""
         current_time = time.time()
@@ -246,6 +261,12 @@ class CryptoDataFetcher:
         Returns:
             Dictionary mapping symbol to DataFrame
         """
+        # Check if Binance is restricted before attempting to fetch
+        if self.exchange_id == 'binance' and self.is_binance_restricted():
+            logger.error("Binance API is restricted from current location (HTTP 451). "
+                        "Please use an alternative exchange like yfinance/CoinGecko.")
+            return {}
+        
         result = {}
         for symbol in symbols:
             try:
