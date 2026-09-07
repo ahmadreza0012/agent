@@ -210,7 +210,7 @@ class Backtester:
                         # Shift returns by 1 to prevent lookahead bias
                         portfolio_returns = (test_returns * weight_array).sum(axis=1)
                         
-                        # Calculate metrics on OOS test period
+                # Calculate metrics on OOS test period
                         cum_return = (1 + portfolio_returns).prod() - 1
                         
                         # Monthly returns for calendar month analysis
@@ -219,15 +219,40 @@ class Backtester:
                             test_prices.index[len(test_returns)-len(portfolio_returns):]
                         )
                         
-                        mean_monthly = np.mean(monthly_returns) if len(monthly_returns) > 0 else 0.0
-                        max_dd = self._calculate_max_drawdown(portfolio_returns)
-                        sharpe = self._calculate_sharpe(portfolio_returns)
-                        pct_positive = np.mean([r > 0 for r in monthly_returns]) if len(monthly_returns) > 0 else 0.0
+                        # Calculate metrics based on available data
+                        n_months = len(monthly_returns) if not monthly_returns.empty else 0
+                        n_days = len(portfolio_returns) if portfolio_returns is not None else 0
+                        
+                        # Use daily metrics if insufficient monthly data but enough daily data
+                        if n_months < 2 and n_days >= 10:
+                            # Use daily metrics as proxy for monthly
+                            mean_monthly = portfolio_returns.mean() * 21  # Approximate monthly return
+                            max_dd = self._calculate_max_drawdown(portfolio_returns)
+                            sharpe = self._calculate_sharpe(portfolio_returns)
+                            pct_positive = np.mean([r > 0 for r in portfolio_returns]) if len(portfolio_returns) > 0 else 0.0
+                            logger.info(f"  Using daily metrics (n_days={n_days}, n_months={n_months})")
+                        elif n_months >= 1:
+                            # Use monthly metrics
+                            mean_monthly = np.mean(monthly_returns) if len(monthly_returns) > 0 else 0.0
+                            max_dd = self._calculate_max_drawdown(pd.Series(monthly_returns))
+                            if len(monthly_returns) > 1:
+                                monthly_vol = np.std(monthly_returns)
+                                sharpe = (mean_monthly / monthly_vol * np.sqrt(12)) if monthly_vol > 0 else 0
+                            else:
+                                sharpe = 0.0
+                            pct_positive = np.mean([r > 0 for r in monthly_returns]) if len(monthly_returns) > 0 else 0.0
+                        else:
+                            # Insufficient data
+                            mean_monthly = 0.0
+                            max_dd = 0.0
+                            sharpe = 0.0
+                            pct_positive = 0.0
                         
                         logger.info(f"  Cumulative Return: {cum_return:.2%}")
                         logger.info(f"  Mean Monthly Return: {mean_monthly:.2%}")
                         logger.info(f"  Max Drawdown: {max_dd:.2%}")
                         logger.info(f"  Sharpe: {sharpe:.3f}")
+                        logger.info(f"  N Months: {n_months}, N Days: {n_days}")
                         
                         # Store results
                         fold_strategy_results[strategy_name] = {
@@ -239,7 +264,7 @@ class Backtester:
                             'pct_positive': pct_positive,
                             'weights': target_weights if isinstance(target_weights, dict) 
                                       else dict(zip(test_prices.columns, weight_array)),
-                            'n_months': len(monthly_returns)
+                            'n_months': max(n_months, 1) if n_days >= 10 else 0  # Count as 1 month if we have 10+ days
                         }
                         
                         # Track for aggregation
@@ -292,7 +317,10 @@ class Backtester:
                         all_months.append(r['pct_positive'])
                 pct_positive = np.mean(all_months) if all_months else 0.0
                 
-                n_months = sum([r.get('n_months', 0) for r in fold_strategy_results.values()]) // max(len(fold_strategy_results), 1)
+                # Sum n_months across all strategies (not average)
+                n_months = sum([r.get('n_months', 0) for r in fold_strategy_results.values()])
+                
+                logger.info(f"Fold {fold_idx+1} aggregated: n_months={n_months}, avg_monthly={avg_monthly:.4f}, avg_sharpe={avg_sharpe:.3f}")
                 
                 fold_results.append({
                     'fold': fold_idx,
@@ -422,10 +450,16 @@ class Backtester:
         # Create DataFrame with dates index
         ret_df = pd.DataFrame({'returns': daily_returns.values}, index=dates)
         
-        # Resample to monthly
-        monthly = ret_df['returns'].groupby(pd.Grouper(freq='M')).apply(
-            lambda x: (1 + x).prod() - 1
-        )
+        # Resample to monthly - use 'ME' for month-end (newer pandas) or 'M' for older
+        try:
+            monthly = ret_df['returns'].groupby(pd.Grouper(freq='ME')).apply(
+                lambda x: (1 + x).prod() - 1
+            )
+        except ValueError:
+            # Fallback to 'M' if 'ME' not supported
+            monthly = ret_df['returns'].groupby(pd.Grouper(freq='M')).apply(
+                lambda x: (1 + x).prod() - 1
+            )
         
         return monthly.dropna().tolist()
     
