@@ -1,11 +1,1 @@
-```
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Logs
-*.log
-*.jsonl
-```
+Nothing needs to be added to .gitignore since the only change is a modified shell script file (`deploy_to_ec2.sh`) which is a source/config file and not a build artifact, dependency, or temporary file.
