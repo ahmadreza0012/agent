@@ -144,3 +144,43 @@ class SymbolMapper:
     def get_custom_mapping(self, symbol: str, source: str) -> Optional[str]:
         """Get custom mapping for a symbol/source pair."""
         return self._custom_mappings.get(symbol, {}).get(source)
+    
+    def to_exchange_symbol(self, symbol: str, exchange: str) -> Optional[str]:
+        """
+        Convert canonical symbol to exchange-specific format.
+        
+        Args:
+            symbol: Canonical symbol (e.g., 'BTC/USDT')
+            exchange: Exchange name ('binance', 'bybit', 'nobitex', etc.)
+            
+        Returns:
+            Exchange-specific symbol or None if not mapped
+        """
+        exchange = exchange.lower()
+        
+        # Use custom mapping if available
+        custom = self.get_custom_mapping(symbol, exchange)
+        if custom:
+            return custom
+        
+        # Default mappings for common exchanges
+        if exchange in ['binance', 'bybit', 'kucoin', 'okx']:
+            # CCXT standard format: BTC/USDT
+            return symbol
+        
+        elif exchange == 'nobitex':
+            # Nobitex uses RLS/BTC format
+            if symbol == 'BTC/USDT':
+                return 'BTC/RLS'  # Nobitex trades BTC against Rials
+            elif symbol == 'ETH/USDT':
+                return 'ETH/RLS'
+            else:
+                return symbol
+        
+        elif exchange == 'coinbase':
+            # Coinbase uses BTC-USD format
+            base = symbol.split('/')[0]
+            return f'{base}-USD'
+        
+        # Default: return as-is
+        return symbol
