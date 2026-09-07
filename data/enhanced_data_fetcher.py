@@ -77,7 +77,17 @@ class MultiExchangeDataFetcher:
     
     def align_data(self, raw_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """
-        Align data from different sources to common timestamps
+        Align data from different sources to common timestamps.
+        
+        CRITICAL: This method ONLY uses forward-fill (ffill) to prevent lookahead bias.
+        Backward-fill (bfill) is NOT used because it would introduce future information
+        into historical data, invalidating backtests and live trading decisions.
+        
+        Args:
+            raw_data: Dictionary mapping symbol to DataFrame
+            
+        Returns:
+            Aligned DataFrame with columns for each symbol
         """
         if not raw_data:
             return pd.DataFrame()
@@ -87,8 +97,17 @@ class MultiExchangeDataFetcher:
         for symbol, df in raw_data.items():
             prices[symbol] = df['close']
         
-        # Forward fill for missing values
-        prices = prices.fillna(method='ffill').fillna(method='bfill')
+        # CRITICAL: Only forward-fill is allowed to prevent lookahead bias
+        # NEVER use bfill() as it introduces future information
+        prices = prices.ffill()
+        
+        # Log warning if we still have NaN values after ffill
+        nan_count = prices.isna().sum().sum()
+        if nan_count > 0:
+            logger.warning(
+                f"Data alignment resulted in {nan_count} NaN values after forward-fill. "
+                f"These represent genuine missing data that should be handled downstream."
+            )
         
         logger.info(f"Aligned data: {len(prices)} rows, {len(prices.columns)} columns")
         return prices
