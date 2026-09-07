@@ -192,14 +192,61 @@ cd /home/ec2-user/agent
 python3 web_api.py
 ```
 
-### مشکل 2: نمی‌توان به پنل وب دسترسی پیدا کرد
+### مشکل 2: نمی‌توان به پنل وب دسترسی پیدا کرد (ERR_EMPTY_RESPONSE)
 
-**علت احتمالی:**
-- پورت 5000 در Security Group باز نیست
+**علت اصلی:** پورت 5000 در AWS Security Group باز نیست
+
+**راه‌حل گام به گام برای باز کردن پورت 5000:**
+
+#### روش 1: از طریق AWS Console (توصیه می‌شود)
+
+1. وارد AWS Console شوید: https://console.aws.amazon.com/ec2/
+2. از منوی سمت چپ، روی **Security Groups** کلیک کنید
+3. Security Group مرتبط با اینستنس EC2 خود را پیدا و انتخاب کنید
+   - می‌توانید بر اساس نام، تگ، یا ID اینستنس جستجو کنید
+4. به تب **Inbound rules** بروید
+5. روی دکمه **Edit inbound rules** کلیک کنید
+6. روی **Add rule** کلیک کرده و مقادیر زیر را وارد کنید:
+   - **Type**: Custom TCP
+   - **Protocol**: TCP
+   - **Port Range**: 5000
+   - **Source**: 
+     - `0.0.0.0/0` برای دسترسی عمومی
+     - یا `My IP` برای دسترسی فقط از IP فعلی شما
+7. روی **Save rules** کلیک کنید
+
+چند ثانیه صبر کنید و دوباره مرورگر را باز کنید: http://52.23.157.88:5000
+
+#### روش 2: استفاده از AWS CLI
+
+اگر AWS CLI نصب دارید:
+
+```bash
+# ابتدا Security Group ID را پیدا کنید
+aws ec2 describe-instances --instance-ids i-xxxxxxxxx --query 'Reservations[0].Instances[0].SecurityGroups[0].GroupId'
+
+# سپس پورت را باز کنید
+aws ec2 authorize-security-group-ingress \\
+    --group-id sg-xxxxxxxxx \\
+    --protocol tcp \\
+    --port 5000 \\
+    --cidr 0.0.0.0/0
+```
+
+#### بررسی پس از اعمال تغییرات
+
+```bash
+# تست اتصال از سیستم خودتان
+curl -v http://52.23.157.88:5000/api/status
+
+# یا در مرورگر
+http://52.23.157.88:5000
+```
+
+**سایر علل احتمالی:**
 - فایروال سرور مسدود کرده
 - Web API در حال اجرا نیست
 
-**راه‌حل:**
 ```bash
 # 1. بررسی اجرای Web API
 ps aux | grep web_api
@@ -207,11 +254,8 @@ ps aux | grep web_api
 # 2. بررسی گوش دادن به پورت 5000
 netstat -tulpn | grep 5000
 
-# 3. بررسی فایروال
+# 3. بررسی فایروال داخلی
 sudo iptables -L -n | grep 5000
-
-# 4. اگر نیاز است، فایروال را باز کنید
-sudo iptables -A INPUT -p tcp --dport 5000 -j ACCEPT
 ```
 
 ### مشکل 3: لاگ‌ها نمایش داده نمی‌شوند
