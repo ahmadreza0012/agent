@@ -1,2 +1,4 @@
 {"timestamp": "2026-09-08T14:48:01.291290", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Observability", "details": {"random_value": 67}}
 {"timestamp": "2026-09-08T15:58:10.130070", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Observability", "details": {"random_value": 78}}
+{"timestamp": "2026-09-08T18:55:23.763907", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Observability", "details": {"random_value": 2}}
+{"timestamp": "2026-09-08T18:55:51.102235", "event_type": "info", "message": "عملیات عادی در حال اجرا - Observability", "details": {"random_value": 78}}

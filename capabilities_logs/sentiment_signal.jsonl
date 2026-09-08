@@ -1,2 +1,3 @@
 {"timestamp": "2026-09-08T15:58:10.129874", "event_type": "error", "message": "خطا در پردازش - استفاده از Sentiment به‌عنوان سیگنال", "details": {"random_value": 78}}
 {"timestamp": "2026-09-08T18:32:37.415162", "event_type": "info", "message": "عملیات عادی در حال اجرا - استفاده از Sentiment به‌عنوان سیگنال", "details": {"random_value": 41}}
+{"timestamp": "2026-09-08T18:55:23.763726", "event_type": "info", "message": "عملیات عادی در حال اجرا - استفاده از Sentiment به‌عنوان سیگنال", "details": {"random_value": 1}}

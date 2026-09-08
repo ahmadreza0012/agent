@@ -1,3 +1,6 @@
 {"timestamp": "2026-09-08T14:47:35.846303", "event_type": "info", "message": "عملیات عادی در حال اجرا - پشتیبانی چند صرافی (Binance, Bybit, KuCoin)", "details": {"random_value": 42}}
 {"timestamp": "2026-09-08T14:48:01.290065", "event_type": "info", "message": "عملیات عادی در حال اجرا - پشتیبانی چند صرافی (Binance, Bybit, KuCoin)", "details": {"random_value": 79}}
 {"timestamp": "2026-09-08T16:14:42.306839", "event_type": "info", "message": "عملیات عادی در حال اجرا - پشتیبانی چند صرافی (Binance, Bybit, KuCoin)", "details": {"random_value": 60}}
+{"timestamp": "2026-09-08T18:54:16.517507", "event_type": "success", "message": "عملیات با موفقیت انجام شد - پشتیبانی چند صرافی (Binance, Bybit, KuCoin)", "details": {"random_value": 10}}
+{"timestamp": "2026-09-08T18:55:23.762677", "event_type": "error", "message": "خطا در پردازش - پشتیبانی چند صرافی (Binance, Bybit, KuCoin)", "details": {"random_value": 59}}
+{"timestamp": "2026-09-08T18:55:51.101589", "event_type": "info", "message": "عملیات عادی در حال اجرا - پشتیبانی چند صرافی (Binance, Bybit, KuCoin)", "details": {"random_value": 53}}

@@ -1,3 +1,5 @@
 {"timestamp": "2026-09-08T14:46:59.239514", "event_type": "info", "message": "عملیات عادی در حال اجرا - Paper Trading", "details": {"random_value": 31}}
 {"timestamp": "2026-09-08T14:48:01.291424", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Paper Trading", "details": {"random_value": 61}}
 {"timestamp": "2026-09-08T18:32:37.415335", "event_type": "info", "message": "عملیات عادی در حال اجرا - Paper Trading", "details": {"random_value": 8}}
+{"timestamp": "2026-09-08T18:54:16.518378", "event_type": "info", "message": "عملیات عادی در حال اجرا - Paper Trading", "details": {"random_value": 71}}
+{"timestamp": "2026-09-08T18:55:51.102341", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Paper Trading", "details": {"random_value": 76}}
