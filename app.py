@@ -168,6 +168,9 @@ HTML_TEMPLATE = '''
         <button onclick="simulateAll()" style="background: #27ae60; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-size: 16px; margin-bottom: 20px;">
             🎲 شبیه‌سازی فعالیت همه قابلیت‌ها
         </button>
+        <button onclick="copyAllLogsAndAnalysis()" style="background: #3498db; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-size: 16px; margin-bottom: 20px; margin-right: 10px;">
+            📋 کپی تمام لاگ‌ها و تحلیل‌های LLM
+        </button>
 
         <div id="dashboard"></div>
     </div>
@@ -269,6 +272,62 @@ HTML_TEMPLATE = '''
         async function simulateAll() {
             for (let i = 1; i <= 60; i++) {
                 setTimeout(() => simulateCapability(i), i * 100);
+            }
+        }
+        
+        async function copyAllLogsAndAnalysis() {
+            try {
+                const response = await fetch('/api/capabilities');
+                const capabilities = await response.json();
+                
+                let clipboardText = "=== گزارش کامل لاگ‌ها و تحلیل‌های LLM ===\n";
+                clipboardText += `تاریخ گزارش: ${new Date().toLocaleString('fa-IR')}\n\n`;
+                
+                for (const [category, caps] of Object.entries(capabilities)) {
+                    clipboardText += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+                    clipboardText += `دسته‌بندی: ${category}\n`;
+                    clipboardText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+                    
+                    for (const cap of caps) {
+                        const capName = cap.name || cap.id;
+                        clipboardText += `┌─────────────────────────────────────\n`;
+                        clipboardText += `│ قابلیت: ${capName}\n`;
+                        clipboardText += `│ وضعیت: ${cap.status || 'unknown'}\n`;
+                        clipboardText += `└─────────────────────────────────────\n`;
+                        
+                        // Fetch logs for this capability
+                        const logsResponse = await fetch(`/api/logs/${cap.id}`);
+                        const logs = await logsResponse.json();
+                        
+                        if (logs && logs.length > 0) {
+                            for (const log of logs) {
+                                clipboardText += `\n  📝 لاگ:\n`;
+                                clipboardText += `     زمان: ${log.timestamp}\n`;
+                                clipboardText += `     سطح: ${log.level}\n`;
+                                clipboardText += `     پیام: ${log.message}\n`;
+                                
+                                if (log.llm_analysis && log.llm_analysis !== "در حال تحلیل...") {
+                                    clipboardText += `\n  🤖 تحلیل LLM:\n`;
+                                    clipboardText += `     ${log.llm_analysis}\n`;
+                                }
+                                clipboardText += `\n`;
+                            }
+                        } else {
+                            clipboardText += `  (بدون لاگ ثبت شده)\n\n`;
+                        }
+                    }
+                }
+                
+                clipboardText += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+                clipboardText += `پایان گزارش\n`;
+                clipboardText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+                
+                await navigator.clipboard.writeText(clipboardText);
+                alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!');
+                
+            } catch (error) {
+                console.error('Error copying logs:', error);
+                alert('❌ خطا در کپی کردن لاگ‌ها: ' + error.message);
             }
         }
         
