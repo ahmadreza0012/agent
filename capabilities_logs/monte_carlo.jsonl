@@ -1,0 +1,2 @@
+{"timestamp": "2026-09-08T14:47:35.847035", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Monte Carlo / Robustness Analysis", "details": {"random_value": 24}}
+{"timestamp": "2026-09-08T15:58:10.129728", "event_type": "info", "message": "عملیات عادی در حال اجرا - Monte Carlo / Robustness Analysis", "details": {"random_value": 44}}

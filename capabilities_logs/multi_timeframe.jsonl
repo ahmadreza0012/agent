@@ -1,0 +1,2 @@
+{"timestamp": "2026-09-08T14:48:01.290250", "event_type": "error", "message": "خطا در پردازش - تحلیل چند تایم‌فریمی", "details": {"random_value": 32}}
+{"timestamp": "2026-09-08T15:58:10.129197", "event_type": "success", "message": "عملیات با موفقیت انجام شد - تحلیل چند تایم‌فریمی", "details": {"random_value": 25}}

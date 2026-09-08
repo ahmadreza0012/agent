@@ -1,14 +1,4 @@
 ```
-# Logs and temporary files
-*.log
-*.tmp
-*.swp
-
-# Environment files
-.env
-.env.local
-*.env.*
-
-# Capabilities logs (generated files)
-capabilities_logs/
+__pycache__/
+*.pyc
 ```

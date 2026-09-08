@@ -1,0 +1,2 @@
+{"timestamp": "2026-09-08T14:46:59.238522", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Portfolio Optimization", "details": {"random_value": 70}}
+{"timestamp": "2026-09-08T15:58:10.129338", "event_type": "warning", "message": "هشدار: عملکرد زیر بهینه - Portfolio Optimization", "details": {"random_value": 64}}
