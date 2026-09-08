@@ -2,3 +2,4 @@
 {"timestamp": "2026-09-08T16:14:42.306967", "event_type": "info", "message": "عملیات عادی در حال اجرا - استراتژی‌های تکنیکال متعدد", "details": {"random_value": 76}}
 {"timestamp": "2026-09-08T18:32:37.414636", "event_type": "info", "message": "عملیات عادی در حال اجرا - استراتژی‌های تکنیکال متعدد", "details": {"random_value": 95}}
 {"timestamp": "2026-09-08T18:55:23.762909", "event_type": "error", "message": "خطا در پردازش - استراتژی‌های تکنیکال متعدد", "details": {"random_value": 82}}
+{"timestamp": "2026-09-08T19:02:11.835658", "event_type": "success", "message": "عملیات با موفقیت انجام شد - استراتژی‌های تکنیکال متعدد", "details": {"random_value": 76}}

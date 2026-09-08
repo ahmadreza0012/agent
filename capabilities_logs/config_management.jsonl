@@ -3,3 +3,4 @@
 {"timestamp": "2026-09-08T16:14:42.307316", "event_type": "info", "message": "عملیات عادی در حال اجرا - Configuration Management", "details": {"random_value": 68}}
 {"timestamp": "2026-09-08T18:32:37.415267", "event_type": "info", "message": "عملیات عادی در حال اجرا - Configuration Management", "details": {"random_value": 96}}
 {"timestamp": "2026-09-08T18:55:23.763950", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Configuration Management", "details": {"random_value": 9}}
+{"timestamp": "2026-09-08T19:02:11.836241", "event_type": "warning", "message": "هشدار: عملکرد زیر بهینه - Configuration Management", "details": {"random_value": 40}}
