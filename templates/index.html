@@ -47,10 +47,10 @@
             <div class="subtitle">نظارت بر ۶۰ قابلیت با لاگ‌گذاری هوشمند و تحلیل LLM</div>
         </header>
         <div class="stats-grid">
-            <div class="stat-card"><div class="stat-value" id="uptime">-</div><div class="stat-label">زمان کارکرد</div></div>
-            <div class="stat-card"><div class="stat-value" id="cycle-count">0</div><div class="stat-label">تعداد سیکل‌ها</div></div>
-            <div class="stat-card"><div class="stat-value" id="active-logs">0</div><div class="stat-label">لاگ‌های فعال</div></div>
             <div class="stat-card"><div class="stat-value" id="total-caps">60</div><div class="stat-label">کل قابلیت‌ها</div></div>
+            <div class="stat-card"><div class="stat-value" id="active-cats">7</div><div class="stat-label">دسته‌بندی‌ها</div></div>
+            <div class="stat-card"><div class="stat-value" id="total-logs">0</div><div class="stat-label">کل لاگ‌ها</div></div>
+            <div class="stat-card"><div class="stat-value" id="analyzed-logs">0</div><div class="stat-label">تحلیل شده با LLM</div></div>
         </div>
         <div class="controls">
             <button onclick="fetchData()">🔄 بروزرسانی</button>
@@ -62,63 +62,91 @@
     </div>
     <script>
         const API_BASE = window.location.origin;
+        let allCapabilitiesData = {};
+        let allLogsData = {};
+        
         async function fetchData() {
             try {
-                const response = await fetch(`${API_BASE}/api/data`);
-                const data = await response.json();
-                document.getElementById('uptime').innerText = data.uptime;
-                document.getElementById('cycle-count').innerText = data.cycle_count;
-                document.getElementById('active-logs').innerText = data.active_logs;
-                renderCapabilities(data.capabilities_status, data.capabilities_structure);
-                renderSystemLogs(data.system_logs);
-            } catch (error) { console.error('Error fetching data:', error); }
-        }
-        function renderCapabilities(capabilitiesStatus, capabilitiesStructure) {
-            const container = document.getElementById('capabilities-container');
-            if (!capabilitiesStatus || Object.keys(capabilitiesStatus).length === 0) return;
-            const categories = {};
-            for (const [capId, capData] of Object.entries(capabilitiesStatus)) {
-                const capInfo = capabilitiesStructure[capId] || {name: capId, icon: '📦', category: 'unknown'};
-                if (!categories[capInfo.category]) categories[capInfo.category] = [];
-                categories[capInfo.category].push({
-                    id: capId,
-                    name: capInfo.name,
-                    icon: capInfo.icon,
-                    category: capInfo.category,
-                    status: capData.status,
-                    status_text: capData.status === 'active' ? 'فعال' : capData.status === 'warning' ? 'هشدار' : 'خطا',
-                    logs: capData.logs || []
-                });
+                const response = await fetch(`${API_BASE}/api/capabilities`);
+                allCapabilitiesData = await response.json();
+                
+                const logPromises = [];
+                for (const category of Object.values(allCapabilitiesData)) {
+                    for (const cap of category) {
+                        logPromises.push(
+                            fetch(`${API_BASE}/api/logs/${cap.id}`)
+                                .then(res => res.json())
+                                .then(logs => ({id: cap.id, logs: logs}))
+                        );
+                    }
+                }
+                
+                const allLogs = await Promise.all(logPromises);
+                allLogsData = {};
+                allLogs.forEach(item => allLogsData[item.id] = item.logs);
+                
+                renderCapabilities(allCapabilitiesData, allLogsData);
+                renderSystemLogs([]);
+                updateStats(allLogsData);
+            } catch (error) { 
+                console.error('Error fetching data:', error); 
+                document.getElementById('capabilities-container').innerHTML = '<div style="color: var(--error); text-align: center; padding: 40px;">خطا در دریافت داده‌ها</div>';
             }
+        }
+        
+        function updateStats(logsData) {
+            let totalLogs = 0;
+            let analyzedLogs = 0;
+            for (const logs of Object.values(logsData)) {
+                totalLogs += logs.length;
+                analyzedLogs += logs.filter(log => log.llm_status === 'success').length;
+            }
+            document.getElementById('total-logs').innerText = totalLogs;
+            document.getElementById('analyzed-logs').innerText = analyzedLogs;
+        }
+        
+        function renderCapabilities(capabilitiesData, logsMap) {
+            const container = document.getElementById('capabilities-container');
+            if (!capabilitiesData || Object.keys(capabilitiesData).length === 0) {
+                container.innerHTML = '<div style="text-align:center; padding: 40px;">هیچ داده‌ای موجود نیست</div>';
+                return;
+            }
+            
             let html = '';
-            for (const [catName, caps] of Object.entries(categories)) {
-                const catDisplayName = capabilitiesStructure[Object.keys(caps)[0]]?.category || catName;
-                html += `<div class="category-section"><div class="category-title">📦 ${catDisplayName}</div><div class="capabilities-grid">`;
+            for (const [catName, caps] of Object.entries(capabilitiesData)) {
+                html += `<div class="category-section"><div class="category-title">📦 ${catName}</div><div class="capabilities-grid">`;
                 caps.forEach(cap => {
+                    const logs = logsMap[cap.id] || [];
                     let statusClass = 'status-active';
-                    if (cap.status === 'warning') statusClass = 'status-warning';
-                    if (cap.status === 'error') statusClass = 'status-error';
+                    let statusText = 'فعال';
+                    
                     let logsHtml = '';
-                    if (cap.logs && cap.logs.length > 0) {
+                    if (logs && logs.length > 0) {
                         logsHtml = '<div class="log-area">';
-                        cap.logs.slice(-5).reverse().forEach(log => {
-                            logsHtml += `<div class="log-entry"><div class="log-time">${log.timestamp}</div><div>${log.message}</div>`;
-                            if (log.llm_analysis) logsHtml += `<div class="llm-analysis">🤖 تحلیل LLM: ${log.llm_analysis}</div>`;
+                        logs.slice(-5).reverse().forEach(log => {
+                            logsHtml += `<div class="log-entry"><div class="log-time">${new Date(log.timestamp).toLocaleString('fa-IR')}</div><div>${log.message}</div>`;
+                            if (log.llm_analysis && log.llm_status === 'success') {
+                                logsHtml += `<div class="llm-analysis">🤖 تحلیل LLM: ${log.llm_analysis}</div>`;
+                            } else if (log.llm_status === 'pending') {
+                                logsHtml += `<div class="llm-analysis">🤖 تحلیل LLM: در حال پردازش...</div>`;
+                            }
                             logsHtml += `</div>`;
                         });
                         logsHtml += '</div>';
                     }
-                    html += `<div class="cap-card"><div class="cap-header"><span class="cap-icon">${cap.icon}</span><span class="cap-name">${cap.name}</span><span class="status-badge ${statusClass}">${cap.status_text}</span></div>${logsHtml}</div>`;
+                    html += `<div class="cap-card"><div class="cap-header"><span class="cap-icon">📊</span><span class="cap-name">${cap.name}</span><span class="status-badge ${statusClass}">${statusText}</span></div>${logsHtml}</div>`;
                 });
                 html += `</div></div>`;
             }
             container.innerHTML = html;
         }
+        
         function renderSystemLogs(logs) {
             const container = document.getElementById('system-logs');
             if (!logs || logs.length === 0) { container.innerHTML = '<div>هیچ لاگ سیستمی موجود نیست.</div>'; return; }
             container.innerHTML = logs.slice(-20).reverse().map(log => `<div>${log}</div>`).join('');
         }
+        
         async function simulateActivity() {
             try {
                 const btn = event.target; btn.disabled = true; btn.innerText = '⏳ در حال پردازش...';
@@ -126,52 +154,37 @@
                 setTimeout(() => { fetchData(); btn.disabled = false; btn.innerText = '🎲 شبیه‌سازی فعالیت'; }, 1000);
             } catch (error) { alert('خطا در شبیه‌سازی فعالیت'); btn.disabled = false; btn.innerText = '🎲 شبیه‌سازی فعالیت'; }
         }
+        
         async function copyAllLogsAndAnalysis() {
             try {
-                const response = await fetch(`${API_BASE}/api/data`);
-                const data = await response.json();
+                const capabilitiesData = allCapabilitiesData;
+                const logsData = allLogsData;
+                
                 let clipboardText = "📊 گزارش کامل لاگ‌ها و تحلیل‌های LLM\n";
                 clipboardText += `تاریخ گزارش: ${new Date().toLocaleString('fa-IR')}\n================================================\n\n`;
                 
-                // افزودن ارزیابی‌های دسته‌بندی
-                if (data.category_evaluations) {
-                    clipboardText += "📋 ارزیابی‌های LLM برای هر دسته‌بندی:\n";
-                    clipboardText += "================================================\n";
-                    for (const [catKey, evaluation] of Object.entries(data.category_evaluations)) {
-                        const catName = data.capabilities_structure[catKey]?.name || catKey;
-                        clipboardText += `\n📂 دسته‌بندی: ${catName}\n`;
-                        clipboardText += "------------------------------------------------\n";
-                        if (evaluation) {
-                            clipboardText += `   وضعیت: ${evaluation.status || 'نامشخص'}\n`;
-                            clipboardText += `   تحلیل: ${evaluation.analysis || evaluation.llm_evaluation || 'تحلیلی موجود نیست'}\n`;
-                            if (evaluation.issues) clipboardText += `   مشکلات: ${JSON.stringify(evaluation.issues)}\n`;
-                            if (evaluation.recommendations) clipboardText += `   پیشنهادات: ${JSON.stringify(evaluation.recommendations)}\n`;
-                        } else {
-                            clipboardText += "   ⚠️ هیچ ارزیابی برای این دسته‌بندی موجود نیست\n";
-                        }
-                        clipboardText += "\n";
-                    }
-                }
-                
-                // افزودن لاگ‌های هر قابلیت
-                const categories = {};
-                data.capabilities.forEach(cap => { if (!categories[cap.category]) categories[cap.category] = []; categories[cap.category].push(cap); });
-                for (const [catName, caps] of Object.entries(categories)) {
+                for (const [catName, caps] of Object.entries(capabilitiesData)) {
                     clipboardText += `📂 دسته‌بندی: ${catName}\n------------------------------------------------\n`;
                     caps.forEach(cap => {
-                        if (cap.logs && cap.logs.length > 0) {
-                            clipboardText += `\n🔹 قابلیت: ${cap.name} (${cap.icon})\n   وضعیت فعلی: ${cap.status_text}\n`;
-                            cap.logs.forEach(log => {
-                                clipboardText += `   └─ [${log.timestamp}] ${log.message}\n`;
-                                if (log.llm_analysis) clipboardText += `      🤖 تحلیل LLM: ${log.llm_analysis}\n`;
+                        const logs = logsData[cap.id] || [];
+                        if (logs && logs.length > 0) {
+                            clipboardText += `\n🔹 قابلیت: ${cap.name}\n`;
+                            logs.forEach(log => {
+                                clipboardText += `   └─ [${new Date(log.timestamp).toLocaleString('fa-IR')}] ${log.message}\n`;
+                                if (log.llm_analysis && log.llm_status === 'success') {
+                                    clipboardText += `      🤖 تحلیل LLM: ${log.llm_analysis}\n`;
+                                } else if (log.llm_status === 'pending') {
+                                    clipboardText += `      🤖 تحلیل LLM: در حال پردازش...\n`;
+                                }
                             });
                         }
                     });
                     clipboardText += "\n";
                 }
-                navigator.clipboard.writeText(clipboardText).then(() => { alert('✅ تمام لاگ‌ها، تحلیل‌های LLM و ارزیابی‌های دسته‌بندی با موفقیت کپی شدند!'); }).catch(err => { console.error('خطا در کپی:', err); alert('❌ خطا در کپی کردن متن.'); });
+                navigator.clipboard.writeText(clipboardText).then(() => { alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!'); }).catch(err => { console.error('خطا در کپی:', err); alert('❌ خطا در کپی کردن متن.'); });
             } catch (error) { console.error('خطا در دریافت داده‌ها:', error); alert('❌ خطا در دریافت داده‌ها برای کپی.'); }
         }
+        
         fetchData();
         setInterval(fetchData, 30000);
     </script>
