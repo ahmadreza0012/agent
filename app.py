@@ -21,15 +21,15 @@ app.config['LLM_API_KEY'] = os.getenv('GROQ_API_KEY')  # Load from environment v
 app.config['LLM_API_URL'] = 'https://api.groq.com/openai/v1/chat/completions'
 app.config['LLM_MODEL'] = 'groq/compound'
 
+# Setup Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 if not app.config['LLM_API_KEY']:
     logger.warning("GROQ_API_KEY not found in environment variables. LLM features will be disabled.")
 
 # Ensure log directory exists
 os.makedirs(app.config['LOG_DIR'], exist_ok=True)
-
-# Setup Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Thread pool for async LLM calls
 executor = ThreadPoolExecutor(max_workers=10)
