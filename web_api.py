@@ -136,9 +136,10 @@ ALL_CAPABILITIES = {
     }
 }
 
-# آدرس API برای تحلیل LLM (قابل تنظیم)
-LLM_API_URL = os.environ.get('LLM_API_URL', 'http://localhost:11434/api/generate')
-LLM_MODEL = os.environ.get('LLM_MODEL', 'llama2')
+# آدرس API برای تحلیل LLM (Groq API)
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
+LLM_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+LLM_MODEL = 'llama-3.1-70b-versatile'
 
 
 def get_bot_state():
@@ -964,6 +965,17 @@ def api_get_capability_logs(capability_id):
         'llm_analysis': llm_analysis
     })
 
+
+
+@app.route('/api/capability/<capability_id>/analysis')
+def api_get_capability_analysis(capability_id):
+    """API برای دریافت تحلیل LLM یک قابلیت (GET)"""
+    llm_analysis = get_llm_analysis(capability_id)
+    
+    if llm_analysis:
+        return jsonify(llm_analysis)
+    else:
+        return jsonify(None), 404
 
 @app.route('/api/capability/<capability_id>/analyze', methods=['POST'])
 def api_analyze_capability(capability_id):
