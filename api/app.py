@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import uvicorn
 
@@ -111,7 +111,21 @@ app.include_router(capabilities_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
-    return {"name": "Trading System API", "version": "2.0.0", "docs": "/docs"}
+    # Serve the UI dashboard
+    static_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static')
+    index_path = os.path.join(static_path, 'index.html')
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"name": "Trading System API", "version": "2.0.0", "docs": "/docs", "ui": "/static/index.html"}
+
+
+@app.get("/static/{path:path}")
+async def serve_static(path: str):
+    """Serve static files."""
+    static_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', path)
+    if os.path.exists(static_path) and os.path.isfile(static_path):
+        return FileResponse(static_path)
+    raise StarletteHTTPException(status_code=404, detail="File not found")
 
 
 def run(host: str = "0.0.0.0", port: int = 8000):
