@@ -1,3 +1,5 @@
 {"timestamp": "2026-09-08T14:46:59.239082", "event_type": "info", "message": "عملیات عادی در حال اجرا - ترکیب ML با استراتژی‌های معاملاتی", "details": {"random_value": 28}}
 {"timestamp": "2026-09-08T14:47:16.857266", "event_type": "error", "message": "خطا در پردازش - ترکیب ML با استراتژی‌های معاملاتی", "details": {"random_value": 95}}
 {"timestamp": "2026-09-08T15:58:10.129831", "event_type": "info", "message": "عملیات عادی در حال اجرا - ترکیب ML با استراتژی‌های معاملاتی", "details": {"random_value": 42}}
+{"timestamp": "2026-09-08T18:54:16.518241", "event_type": "info", "message": "عملیات عادی در حال اجرا - ترکیب ML با استراتژی‌های معاملاتی", "details": {"random_value": 57}}
+{"timestamp": "2026-09-08T18:55:23.763691", "event_type": "success", "message": "عملیات با موفقیت انجام شد - ترکیب ML با استراتژی‌های معاملاتی", "details": {"random_value": 8}}

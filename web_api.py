@@ -136,10 +136,10 @@ ALL_CAPABILITIES = {
     }
 }
 
-# آدرس API برای تحلیل LLM (Groq API)
+# آدرس API برای تحلیل LLM (Ollama - llama2)
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
-LLM_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
-LLM_MODEL = 'llama-3.1-70b-versatile'
+LLM_API_URL = 'http://localhost:11434/api/generate'
+LLM_MODEL = 'llama2'
 
 
 def get_bot_state():
@@ -205,8 +205,7 @@ def analyze_with_llm(capability_id, log_entries):
         # ساخت پرامپت برای تحلیل
         logs_text = "\n".join([f"- {entry['timestamp']}: {entry['message']}" for entry in log_entries[-10:]])
         
-        prompt = f"""
-تحلیل وضعیت قابلیت: {capability_id}
+        prompt = f"""تحلیل وضعیت قابلیت: {capability_id}
 
 لاگ‌های اخیر:
 {logs_text}
@@ -216,8 +215,7 @@ def analyze_with_llm(capability_id, log_entries):
 2. مشکلات احتمالی
 3. پیشنهادات بهبود
 
-پاسخ را به صورت JSON بده با فیلدهای: status, issues, recommendations
-"""
+پاسخ را به صورت JSON بده با فیلدهای: status, issues, recommendations"""
         
         payload = {
             "model": LLM_MODEL,
@@ -266,8 +264,7 @@ def analyze_categorized_logs_with_llm(category_name, categorized_logs):
         
         logs_text = "\n\n".join(logs_summary)
         
-        prompt = f"""
-ارزیابی لاگ‌های دسته‌بندی شده برای: {category_name}
+        prompt = f"""ارزیابی لاگ‌های دسته‌بندی شده برای: {category_name}
 
 خلاصه لاگ‌ها بر اساس سطح:
 {logs_text}
@@ -277,8 +274,7 @@ def analyze_categorized_logs_with_llm(category_name, categorized_logs):
 2. مشکلات مهم شناسایی شده
 3. پیشنهادات برای بهبود
 
-پاسخ را به صورت JSON بده با فیلدهای: overall_status, key_issues, recommendations
-"""
+پاسخ را به صورت JSON بده با فیلدهای: overall_status, key_issues, recommendations"""
         
         payload = {
             "model": LLM_MODEL,
