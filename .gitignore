@@ -1,22 +1,25 @@
-```gitignore
-# Python
-__pycache__/
+```
+# JSON evaluation files
+llm_analysis/*_category_eval.json
+
+# Python compiled files
 *.pyc
-*.pyo
-*.pyd
+__pycache__/
 
-# Logs and temp files
+# Logs
 *.log
-*.tmp
 
-# Environment
+# Environment files
 .env
 .env.local
 *.env.*
 
-# Editors
+# Editor/IDE files
 .vscode/
 .idea/
+*.swp
+*.swo
+*.tmp
 
 # Dependencies
 .venv/
@@ -27,4 +30,13 @@ node_modules/
 dist/
 build/
 target/
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# OS files
+.DS_Store
+Thumbs.db
 ```
