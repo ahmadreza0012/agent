@@ -288,6 +288,27 @@ def get_llm_analysis(capability_id):
         return None
 
 
+def get_category_evaluation(category_key):
+    """دریافت ارزیابی LLM برای یک دسته‌بندی"""
+    try:
+        eval_file = os.path.join(LLM_ANALYSIS_DIR, f"{category_key}_category_eval.json")
+        if os.path.exists(eval_file):
+            with open(eval_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return None
+    except Exception as e:
+        app.logger.error(f"Error getting category evaluation: {e}")
+        return None
+
+
+def get_all_category_evaluations():
+    """دریافت تمام ارزیابی‌های دسته‌بندی"""
+    evaluations = {}
+    for category_key in ALL_CAPABILITIES.keys():
+        evaluations[category_key] = get_category_evaluation(category_key)
+    return evaluations
+
+
 def read_last_lines(filepath, num_lines=30):
     """خواندن آخرین خطوط یک فایل لاگ"""
     try:
@@ -922,12 +943,16 @@ def api_data():
                 'llm_analysis': llm_analysis
             }
     
+    # دریافت ارزیابی‌های دسته‌بندی
+    category_evaluations = get_all_category_evaluations()
+    
     return jsonify({
         'status': status,
         'metrics': metrics,
         'logs': logs,
         'capabilities_status': capabilities_status,
-        'capabilities_structure': ALL_CAPABILITIES
+        'capabilities_structure': ALL_CAPABILITIES,
+        'category_evaluations': category_evaluations
     })
 
 
