@@ -254,6 +254,68 @@ def analyze_with_llm(capability_id, log_entries):
         return None
 
 
+def analyze_categorized_logs_with_llm(category_name, categorized_logs):
+    """ارسال لاگ‌های دسته‌بندی شده به LLM برای ارزیابی"""
+    try:
+        # ساخت متن لاگ‌ها برای هر دسته
+        logs_summary = []
+        for level, entries in categorized_logs.items():
+            if entries:
+                level_logs = "\n".join([f"  - [{entry['timestamp']}] {entry['message'][:100]}" for entry in entries[-5:]])
+                logs_summary.append(f"{level} ({len(entries)} مورد):\n{level_logs}")
+        
+        logs_text = "\n\n".join(logs_summary)
+        
+        prompt = f"""
+ارزیابی لاگ‌های دسته‌بندی شده برای: {category_name}
+
+خلاصه لاگ‌ها بر اساس سطح:
+{logs_text}
+
+لطفاً یک ارزیابی کلی از این لاگ‌ها ارائه ده و موارد زیر را مشخص کن:
+1. وضعیت کلی سیستم (سالم/نیاز به توجه/خطرناک)
+2. مشکلات مهم شناسایی شده
+3. پیشنهادات برای بهبود
+
+پاسخ را به صورت JSON بده با فیلدهای: overall_status, key_issues, recommendations
+"""
+        
+        payload = {
+            "model": LLM_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "max_tokens": 600
+        }
+        
+        response = requests.post(LLM_API_URL, json=payload, timeout=45)
+        if response.status_code == 200:
+            result = response.json()
+            evaluation = {
+                "timestamp": datetime.now().isoformat(),
+                "category": category_name,
+                "llm_evaluation": result.get('response', ''),
+                "log_counts": {level: len(entries) for level, entries in categorized_logs.items()},
+                "raw_response": result
+            }
+            
+            # ذخیره ارزیابی
+            eval_file = os.path.join(LLM_ANALYSIS_DIR, f"categorized_logs_evaluation.json")
+            with open(eval_file, 'w', encoding='utf-8') as f:
+                json.dump(evaluation, f, ensure_ascii=False, indent=2)
+            
+            return evaluation
+        else:
+            app.logger.warning(f"LLM API returned status {response.status_code}")
+            return None
+            
+    except requests.exceptions.RequestException as e:
+        app.logger.warning(f"LLM API request failed: {e}")
+        return None
+    except Exception as e:
+        app.logger.error(f"Error analyzing categorized logs with LLM: {e}")
+        return None
+
+
 def get_capability_logs(capability_id, limit=10):
     """دریافت لاگ‌های یک قابلیت"""
     try:
@@ -309,7 +371,32 @@ def get_all_category_evaluations():
     return evaluations
 
 
-def read_last_lines(filepath, num_lines=30):
+def parse_log_line(line):
+    """تجزیه یک خط لاگ به اجزای آن"""
+    import re
+    
+    # الگوی لاگ: timestamp - logger - level - message
+    pattern = r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2},\d{3})\s+-\s+([\w\.]+)\s+-\s+(INFO|WARNING|ERROR|DEBUG|SUCCESS)\s+-\s+(.*)$'
+    match = re.match(pattern, line.strip())
+    
+    if match:
+        return {
+            'timestamp': match.group(1),
+            'logger': match.group(2),
+            'level': match.group(3),
+            'message': match.group(4)
+        }
+    
+    # اگر الگو مطابقت نداشت، کل خط را برگردان
+    return {
+        'timestamp': '',
+        'logger': '',
+        'level': 'INFO',
+        'message': line.strip()
+    }
+
+
+def read_last_lines(filepath, num_lines=50):
     """خواندن آخرین خطوط یک فایل لاگ"""
     try:
         if not os.path.exists(filepath):
@@ -330,14 +417,61 @@ def get_all_logs():
     for log_file in LOG_FILES:
         logs = read_last_lines(log_file)
         for line in logs:
+            parsed = parse_log_line(line)
             all_logs.append({
                 'source': os.path.basename(log_file),
                 'line': line.strip(),
-                'timestamp': datetime.now().isoformat()
+                'timestamp': parsed.get('timestamp', datetime.now().isoformat()),
+                'level': parsed.get('level', 'INFO'),
+                'logger': parsed.get('logger', ''),
+                'message': parsed.get('message', line.strip())
             })
     
     all_logs.reverse()
-    return all_logs[:30]
+    return all_logs[:50]
+
+
+def get_categorized_logs(filepath=None, limit=100):
+    """دریافت لاگ‌های دسته‌بندی شده بر اساس سطح"""
+    if filepath is None:
+        filepath = os.path.join(PROJECT_DIR, 'detailed_trading.log')
+    
+    categorized = {
+        'INFO': [],
+        'WARNING': [],
+        'ERROR': [],
+        'SUCCESS': [],
+        'DEBUG': [],
+        'OTHER': []
+    }
+    
+    try:
+        if not os.path.exists(filepath):
+            return categorized
+        
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+            
+        for line in lines[-limit:]:
+            parsed = parse_log_line(line)
+            level = parsed.get('level', 'OTHER')
+            
+            log_entry = {
+                'timestamp': parsed.get('timestamp', ''),
+                'logger': parsed.get('logger', ''),
+                'message': parsed.get('message', line.strip()),
+                'raw': line.strip()
+            }
+            
+            if level in categorized:
+                categorized[level].append(log_entry)
+            else:
+                categorized['OTHER'].append(log_entry)
+        
+        return categorized
+    except Exception as e:
+        app.logger.error(f"Error categorizing logs: {e}")
+        return categorized
 
 
 def get_metrics():
@@ -885,19 +1019,60 @@ HTML_TEMPLATE = '''
         
         async function copyAllLogsAndAnalysis() {
             try {
-                const response = await fetch('/api/data');
-                const data = await response.json();
+                // دریافت لاگ‌های دسته‌بندی شده از API جدید
+                const logsResponse = await fetch('/api/logs/categorized?limit=200&analyze=false');
+                const logsData = await logsResponse.json();
                 
+                // دریافت داده‌های معمولی داشبورد
+                const dashboardResponse = await fetch('/api/data');
+                const dashboardData = await dashboardResponse.json();
+
                 let clipboardText = "📊 گزارش کامل لاگ‌ها و تحلیل‌های LLM\n";
                 clipboardText += `تاریخ گزارش: ${new Date().toLocaleString('fa-IR')}\n`;
                 clipboardText += "================================================\n\n";
-                
-                // افزودن ارزیابی‌های دسته‌بندی
-                if (data.category_evaluations) {
-                    clipboardText += "📋 ارزیابی‌های LLM برای هر دسته‌بندی:\n";
+
+                // بخش 1: لاگ‌های دسته‌بندی شده
+                if (logsData.success && logsData.categorized_logs) {
+                    clipboardText += "📋 لاگ‌های دسته‌بندی شده:\n";
                     clipboardText += "================================================\n";
-                    for (const [catKey, evaluation] of Object.entries(data.category_evaluations)) {
-                        const catName = data.capabilities_structure[catKey]?.name || catKey;
+                    
+                    const levelNames = {
+                        'INFO': 'اطلاعات',
+                        'WARNING': 'هشدارها',
+                        'ERROR': 'خطاها',
+                        'SUCCESS': 'موفقیت‌ها',
+                        'DEBUG': 'دیباگ',
+                        'OTHER': 'سایر'
+                    };
+                    
+                    for (const [level, entries] of Object.entries(logsData.categorized_logs)) {
+                        if (entries && entries.length > 0) {
+                            clipboardText += `\n🔸 ${levelNames[level] || level} (${entries.length} مورد):\n`;
+                            clipboardText += "------------------------------------------------\n";
+                            entries.slice(-20).forEach(entry => {
+                                clipboardText += `   [${entry.timestamp}] ${entry.message}\n`;
+                            });
+                            if (entries.length > 20) {
+                                clipboardText += `   ... و ${entries.length - 20} مورد دیگر\n`;
+                            }
+                            clipboardText += "\n";
+                        }
+                    }
+                    
+                    // افزودن ارزیابی LLM اگر موجود است
+                    if (logsData.llm_evaluation) {
+                        clipboardText += "\n🧠 ارزیابی LLM:\n";
+                        clipboardText += "================================================\n";
+                        clipboardText += `${logsData.llm_evaluation.llm_evaluation || 'تحلیلی موجود نیست'}\n\n`;
+                    }
+                }
+
+                // بخش 2: ارزیابی‌های دسته‌بندی قابلیت‌ها
+                if (dashboardData.category_evaluations) {
+                    clipboardText += "\n📋 ارزیابی‌های LLM برای دسته‌بندی قابلیت‌ها:\n";
+                    clipboardText += "================================================\n";
+                    for (const [catKey, evaluation] of Object.entries(dashboardData.category_evaluations)) {
+                        const catName = dashboardData.capabilities_structure[catKey]?.name || catKey;
                         clipboardText += `\n📂 دسته‌بندی: ${catName}\n`;
                         clipboardText += "------------------------------------------------\n";
                         if (evaluation) {
@@ -911,11 +1086,11 @@ HTML_TEMPLATE = '''
                         clipboardText += "\n";
                     }
                 }
-                
-                // افزودن لاگ‌های هر قابلیت
+
+                // بخش 3: لاگ‌های هر قابلیت
                 const categories = {};
-                for (const [capId, capData] of Object.entries(data.capabilities_status)) {
-                    for (const [catKey, catData] of Object.entries(data.capabilities_structure)) {
+                for (const [capId, capData] of Object.entries(dashboardData.capabilities_status)) {
+                    for (const [catKey, catData] of Object.entries(dashboardData.capabilities_structure)) {
                         for (const cap of catData.capabilities) {
                             if (cap.id === capId) {
                                 if (!categories[catKey]) categories[catKey] = [];
@@ -931,9 +1106,11 @@ HTML_TEMPLATE = '''
                         }
                     }
                 }
-                
+
+                clipboardText += "\n📋 لاگ‌های تفکیکی قابلیت‌ها:\n";
+                clipboardText += "================================================\n";
                 for (const [catKey, caps] of Object.entries(categories)) {
-                    const catName = data.capabilities_structure[catKey]?.name || catKey;
+                    const catName = dashboardData.capabilities_structure[catKey]?.name || catKey;
                     clipboardText += `\n📂 دسته‌بندی: ${catName}\n`;
                     clipboardText += "------------------------------------------------\n";
                     caps.forEach(cap => {
@@ -950,16 +1127,27 @@ HTML_TEMPLATE = '''
                     });
                     clipboardText += "\n";
                 }
-                
+
+                // خروجی JSON هم برای استفاده برنامه‌نویسی
+                clipboardText += "\n\n📄 فرمت JSON (برای استفاده برنامه‌نویسی):\n";
+                clipboardText += "================================================\n";
+                clipboardText += JSON.stringify({
+                    timestamp: new Date().toISOString(),
+                    categorized_logs: logsData.categorized_logs,
+                    log_counts: logsData.log_counts,
+                    llm_evaluation: logsData.llm_evaluation,
+                    category_evaluations: dashboardData.category_evaluations
+                }, null, 2);
+
                 navigator.clipboard.writeText(clipboardText).then(() => {
-                    alert('✅ تمام لاگ‌ها، تحلیل‌های LLM و ارزیابی‌های دسته‌بندی با موفقیت کپی شدند!');
+                    alert('✅ تمام لاگ‌ها، تحلیل‌های LLM و ارزیابی‌های دسته‌بندی با موفقیت کپی شدند!\n\nشامل:\n- لاگ‌های دسته‌بندی شده (INFO, WARNING, ERROR, SUCCESS)\n- ارزیابی LLM\n- لاگ‌های تفکیکی قابلیت‌ها\n- فرمت JSON برای استفاده برنامه‌نویسی');
                 }).catch(err => {
                     console.error('خطا در کپی:', err);
                     alert('❌ خطا در کپی کردن متن.');
                 });
             } catch (error) {
                 console.error('خطا در دریافت داده‌ها:', error);
-                alert('❌ خطا در دریافت داده‌ها برای کپی.');
+                alert('❌ خطا در دریافت داده‌ها برای کپی: ' + error.message);
             }
         }
         
@@ -1104,6 +1292,35 @@ def api_simulate():
     """API برای شبیه‌سازی فعالیت قابلیت‌ها"""
     simulate_capability_activity()
     return jsonify({'success': True, 'message': 'فعالیت شبیه‌سازی شد'})
+
+
+@app.route('/api/logs/categorized')
+def api_get_categorized_logs():
+    """API برای دریافت لاگ‌های دسته‌بندی شده با ارزیابی LLM"""
+    limit = request.args.get('limit', 100, type=int)
+    analyze = request.args.get('analyze', 'false').lower() == 'true'
+    
+    categorized_logs = get_categorized_logs(limit=limit)
+    
+    llm_evaluation = None
+    if analyze:
+        llm_evaluation = analyze_categorized_logs_with_llm("detailed_trading.log", categorized_logs)
+    
+    # دریافت ارزیابی ذخیره شده اگر وجود دارد
+    eval_file = os.path.join(LLM_ANALYSIS_DIR, "categorized_logs_evaluation.json")
+    if os.path.exists(eval_file):
+        with open(eval_file, 'r', encoding='utf-8') as f:
+            stored_evaluation = json.load(f)
+            if not llm_evaluation:
+                llm_evaluation = stored_evaluation
+    
+    return jsonify({
+        'success': True,
+        'categorized_logs': categorized_logs,
+        'log_counts': {level: len(entries) for level, entries in categorized_logs.items()},
+        'llm_evaluation': llm_evaluation,
+        'total_logs': sum(len(entries) for entries in categorized_logs.values())
+    })
 
 
 @app.route('/api/llm/config', methods=['GET', 'POST'])
