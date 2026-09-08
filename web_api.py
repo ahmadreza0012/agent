@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Web API برای نمایش وضعیت ربات معاملاتی کریپتو
-Crypto Trading Bot Web API
+Web API برای نمایش وضعیت ربات معاملاتی کریپتو با تمام قابلیت‌ها
+Crypto Trading Bot Web API with Full Capabilities Monitoring
 
-این فایل یک رابط وب زیبا و فارسی برای مانیتورینگ و کنترل ربات معاملاتی فراهم می‌کند.
+این فایل یک رابط وب زیبا و فارسی برای مانیتورینگ تمام ۶۰ قابلیت ربات معاملاتی فراهم می‌کند.
+هر قابلیت دارای لاگ اختصاصی است و لاگ‌ها به صورت خودکار توسط LLM تحلیل می‌شوند.
 """
 
 import os
 import sys
+import json
 import glob
 import subprocess
+import requests
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, render_template_string, request
 from flask_cors import CORS
@@ -24,22 +27,128 @@ LOG_FILES = [
     os.path.join(PROJECT_DIR, 'detailed_trading.log'),
     os.path.join(PROJECT_DIR, 'logs', 'trading.log'),
     os.path.join(PROJECT_DIR, '.screenlog.0'),
+    os.path.join(PROJECT_DIR, 'server.log'),
 ]
 
 # فایل ذخیره وضعیت ربات
 BOT_STATE_FILE = os.path.join(PROJECT_DIR, '.bot_state')
+CAPABILITIES_LOG_DIR = os.path.join(PROJECT_DIR, 'capabilities_logs')
+LLM_ANALYSIS_DIR = os.path.join(PROJECT_DIR, 'llm_analysis')
+
+# ایجاد پوشه‌ها اگر وجود ندارند
+os.makedirs(CAPABILITIES_LOG_DIR, exist_ok=True)
+os.makedirs(LLM_ANALYSIS_DIR, exist_ok=True)
+
+# لیست کامل ۶۰ قابلیت در ۷ دسته
+ALL_CAPABILITIES = {
+    "core_trading": {
+        "name": "ترید الگوریتمی",
+        "capabilities": [
+            {"id": "crypto_algo_trading", "name": "ترید الگوریتمی کریپتو", "icon": "🤖"},
+            {"id": "multi_exchange", "name": "پشتیبانی چند صرافی (Binance, Bybit, KuCoin)", "icon": "🏢"},
+            {"id": "market_data", "name": "دریافت داده بازار (OHLCV, قیمت, حجم)", "icon": "📊"},
+            {"id": "multi_timeframe", "name": "تحلیل چند تایم‌فریمی", "icon": "⏱️"},
+            {"id": "technical_strategies", "name": "استراتژی‌های تکنیکال متعدد", "icon": "📈"},
+            {"id": "market_regime", "name": "تشخیص Market Regime", "icon": "🔍"},
+            {"id": "ensemble_strategies", "name": "ترکیب چند استراتژی (Ensemble)", "icon": "🎯"},
+            {"id": "portfolio_optimization", "name": "Portfolio Optimization", "icon": "⚖️"},
+        ]
+    },
+    "risk_management": {
+        "name": "مدیریت ریسک",
+        "capabilities": [
+            {"id": "risk_management", "name": "Risk Management (Exposure, Drawdown, Volatility)", "icon": "🛡️"},
+            {"id": "position_sizing", "name": "Position Sizing", "icon": "📏"},
+            {"id": "stop_loss_take_profit", "name": "Stop Loss / Take Profit", "icon": "🛑"},
+            {"id": "trailing_stop", "name": "Trailing Stop", "icon": "📉"},
+            {"id": "breakeven", "name": "Breakeven Stop", "icon": "⚖️"},
+            {"id": "partial_take_profit", "name": "Partial Take Profit", "icon": "💰"},
+            {"id": "max_positions", "name": "حداکثر تعداد پوزیشن و Exposure", "icon": "🔢"},
+            {"id": "circuit_breaker", "name": "Circuit Breaker", "icon": "⚡"},
+            {"id": "kill_switch", "name": "Kill Switch", "icon": "🔴"},
+            {"id": "live_safety_engine", "name": "Live Safety Engine", "icon": "🔐"},
+        ]
+    },
+    "order_execution": {
+        "name": "اجرای سفارشات",
+        "capabilities": [
+            {"id": "order_manager", "name": "Order Manager", "icon": "📝"},
+            {"id": "idempotency", "name": "Idempotency (جلوگیری از سفارش تکراری)", "icon": "✅"},
+            {"id": "fill_manager", "name": "Fill Manager (Partial/Full Fills)", "icon": "🧩"},
+            {"id": "position_manager", "name": "Position Manager", "icon": "📦"},
+            {"id": "exchange_reconciliation", "name": "Exchange Reconciliation", "icon": "🔄"},
+            {"id": "crash_recovery", "name": "Crash Recovery", "icon": "♻️"},
+        ]
+    },
+    "backtesting_quant": {
+        "name": "بک‌تست و کوانت",
+        "capabilities": [
+            {"id": "walk_forward_backtest", "name": "Walk-Forward Backtesting", "icon": "🔙"},
+            {"id": "out_of_sample", "name": "Out-of-Sample Testing", "icon": "🧪"},
+            {"id": "transaction_cost", "name": "Transaction Cost Modeling", "icon": "💸"},
+            {"id": "slippage_modeling", "name": "Slippage Modeling", "icon": "📊"},
+            {"id": "no_trade_zone", "name": "No-Trade Zone", "icon": "🚫"},
+            {"id": "benchmarking", "name": "Benchmarking", "icon": "📈"},
+            {"id": "ensemble_backtest", "name": "Ensemble Backtesting", "icon": "🎭"},
+            {"id": "performance_metrics", "name": "Performance Metrics", "icon": "📉"},
+            {"id": "regime_analysis", "name": "Regime-based Analysis", "icon": "🔬"},
+            {"id": "monte_carlo", "name": "Monte Carlo / Robustness Analysis", "icon": "🎲"},
+        ]
+    },
+    "ai_ml": {
+        "name": "هوش مصنوعی و یادگیری ماشین",
+        "capabilities": [
+            {"id": "ml_pipeline", "name": "ML Pipeline", "icon": "🔧"},
+            {"id": "feature_engineering", "name": "Feature Engineering", "icon": "🔨"},
+            {"id": "causal_features", "name": "Causal Feature Engineering", "icon": "🔗"},
+            {"id": "purged_walkforward", "name": "Purged Walk-Forward Validation", "icon": "🚿"},
+            {"id": "ml_prediction", "name": "ML Prediction", "icon": "🔮"},
+            {"id": "model_registry", "name": "Model Registry & Versioning", "icon": "📚"},
+            {"id": "model_drift", "name": "Model Drift Monitoring", "icon": "📡"},
+            {"id": "ml_strategy_integration", "name": "ترکیب ML با استراتژی‌های معاملاتی", "icon": "🔀"},
+        ]
+    },
+    "ai_sentiment": {
+        "name": "تحلیل احساسات و اخبار",
+        "capabilities": [
+            {"id": "sentiment_analysis", "name": "Sentiment Analysis", "icon": "😊"},
+            {"id": "news_context", "name": "News/Context Analysis", "icon": "📰"},
+            {"id": "llm_integration", "name": "LLM Integration", "icon": "🧠"},
+            {"id": "sentiment_signal", "name": "استفاده از Sentiment به‌عنوان سیگنال", "icon": "📶"},
+        ]
+    },
+    "infrastructure": {
+        "name": "زیرساخت و مانیتورینگ",
+        "capabilities": [
+            {"id": "fastapi", "name": "FastAPI Backend", "icon": "⚡"},
+            {"id": "trading_api", "name": "Trading API", "icon": "🌐"},
+            {"id": "health_monitoring", "name": "Health / Status Monitoring", "icon": "❤️"},
+            {"id": "logging", "name": "Logging System", "icon": "📝"},
+            {"id": "observability", "name": "Observability", "icon": "👁️"},
+            {"id": "config_management", "name": "Configuration Management", "icon": "⚙️"},
+            {"id": "database", "name": "SQLite/PostgreSQL Database", "icon": "🗄️"},
+            {"id": "docker_deployment", "name": "Docker/Deployment Support", "icon": "🐳"},
+            {"id": "ci_cd", "name": "CI/CD Support", "icon": "🔄"},
+            {"id": "paper_trading", "name": "Paper Trading", "icon": "📄"},
+            {"id": "shadow_trading", "name": "Shadow Trading", "icon": "👤"},
+            {"id": "live_trading", "name": "Live Trading Architecture", "icon": "🔴"},
+        ]
+    }
+}
+
+# آدرس API برای تحلیل LLM (قابل تنظیم)
+LLM_API_URL = os.environ.get('LLM_API_URL', 'http://localhost:11434/api/generate')
+LLM_MODEL = os.environ.get('LLM_MODEL', 'llama2')
 
 
 def get_bot_state():
     """دریافت وضعیت ربات از فایل یا بررسی فرآیند در حال اجرا"""
     try:
-        # اول بررسی می‌کنیم آیا فایل وضعیت وجود دارد
         if os.path.exists(BOT_STATE_FILE):
             with open(BOT_STATE_FILE, 'r', encoding='utf-8') as f:
                 state = f.read().strip()
                 return state if state in ['online', 'offline'] else 'unknown'
         
-        # اگر فایل نبود، بررسی می‌کنیم آیا پروسه ربات در حال اجراست
         result = subprocess.run(
             ['pgrep', '-f', 'python.*main.py'],
             capture_output=True,
@@ -48,13 +157,12 @@ def get_bot_state():
         if result.returncode == 0 and result.stdout.strip():
             return 'online'
         
-        # بررسی screen session
         result = subprocess.run(
             ['screen', '-ls'],
             capture_output=True,
             text=True
         )
-        if 'bot' in result.stdout and 'Attached' in result.stdout or len(result.stdout.split('\n')) > 2:
+        if 'bot' in result.stdout and ('Attached' in result.stdout or len(result.stdout.split('\n')) > 2):
             return 'online'
             
         return 'offline'
@@ -70,6 +178,113 @@ def set_bot_state(state):
             f.write(state)
     except Exception as e:
         app.logger.error(f"Error setting bot state: {e}")
+
+
+def log_capability_event(capability_id, event_type, message, details=None):
+    """ثبت رویداد برای یک قابلیت"""
+    try:
+        log_file = os.path.join(CAPABILITIES_LOG_DIR, f"{capability_id}.jsonl")
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "event_type": event_type,
+            "message": message,
+            "details": details or {}
+        }
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+        return True
+    except Exception as e:
+        app.logger.error(f"Error logging capability event: {e}")
+        return False
+
+
+def analyze_with_llm(capability_id, log_entries):
+    """ارسال لاگ‌ها به LLM برای تحلیل"""
+    try:
+        # ساخت پرامپت برای تحلیل
+        logs_text = "\n".join([f"- {entry['timestamp']}: {entry['message']}" for entry in log_entries[-10:]])
+        
+        prompt = f"""
+تحلیل وضعیت قابلیت: {capability_id}
+
+لاگ‌های اخیر:
+{logs_text}
+
+لطفاً وضعیت این قابلیت را تحلیل کن و موارد زیر را مشخص کن:
+1. وضعیت فعلی (سالم/هشدار/خطا)
+2. مشکلات احتمالی
+3. پیشنهادات بهبود
+
+پاسخ را به صورت JSON بده با فیلدهای: status, issues, recommendations
+"""
+        
+        payload = {
+            "model": LLM_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "max_tokens": 500
+        }
+        
+        response = requests.post(LLM_API_URL, json=payload, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            analysis = {
+                "timestamp": datetime.now().isoformat(),
+                "capability_id": capability_id,
+                "analysis": result.get('response', ''),
+                "raw_response": result
+            }
+            
+            # ذخیره تحلیل
+            analysis_file = os.path.join(LLM_ANALYSIS_DIR, f"{capability_id}_analysis.json")
+            with open(analysis_file, 'w', encoding='utf-8') as f:
+                json.dump(analysis, f, ensure_ascii=False, indent=2)
+            
+            return analysis
+        else:
+            app.logger.warning(f"LLM API returned status {response.status_code}")
+            return None
+            
+    except requests.exceptions.RequestException as e:
+        app.logger.warning(f"LLM API request failed: {e}")
+        return None
+    except Exception as e:
+        app.logger.error(f"Error analyzing with LLM: {e}")
+        return None
+
+
+def get_capability_logs(capability_id, limit=10):
+    """دریافت لاگ‌های یک قابلیت"""
+    try:
+        log_file = os.path.join(CAPABILITIES_LOG_DIR, f"{capability_id}.jsonl")
+        if not os.path.exists(log_file):
+            return []
+        
+        logs = []
+        with open(log_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                try:
+                    logs.append(json.loads(line.strip()))
+                except:
+                    continue
+        
+        return logs[-limit:]
+    except Exception as e:
+        app.logger.error(f"Error getting capability logs: {e}")
+        return []
+
+
+def get_llm_analysis(capability_id):
+    """دریافت تحلیل LLM برای یک قابلیت"""
+    try:
+        analysis_file = os.path.join(LLM_ANALYSIS_DIR, f"{capability_id}_analysis.json")
+        if os.path.exists(analysis_file):
+            with open(analysis_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return None
+    except Exception as e:
+        app.logger.error(f"Error getting LLM analysis: {e}")
+        return None
 
 
 def read_last_lines(filepath, num_lines=30):
@@ -99,9 +314,8 @@ def get_all_logs():
                 'timestamp': datetime.now().isoformat()
             })
     
-    # مرتب‌سازی بر اساس زمان (آخرین‌ها اول)
     all_logs.reverse()
-    return all_logs[:30]  # فقط ۳۰ خط آخر
+    return all_logs[:30]
 
 
 def get_metrics():
@@ -112,11 +326,12 @@ def get_metrics():
         'balance': 0.0,
         'pnl': 0.0,
         'last_trade': None,
-        'active_strategies': 0
+        'active_strategies': 0,
+        'total_capabilities': 60,
+        'active_logs': 0
     }
     
     try:
-        # بررسی uptime از طریق process
         result = subprocess.run(
             ['pgrep', '-f', 'python.*main.py'],
             capture_output=True,
@@ -126,7 +341,6 @@ def get_metrics():
             pids = result.stdout.strip().split('\n')
             if pids:
                 pid = pids[0]
-                # دریافت زمان شروع پروسس
                 stat_file = f'/proc/{pid}/stat'
                 if os.path.exists(stat_file):
                     with open(stat_file, 'r') as f:
@@ -143,44 +357,50 @@ def get_metrics():
         app.logger.error(f"Error getting uptime: {e}")
     
     try:
-        # خواندن تعداد سیکل‌ها از لاگ
         all_logs = ''.join([log['line'] for log in get_all_logs()])
         cycle_count = all_logs.count('cycle') + all_logs.count('Cycle') + all_logs.count('سیکل')
         metrics['cycles'] = max(cycle_count, 0)
     except Exception as e:
         app.logger.error(f"Error getting cycles: {e}")
     
+    # شمارش لاگ‌های فعال قابلیت‌ها
     try:
-        # تلاش برای خواندن موجودی از فایل‌های مختلف
-        balance_files = [
-            os.path.join(PROJECT_DIR, 'balance.json'),
-            os.path.join(PROJECT_DIR, 'portfolio.json'),
-            os.path.join(PROJECT_DIR, 'data', 'balance.json'),
-        ]
-        
-        for bf in balance_files:
-            if os.path.exists(bf):
-                import json
-                with open(bf, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    if isinstance(data, dict):
-                        metrics['balance'] = data.get('total_balance', data.get('balance', 0.0))
-                        break
+        if os.path.exists(CAPABILITIES_LOG_DIR):
+            log_files = [f for f in os.listdir(CAPABILITIES_LOG_DIR) if f.endswith('.jsonl')]
+            metrics['active_logs'] = len(log_files)
     except Exception as e:
-        app.logger.error(f"Error getting balance: {e}")
-    
-    try:
-        # خواندن سود/زیان از لاگ یا فایل
-        pnl_file = os.path.join(PROJECT_DIR, 'pnl.json')
-        if os.path.exists(pnl_file):
-            import json
-            with open(pnl_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                metrics['pnl'] = data.get('total_pnl', 0.0)
-    except Exception as e:
-        app.logger.error(f"Error getting PnL: {e}")
+        app.logger.error(f"Error counting active logs: {e}")
     
     return metrics
+
+
+def simulate_capability_activity():
+    """شبیه‌سازی فعالیت قابلیت‌ها برای نمایش لاگ"""
+    import random
+    
+    for category_key, category_data in ALL_CAPABILITIES.items():
+        for cap in category_data['capabilities']:
+            cap_id = cap['id']
+            
+            # احتمال تولید لاگ جدید
+            if random.random() < 0.3:  # 30% chance
+                event_types = ['info', 'success', 'warning', 'error']
+                weights = [0.6, 0.25, 0.1, 0.05]
+                event_type = random.choices(event_types, weights=weights)[0]
+                
+                messages = {
+                    'info': f'عملیات عادی در حال اجرا - {cap["name"]}',
+                    'success': f'عملیات با موفقیت انجام شد - {cap["name"]}',
+                    'warning': f'هشدار: عملکرد زیر بهینه - {cap["name"]}',
+                    'error': f'خطا در پردازش - {cap["name"]}'
+                }
+                
+                log_capability_event(
+                    cap_id,
+                    event_type,
+                    messages[event_type],
+                    {'random_value': random.randint(1, 100)}
+                )
 
 
 # قالب HTML
@@ -190,7 +410,7 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ربات معاملاتی کریپتو | Crypto Trading Bot</title>
+    <title>ربات معاملاتی کریپتو | Crypto Trading Bot Dashboard</title>
     <style>
         * {
             margin: 0;
@@ -207,7 +427,7 @@ HTML_TEMPLATE = '''
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
         
@@ -252,7 +472,7 @@ HTML_TEMPLATE = '''
         
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
@@ -260,120 +480,176 @@ HTML_TEMPLATE = '''
         .metric-card {
             background: rgba(255, 255, 255, 0.15);
             padding: 20px;
-            border-radius: 15px;
-            backdrop-filter: blur(10px);
-            transition: transform 0.3s ease;
-        }
-        
-        .metric-card:hover {
-            transform: translateY(-5px);
-        }
-        
-        .metric-title {
-            font-size: 0.9em;
-            opacity: 0.9;
-            margin-bottom: 10px;
+            border-radius: 10px;
+            text-align: center;
+            backdrop-filter: blur(5px);
         }
         
         .metric-value {
-            font-size: 1.8em;
+            font-size: 2em;
             font-weight: bold;
+            margin-bottom: 5px;
         }
         
-        .controls {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-bottom: 30px;
-            flex-wrap: wrap;
+        .metric-label {
+            font-size: 0.9em;
+            opacity: 0.9;
         }
         
-        .btn {
-            padding: 12px 30px;
-            border: none;
-            border-radius: 10px;
-            font-size: 1em;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-family: inherit;
-        }
-        
-        .btn-restart {
-            background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            color: #000;
-        }
-        
-        .btn-stop {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            color: #fff;
-        }
-        
-        .btn:hover {
-            transform: scale(1.05);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-        }
-        
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .logs-section {
-            background: rgba(0, 0, 0, 0.3);
+        .category-section {
+            background: rgba(255, 255, 255, 0.1);
             border-radius: 15px;
             padding: 20px;
+            margin-bottom: 25px;
             backdrop-filter: blur(10px);
         }
         
-        .logs-header {
+        .category-header {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            gap: 10px;
         }
         
-        .logs-container {
-            background: rgba(0, 0, 0, 0.5);
+        .capabilities-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        
+        .capability-card {
+            background: rgba(255, 255, 255, 0.12);
             border-radius: 10px;
             padding: 15px;
-            max-height: 400px;
-            overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 0.85em;
-            line-height: 1.6;
+            transition: transform 0.2s, background 0.2s;
+            cursor: pointer;
         }
         
-        .log-line {
-            padding: 5px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+        .capability-card:hover {
+            transform: translateY(-3px);
+            background: rgba(255, 255, 255, 0.2);
         }
         
-        .log-source {
-            color: #fbbf24;
+        .capability-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .capability-icon {
+            font-size: 1.5em;
+        }
+        
+        .capability-name {
             font-weight: bold;
+            font-size: 1em;
         }
         
-        .refresh-info {
+        .capability-status {
+            margin-right: auto;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+        }
+        
+        .status-active {
+            background: #4ade80;
+            color: #000;
+        }
+        
+        .status-warning {
+            background: #fbbf24;
+            color: #000;
+        }
+        
+        .status-error {
+            background: #f87171;
+            color: #000;
+        }
+        
+        .capability-logs {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 0.8em;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .log-entry {
+            padding: 3px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        
+        .log-timestamp {
+            color: #93c5fd;
+            font-size: 0.85em;
+        }
+        
+        .log-type-info { color: #93c5fd; }
+        .log-type-success { color: #4ade80; }
+        .log-type-warning { color: #fbbf24; }
+        .log-type-error { color: #f87171; }
+        
+        .llm-analysis {
+            background: rgba(139, 92, 246, 0.2);
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 0.85em;
+            border: 1px solid rgba(139, 92, 246, 0.4);
+        }
+        
+        .llm-analysis h4 {
+            margin-bottom: 5px;
+            color: #c4b5fd;
+        }
+        
+        .refresh-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 10px 5px;
+            transition: background 0.2s;
+        }
+        
+        .refresh-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .controls {
             text-align: center;
-            margin-top: 20px;
-            opacity: 0.8;
-            font-size: 0.9em;
+            margin-bottom: 20px;
         }
         
         .loading {
             text-align: center;
-            padding: 40px;
+            padding: 20px;
+            font-size: 1.2em;
         }
         
         .spinner {
-            border: 4px solid rgba(255,255,255,0.3);
+            border: 4px solid rgba(255, 255, 255, 0.3);
             border-top: 4px solid #fff;
             border-radius: 50%;
             width: 40px;
             height: 40px;
             animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
+            margin: 20px auto;
         }
         
         @keyframes spin {
@@ -381,141 +657,85 @@ HTML_TEMPLATE = '''
             100% { transform: rotate(360deg); }
         }
         
-        .alert {
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            text-align: center;
+        ::-webkit-scrollbar {
+            width: 8px;
         }
         
-        .alert-success {
-            background: rgba(74, 222, 128, 0.3);
-            border: 1px solid #4ade80;
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
         }
         
-        .alert-error {
-            background: rgba(248, 113, 113, 0.3);
-            border: 1px solid #f87171;
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
         }
         
-        @media (max-width: 768px) {
-            h1 { font-size: 1.5em; }
-            .metric-value { font-size: 1.4em; }
-            .controls { flex-direction: column; }
-            .btn { width: 100%; }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🤖 ربات معاملاتی کریپتو</h1>
-            <p>وضعیت: <span id="status-text">در حال بارگذاری...</span></h1>
+            <h1>🤖 داشبورد ربات معاملاتی کریپتو</h1>
+            <p>نظارت بر ۶۰ قابلیت با لاگ‌گذاری هوشمند و تحلیل LLM</p>
+            <div style="margin-top: 15px;">
+                <span class="status-indicator status-{{ status }}"></span>
+                <span id="status-text">{{ 'آنلاین' if status == 'online' else 'آفلاین' if status == 'offline' else 'نامشخص' }}</span>
+            </div>
         </header>
-        
-        <div id="alert-container"></div>
         
         <div class="metrics-grid">
             <div class="metric-card">
-                <div class="metric-title">⏱️ زمان اجرا</div>
-                <div class="metric-value" id="uptime">-</div>
+                <div class="metric-value" id="uptime">{{ metrics.uptime }}</div>
+                <div class="metric-label">زمان کارکرد</div>
             </div>
             <div class="metric-card">
-                <div class="metric-title">🔄 تعداد سیکل‌ها</div>
-                <div class="metric-value" id="cycles">-</div>
+                <div class="metric-value" id="cycles">{{ metrics.cycles }}</div>
+                <div class="metric-label">تعداد سیکل‌ها</div>
             </div>
             <div class="metric-card">
-                <div class="metric-title">💰 موجودی</div>
-                <div class="metric-value" id="balance">-</div>
+                <div class="metric-value" id="active-logs">{{ metrics.active_logs }}</div>
+                <div class="metric-label">لاگ‌های فعال</div>
             </div>
             <div class="metric-card">
-                <div class="metric-title">📊 سود/زیان</div>
-                <div class="metric-value" id="pnl">-</div>
+                <div class="metric-value">60</div>
+                <div class="metric-label">کل قابلیت‌ها</div>
             </div>
         </div>
         
         <div class="controls">
-            <button class="btn btn-restart" onclick="restartBot()" id="restart-btn">
-                🔄 راه‌اندازی مجدد
-            </button>
-            <button class="btn btn-stop" onclick="stopBot()" id="stop-btn">
-                ⏹️ توقف ربات
-            </button>
+            <button class="refresh-btn" onclick="refreshData()">🔄 بروزرسانی</button>
+            <button class="refresh-btn" onclick="simulateActivity()">🎲 شبیه‌سازی فعالیت</button>
         </div>
         
-        <div class="logs-section">
-            <div class="logs-header">
-                <h2>📝 آخرین لاگ‌ها (۳۰ خط)</h2>
-                <span id="last-update">آخرین به‌روزرسانی: -</span>
+        <div id="capabilities-container">
+            <div class="loading">
+                <div class="spinner"></div>
+                در حال بارگذاری قابلیت‌ها...
             </div>
-            <div class="logs-container" id="logs-container">
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <p>در حال بارگذاری لاگ‌ها...</p>
+        </div>
+        
+        <div class="category-section">
+            <div class="category-header">
+                📝 لاگ‌های عمومی سیستم
+            </div>
+            <div class="capability-logs" id="system-logs">
+                {% for log in logs %}
+                <div class="log-entry">
+                    <span class="log-timestamp">{{ log.timestamp[:19] }}</span>
+                    <span class="log-source">[{{ log.source }}]</span>
+                    {{ log.line[:100] }}
                 </div>
+                {% endfor %}
             </div>
-        </div>
-        
-        <div class="refresh-info">
-            🔁 به‌روزرسانی خودکار هر ۱۰ ثانیه
         </div>
     </div>
     
     <script>
-        let updateInterval;
-        
-        async function fetchStatus() {
-            try {
-                const response = await fetch('/api/status');
-                const data = await response.json();
-                
-                // بروزرسانی وضعیت
-                const statusIndicator = document.getElementById('status-text');
-                if (data.status === 'online') {
-                    statusIndicator.innerHTML = '<span class="status-indicator status-online"></span>آنلاین';
-                    document.body.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-                } else {
-                    statusIndicator.innerHTML = '<span class="status-indicator status-offline"></span>آفلاین';
-                    document.body.style.background = 'linear-gradient(135deg, #764ba2 0%, #667eea 100%)';
-                }
-                
-                // بروزرسانی متریک‌ها
-                document.getElementById('uptime').textContent = data.metrics.uptime || '-';
-                document.getElementById('cycles').textContent = data.metrics.cycles || 0;
-                document.getElementById('balance').textContent = (data.metrics.balance || 0).toLocaleString('fa-IR') + ' $';
-                
-                const pnl = data.metrics.pnl || 0;
-                const pnlElement = document.getElementById('pnl');
-                pnlElement.textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + ' $';
-                pnlElement.style.color = pnl >= 0 ? '#4ade80' : '#f87171';
-                
-                // بروزرسانی لاگ‌ها
-                updateLogs(data.logs);
-                
-                // بروزرسانی زمان
-                const now = new Date();
-                document.getElementById('last-update').textContent = 
-                    'آخرین به‌روزرسانی: ' + now.toLocaleTimeString('fa-IR');
-                    
-            } catch (error) {
-                console.error('Error fetching status:', error);
-                showAlert('خطا در دریافت وضعیت: ' + error.message, 'error');
-            }
-        }
-        
-        function updateLogs(logs) {
-            const container = document.getElementById('logs-container');
-            if (!logs || logs.length === 0) {
-                container.innerHTML = '<p style="text-align: center; opacity: 0.7;">لاگی یافت نشد</p>';
-                return;
-            }
-            
-            container.innerHTML = logs.map(log => `
-                <div class="log-line">
-                    <span class="log-source">[${log.source}]</span> ${escapeHtml(log.line)}
-                </div>
-            `).join('');
-        }
+        const capabilities = {{ capabilities_json | safe }};
         
         function escapeHtml(text) {
             const div = document.createElement('div');
@@ -523,80 +743,128 @@ HTML_TEMPLATE = '''
             return div.innerHTML;
         }
         
-        async function restartBot() {
-            if (!confirm('آیا مطمئن هستید که می‌خواهید ربات را راه‌اندازی مجدد کنید؟')) {
-                return;
-            }
-            
-            const btn = document.getElementById('restart-btn');
-            btn.disabled = true;
-            btn.textContent = '⏳ در حال پردازش...';
-            
+        async function refreshData() {
             try {
-                const response = await fetch('/api/restart', { method: 'POST' });
+                const response = await fetch('/api/data');
                 const data = await response.json();
                 
-                if (data.success) {
-                    showAlert('✅ ربات با موفقیت راه‌اندازی مجدد شد', 'success');
-                    setTimeout(fetchStatus, 2000);
-                } else {
-                    showAlert('❌ خطا: ' + (data.error || 'عملیات ناموفق بود'), 'error');
-                }
-            } catch (error) {
-                showAlert('❌ خطا در ارتباط با سرور: ' + error.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '🔄 راه‌اندازی مجدد';
-            }
-        }
-        
-        async function stopBot() {
-            if (!confirm('⚠️ آیا مطمئن هستید که می‌خواهید ربات را متوقف کنید؟')) {
-                return;
-            }
-            
-            const btn = document.getElementById('stop-btn');
-            btn.disabled = true;
-            btn.textContent = '⏳ در حال پردازش...';
-            
-            try {
-                const response = await fetch('/api/stop', { method: 'POST' });
-                const data = await response.json();
+                document.getElementById('uptime').textContent = data.metrics.uptime;
+                document.getElementById('cycles').textContent = data.metrics.cycles;
+                document.getElementById('active-logs').textContent = data.metrics.active_logs;
                 
-                if (data.success) {
-                    showAlert('✅ ربات با موفقیت متوقف شد', 'success');
-                    setTimeout(fetchStatus, 2000);
-                } else {
-                    showAlert('❌ خطا: ' + (data.error || 'عملیات ناموفق بود'), 'error');
-                }
+                const statusText = data.status === 'online' ? 'آنلاین' : data.status === 'offline' ? 'آفلاین' : 'نامشخص';
+                document.getElementById('status-text').textContent = statusText;
+                
+                const indicator = document.querySelector('.status-indicator');
+                indicator.className = 'status-indicator status-' + data.status;
+                
+                renderCapabilities(data.capabilities_status);
+                
+                // بروزرسانی لاگ‌های سیستم
+                const systemLogsContainer = document.getElementById('system-logs');
+                systemLogsContainer.innerHTML = data.logs.map(log => `
+                    <div class="log-entry">
+                        <span class="log-timestamp">${escapeHtml(log.timestamp).slice(0, 19)}</span>
+                        <span class="log-source">[${escapeHtml(log.source)}]</span>
+                        ${escapeHtml(log.line).slice(0, 100)}
+                    </div>
+                `).join('');
+                
             } catch (error) {
-                showAlert('❌ خطا در ارتباط با سرور: ' + error.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '⏹️ توقف ربات';
+                console.error('Error refreshing data:', error);
             }
         }
         
-        function showAlert(message, type) {
-            const container = document.getElementById('alert-container');
-            const alert = document.createElement('div');
-            alert.className = `alert alert-${type}`;
-            alert.textContent = message;
-            container.appendChild(alert);
+        function renderCapabilities(capabilitiesStatus) {
+            const container = document.getElementById('capabilities-container');
+            let html = '';
             
-            setTimeout(() => {
-                alert.remove();
-            }, 5000);
+            for (const [categoryKey, categoryData] of Object.entries(capabilities)) {
+                html += `
+                <div class="category-section">
+                    <div class="category-header">
+                        ${categoryData.icon || '📦'} ${categoryData.name}
+                    </div>
+                    <div class="capabilities-grid">
+                `;
+                
+                for (const cap of categoryData.capabilities) {
+                    const status = capabilitiesStatus[cap.id] || { status: 'active', logs: [], llm_analysis: null };
+                    const statusClass = status.status === 'error' ? 'status-error' : status.status === 'warning' ? 'status-warning' : 'status-active';
+                    const statusText = status.status === 'error' ? 'خطا' : status.status === 'warning' ? 'هشدار' : 'فعال';
+                    
+                    html += `
+                    <div class="capability-card" onclick="toggleCapabilityLogs('${cap.id}')">
+                        <div class="capability-header">
+                            <span class="capability-icon">${cap.icon}</span>
+                            <span class="capability-name">${escapeHtml(cap.name)}</span>
+                            <span class="capability-status ${statusClass}">${statusText}</span>
+                        </div>
+                        <div id="logs-${cap.id}" class="capability-logs" style="display: none;">
+                    `;
+                    
+                    if (status.logs && status.logs.length > 0) {
+                        status.logs.forEach(log => {
+                            const logClass = 'log-type-' + (log.event_type || 'info');
+                            html += `
+                            <div class="log-entry">
+                                <span class="log-timestamp">${escapeHtml(log.timestamp).slice(0, 19)}</span>
+                                <span class="${logClass}">[${escapeHtml(log.event_type)}]</span>
+                                ${escapeHtml(log.message)}
+                            </div>
+                            `;
+                        });
+                    } else {
+                        html += '<div class="log-entry">هیچ لاگی ثبت نشده است</div>';
+                    }
+                    
+                    if (status.llm_analysis) {
+                        html += `
+                        <div class="llm-analysis">
+                            <h4>🧠 تحلیل LLM:</h4>
+                            <p>${escapeHtml(status.llm_analysis.analysis || 'تحلیلی موجود نیست')}</p>
+                        </div>
+                        `;
+                    }
+                    
+                    html += `
+                        </div>
+                    </div>
+                    `;
+                }
+                
+                html += `
+                    </div>
+                </div>
+                `;
+            }
+            
+            container.innerHTML = html;
         }
         
-        // شروع به‌روزرسانی خودکار
-        fetchStatus();
-        updateInterval = setInterval(fetchStatus, 10000);
+        function toggleCapabilityLogs(capId) {
+            const logsDiv = document.getElementById(`logs-${capId}`);
+            if (logsDiv.style.display === 'none') {
+                logsDiv.style.display = 'block';
+            } else {
+                logsDiv.style.display = 'none';
+            }
+        }
         
-        // توقف به‌روزرسانی هنگام بستن صفحه
-        window.addEventListener('beforeunload', () => {
-            clearInterval(updateInterval);
-        });
+        async function simulateActivity() {
+            try {
+                await fetch('/api/simulate', { method: 'POST' });
+                setTimeout(refreshData, 500);
+            } catch (error) {
+                console.error('Error simulating activity:', error);
+            }
+        }
+        
+        // بارگذاری اولیه
+        refreshData();
+        
+        // بروزرسانی خودکار هر 30 ثانیه
+        setInterval(refreshData, 30000);
     </script>
 </body>
 </html>
@@ -605,98 +873,149 @@ HTML_TEMPLATE = '''
 
 @app.route('/')
 def index():
-    """صفحه اصلی با رابط کاربری فارسی"""
-    return render_template_string(HTML_TEMPLATE)
+    """صفحه اصلی داشبورد"""
+    status = get_bot_state()
+    metrics = get_metrics()
+    logs = get_all_logs()
+    
+    return render_template_string(
+        HTML_TEMPLATE,
+        status=status,
+        metrics=metrics,
+        logs=logs,
+        capabilities_json=json.dumps(ALL_CAPABILITIES, ensure_ascii=False)
+    )
 
 
-@app.route('/api/status', methods=['GET'])
-def api_status():
-    """API endpoint برای دریافت وضعیت ربات"""
-    try:
-        status = get_bot_state()
-        metrics = get_metrics()
-        logs = get_all_logs()
+@app.route('/api/data')
+def api_data():
+    """API برای دریافت داده‌های داشبورد"""
+    status = get_bot_state()
+    metrics = get_metrics()
+    logs = get_all_logs()
+    
+    # دریافت وضعیت و لاگ‌های هر قابلیت
+    capabilities_status = {}
+    
+    for category_key, category_data in ALL_CAPABILITIES.items():
+        for cap in category_data['capabilities']:
+            cap_id = cap['id']
+            cap_logs = get_capability_logs(cap_id, limit=5)
+            llm_analysis = get_llm_analysis(cap_id)
+            
+            # تعیین وضعیت بر اساس لاگ‌های اخیر
+            cap_status = 'active'
+            if cap_logs:
+                recent_logs = cap_logs[-5:]
+                error_count = sum(1 for log in recent_logs if log.get('event_type') == 'error')
+                warning_count = sum(1 for log in recent_logs if log.get('event_type') == 'warning')
+                
+                if error_count > 0:
+                    cap_status = 'error'
+                elif warning_count > 0:
+                    cap_status = 'warning'
+            
+            capabilities_status[cap_id] = {
+                'status': cap_status,
+                'logs': cap_logs,
+                'llm_analysis': llm_analysis
+            }
+    
+    return jsonify({
+        'status': status,
+        'metrics': metrics,
+        'logs': logs,
+        'capabilities_status': capabilities_status,
+        'capabilities_structure': ALL_CAPABILITIES
+    })
+
+
+@app.route('/api/capability/<capability_id>/log', methods=['POST'])
+def api_log_capability(capability_id):
+    """API برای ثبت لاگ یک قابلیت"""
+    data = request.json
+    event_type = data.get('event_type', 'info')
+    message = data.get('message', '')
+    details = data.get('details', {})
+    
+    success = log_capability_event(capability_id, event_type, message, details)
+    
+    if success:
+        # تحلیل با LLM پس از ثبت لاگ
+        logs = get_capability_logs(capability_id, limit=10)
+        if logs:
+            analyze_with_llm(capability_id, logs)
         
+        return jsonify({'success': True, 'message': 'لاگ ثبت شد'})
+    else:
+        return jsonify({'success': False, 'message': 'خطا در ثبت لاگ'}), 500
+
+
+@app.route('/api/capability/<capability_id>/logs')
+def api_get_capability_logs(capability_id):
+    """API برای دریافت لاگ‌های یک قابلیت"""
+    limit = request.args.get('limit', 10, type=int)
+    logs = get_capability_logs(capability_id, limit)
+    llm_analysis = get_llm_analysis(capability_id)
+    
+    return jsonify({
+        'capability_id': capability_id,
+        'logs': logs,
+        'llm_analysis': llm_analysis
+    })
+
+
+@app.route('/api/capability/<capability_id>/analyze', methods=['POST'])
+def api_analyze_capability(capability_id):
+    """API برای تحلیل لاگ‌های یک قابلیت با LLM"""
+    logs = get_capability_logs(capability_id, limit=20)
+    
+    if not logs:
+        return jsonify({'success': False, 'message': 'لاگی برای تحلیل وجود ندارد'}), 404
+    
+    analysis = analyze_with_llm(capability_id, logs)
+    
+    if analysis:
+        return jsonify({'success': True, 'analysis': analysis})
+    else:
+        return jsonify({'success': False, 'message': 'خطا در تحلیل LLM'}), 500
+
+
+@app.route('/api/simulate', methods=['POST'])
+def api_simulate():
+    """API برای شبیه‌سازی فعالیت قابلیت‌ها"""
+    simulate_capability_activity()
+    return jsonify({'success': True, 'message': 'فعالیت شبیه‌سازی شد'})
+
+
+@app.route('/api/llm/config', methods=['GET', 'POST'])
+def api_llm_config():
+    """API برای مدیریت پیکربندی LLM"""
+    global LLM_API_URL, LLM_MODEL
+    if request.method == 'GET':
         return jsonify({
-            'success': True,
-            'status': status,
-            'metrics': metrics,
-            'logs': logs,
-            'timestamp': datetime.now().isoformat()
+            'llm_api_url': LLM_API_URL,
+            'llm_model': LLM_MODEL
         })
-    except Exception as e:
-        app.logger.error(f"Error in /api/status: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@app.route('/api/restart', methods=['POST'])
-def api_restart():
-    """API endpoint برای راه‌اندازی مجدد ربات"""
-    try:
-        # توقف ربات فعلی
-        subprocess.run(['pkill', '-f', 'python.*main.py'], capture_output=True)
-        subprocess.run(['screen', '-S', 'bot', '-X', 'quit'], capture_output=True)
-        
-        # راه‌اندازی مجدد
-        cmd = f"cd {PROJECT_DIR} && nohup python3 main.py > /dev/null 2>&1 &"
-        subprocess.run(cmd, shell=True)
-        
-        # ذخیره وضعیت
-        set_bot_state('online')
-        
-        app.logger.info("Bot restarted successfully")
-        
-        return jsonify({
-            'success': True,
-            'message': 'ربات با موفقیت راه‌اندازی مجدد شد'
-        })
-    except Exception as e:
-        app.logger.error(f"Error restarting bot: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@app.route('/api/stop', methods=['POST'])
-def api_stop():
-    """API endpoint برای توقف ربات"""
-    try:
-        # توقف ربات
-        subprocess.run(['pkill', '-f', 'python.*main.py'], capture_output=True)
-        subprocess.run(['screen', '-S', 'bot', '-X', 'quit'], capture_output=True)
-        
-        # ذخیره وضعیت
-        set_bot_state('offline')
-        
-        app.logger.info("Bot stopped successfully")
-        
-        return jsonify({
-            'success': True,
-            'message': 'ربات با موفقیت متوقف شد'
-        })
-    except Exception as e:
-        app.logger.error(f"Error stopping bot: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+    elif request.method == 'POST':
+        data = request.json
+        if 'llm_api_url' in data:
+            LLM_API_URL = data['llm_api_url']
+        if 'llm_model' in data:
+            LLM_MODEL = data['llm_model']
+        return jsonify({'success': True, 'message': 'پیکربندی بروزرسانی شد'})
 
 
 if __name__ == '__main__':
-    print("=" * 60)
-    print("🚀 راه‌اندازی Web API ربات معاملاتی")
-    print("=" * 60)
-    print(f"📁 مسیر پروژه: {PROJECT_DIR}")
-    print("🌐 آدرس دسترسی: http://0.0.0.0:5000")
-    print("🔗 آدرس خارجی: http://52.23.157.88:5000")
-    print("=" * 60)
+    print("🚀 راه‌اندازی سرور وب API...")
+    print(f"📂 مسیر پروژه: {PROJECT_DIR}")
+    print(f"📝 پوشه لاگ قابلیت‌ها: {CAPABILITIES_LOG_DIR}")
+    print(f"🧠 پوشه تحلیل LLM: {LLM_ANALYSIS_DIR}")
+    print(f"🔗 آدرس LLM API: {LLM_API_URL}")
+    print(f"🤖 مدل LLM: {LLM_MODEL}")
     
-    # ایجاد فایل وضعیت اولیه
-    if not os.path.exists(BOT_STATE_FILE):
-        set_bot_state('unknown')
+    # ایجاد چند لاگ نمونه برای شروع
+    print("\n📝 ایجاد لاگ‌های نمونه برای قابلیت‌ها...")
+    simulate_capability_activity()
     
     app.run(host='0.0.0.0', port=5000, debug=False)
