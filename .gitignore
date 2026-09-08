@@ -1,42 +1,11 @@
 ```
-# JSON evaluation files
-llm_analysis/*_category_eval.json
-
-# Python compiled files
-*.pyc
-__pycache__/
-
-# Logs
+# Logs and temp files
 *.log
+*.tmp
+*.swp
 
-# Environment files
+# Environment
 .env
 .env.local
 *.env.*
-
-# Editor/IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# Dependencies
-.venv/
-venv/
-node_modules/
-
-# Build artifacts
-dist/
-build/
-target/
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# OS files
-.DS_Store
-Thumbs.db
 ```
