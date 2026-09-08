@@ -8,6 +8,6 @@ __pycache__/
 # Logs
 *.log
 
-# Capabilities logs (assuming these are generated/intermediate files)
+# Capabilities logs (assuming these are generated/output files)
 capabilities_logs/
 ```

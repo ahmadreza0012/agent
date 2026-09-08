@@ -371,9 +371,18 @@ def parse_log_line(line):
     """تجزیه یک خط لاگ به اجزای آن"""
     import re
     
-    # الگوی لاگ: timestamp - logger - level - message
+    line = line.strip()
+    if not line:
+        return {
+            'timestamp': '',
+            'logger': '',
+            'level': 'INFO',
+            'message': ''
+        }
+    
+    # الگوی اصلی لاگ: timestamp - logger - level - message
     pattern = r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2},\d{3})\s+-\s+([\w\.]+)\s+-\s+(INFO|WARNING|ERROR|DEBUG|SUCCESS)\s+-\s+(.*)$'
-    match = re.match(pattern, line.strip())
+    match = re.match(pattern, line)
     
     if match:
         return {
@@ -383,12 +392,36 @@ def parse_log_line(line):
             'message': match.group(4)
         }
     
-    # اگر الگو مطابقت نداشت، کل خط را برگردان
+    # الگوی دوم: timestamp - logger - message (بدون سطح مشخص)
+    pattern2 = r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2},\d{3})\s+-\s+([\w\.]+)\s+-\s+(.*)$'
+    match2 = re.match(pattern2, line)
+    
+    if match2:
+        message = match2.group(3)
+        # تشخیص سطح از محتوای پیام
+        level = 'INFO'
+        if '✅' in message or 'SUCCESS' in message.upper():
+            level = 'SUCCESS'
+        elif 'ERROR' in message.upper() or 'Error' in message or 'error' in message or '❌' in message:
+            level = 'ERROR'
+        elif 'WARNING' in message.upper() or 'Warning' in message or 'warning' in message or '⚠️' in message:
+            level = 'WARNING'
+        elif 'DEBUG' in message.upper() or 'debug' in message:
+            level = 'DEBUG'
+        
+        return {
+            'timestamp': match2.group(1),
+            'logger': match2.group(2),
+            'level': level,
+            'message': message
+        }
+    
+    # اگر هیچ الگویی مطابقت نداشت، کل خط را برگردان
     return {
         'timestamp': '',
         'logger': '',
         'level': 'INFO',
-        'message': line.strip()
+        'message': line
     }
 
 

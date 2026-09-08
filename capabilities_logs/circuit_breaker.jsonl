@@ -1,1 +1,3 @@
 {"timestamp": "2026-09-08T14:46:59.238825", "event_type": "info", "message": "عملیات عادی در حال اجرا - Circuit Breaker", "details": {"random_value": 92}}
+{"timestamp": "2026-09-08T19:02:11.835872", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Circuit Breaker", "details": {"random_value": 86}}
+{"timestamp": "2026-09-08T19:02:18.360935", "event_type": "info", "message": "عملیات عادی در حال اجرا - Circuit Breaker", "details": {"random_value": 4}}
