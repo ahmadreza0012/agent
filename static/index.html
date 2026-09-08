@@ -356,6 +356,14 @@
         <header>
             <h1>🎯 داشبورد قابلیت‌های سیستم ترید</h1>
             <p class="subtitle">نظارت بلادرنگ بر ۶۰ قابلیت سیستم با تحلیل هوش مصنوعی</p>
+            <div style="margin-top: 20px; display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="simulateActivity()" style="font-size: 1rem; padding: 12px 24px;">
+                    🎲 شبیه‌سازی فعالیت
+                </button>
+                <button class="btn btn-secondary" onclick="copyAllLogsAndAnalysis()" style="font-size: 1rem; padding: 12px 24px;">
+                    📋 کپی تمام لاگ‌ها و تحلیل‌های LLM
+                </button>
+            </div>
         </header>
         
         <div id="summary" class="summary-cards">
@@ -690,6 +698,82 @@
         document.getElementById('logs-modal').addEventListener('click', function(e) {
             if (e.target === this) closeModal();
         });
+
+        // Simulate activity for random capabilities
+        async function simulateActivity() {
+            const allCapabilities = Object.values(capabilityNames).length;
+            const randomCount = Math.floor(Math.random() * 5) + 3; // 3-7 capabilities
+            let successCount = 0;
+            
+            for (let i = 0; i < randomCount; i++) {
+                const capKeys = Object.keys(capabilityNames);
+                const randomCap = capKeys[Math.floor(Math.random() * capKeys.length)];
+                await triggerLog(randomCap);
+                successCount++;
+            }
+            
+            alert(`✅ فعالیت برای ${successCount} قابلیت شبیه‌سازی شد`);
+            loadDashboard();
+        }
+
+        // Copy all logs and LLM analysis
+        async function copyAllLogsAndAnalysis() {
+            try {
+                const response = await fetch(`${API_BASE}/data`);
+                const data = await response.json();
+                
+                let clipboardText = "=== گزارش کامل لاگ‌ها و تحلیل‌های LLM ===\n";
+                clipboardText += `تاریخ گزارش: ${new Date().toLocaleString('fa-IR')}\n`;
+                clipboardText += `تعداد کل قابلیت‌ها: ${data.total_capabilities}\n`;
+                clipboardText += `خلاصه وضعیت: سالم=${data.summary.healthy}, کاهشی=${data.summary.degraded}, ناموفق=${data.summary.failing}\n\n`;
+                
+                for (const [categoryKey, categoryData] of Object.entries(data.categories)) {
+                    clipboardText += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+                    clipboardText += `دسته‌بندی: ${categoryNames[categoryKey] || categoryKey}\n`;
+                    clipboardText += `تعداد قابلیت‌ها: ${categoryData.count}\n`;
+                    clipboardText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+                    
+                    for (const capability of categoryData.capabilities) {
+                        const capName = capabilityNames[capability.id] || capability.id;
+                        clipboardText += `┌─────────────────────────────────────\n`;
+                        clipboardText += `│ قابلیت: ${capName}\n`;
+                        clipboardText += `│ وضعیت: ${capability.status}\n`;
+                        clipboardText += `│ تعداد لاگ: ${capability.log_count}\n`;
+                        clipboardText += `└─────────────────────────────────────\n`;
+                        
+                        if (capability.logs && capability.logs.length > 0) {
+                            for (const log of capability.logs) {
+                                clipboardText += `\n  📝 لاگ:\n`;
+                                clipboardText += `     زمان: ${log.timestamp}\n`;
+                                clipboardText += `     وضعیت: ${log.status}\n`;
+                                clipboardText += `     پیام: ${log.message}\n`;
+                                
+                                if (log.llm_analysis) {
+                                    clipboardText += `\n  🤖 تحلیل LLM:\n`;
+                                    clipboardText += `     نتیجه‌گیری: ${log.llm_analysis.conclusion || 'ندارد'}\n`;
+                                    clipboardText += `     ریسک: ${log.llm_analysis.risk_level || 'نامشخص'}\n`;
+                                    clipboardText += `     توصیه: ${log.llm_analysis.recommendation || 'ندارد'}\n`;
+                                }
+                                clipboardText += `\n`;
+                            }
+                        } else {
+                            clipboardText += `  (بدون لاگ ثبت شده)\n\n`;
+                        }
+                    }
+                }
+                
+                clipboardText += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+                clipboardText += `پایان گزارش\n`;
+                clipboardText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+                
+                await navigator.clipboard.writeText(clipboardText);
+                alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!');
+                
+            } catch (error) {
+                console.error('Error copying logs:', error);
+                alert('❌ خطا در کپی کردن لاگ‌ها: ' + error.message);
+            }
+        }
         
         // Initial load
         loadDashboard();
