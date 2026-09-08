@@ -1,40 +1,12 @@
 ```
-# Environment variables
-.env
+# Compiled Python files
+__pycache__/
+*.pyc
 
 # Logs
 *.log
 server.log
 
-# Dependencies
-node_modules/
-venv/
-.venv/
-__pycache__/
-*.pyc
-
-# Build artifacts
-dist/
-build/
-target/
-
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# System files
-.DS_Store
-Thumbs.db
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Python specific
-.mypy_cache/
-.pytest_cache/
+# Database (if temporary/build artifact)
+trading_system.db
 ```
