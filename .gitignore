@@ -1,10 +1,7 @@
 ```
-# Logs
+# Log files
 *.log
 
-# Environment
-.env.local
-
-# Editors
-.vscode/
+# Capabilities logs directory
+capabilities_logs/
 ```

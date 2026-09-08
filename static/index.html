@@ -489,18 +489,28 @@
                 const response = await fetch(`${API_BASE}/data`);
                 const data = await response.json();
                 
-                // Update summary cards
-                document.getElementById('total-capabilities').textContent = data.total_capabilities;
-                document.getElementById('healthy-count').textContent = data.summary.healthy;
-                document.getElementById('degraded-count').textContent = data.summary.degraded;
-                document.getElementById('failing-count').textContent = data.summary.failing;
+                // Update summary cards - adapt to new API structure
+                document.getElementById('total-capabilities').textContent = data.metrics.total_capabilities;
                 
-                // Render categories
-                renderCategories(data.categories);
+                // Calculate status counts from capabilities_status
+                let healthyCount = 0, degradedCount = 0, failingCount = 0;
+                for (const capId in data.capabilities_status) {
+                    const cap = data.capabilities_status[capId];
+                    if (cap.status === 'active' || cap.status === 'healthy') healthyCount++;
+                    else if (cap.status === 'warning') degradedCount++;
+                    else if (cap.status === 'error' || cap.status === 'failing') failingCount++;
+                }
+                
+                document.getElementById('healthy-count').textContent = healthyCount;
+                document.getElementById('degraded-count').textContent = degradedCount;
+                document.getElementById('failing-count').textContent = failingCount;
+                
+                // Render categories using the new structure
+                renderCategoriesNew(data.capabilities_structure, data.capabilities_status);
                 
                 // Update timestamp
                 document.getElementById('last-update').textContent = 
-                    `آخرین بروزرسانی: ${new Date(data.timestamp).toLocaleString('fa-IR')}`;
+                    `آخرین بروزرسانی: ${new Date().toLocaleString('fa-IR')}`;
                     
             } catch (error) {
                 console.error('Error loading dashboard:', error);
@@ -509,38 +519,63 @@
             }
         }
         
-        function renderCategories(categories) {
+        function renderCategoriesNew(capabilitiesStructure, capabilitiesStatus) {
             const container = document.getElementById('categories-container');
             let html = '';
             
-            for (const [categoryKey, capabilities] of Object.entries(categories)) {
-                const categoryName = categoryNames[categoryKey] || categoryKey;
-                const healthyCount = capabilities.filter(c => c.status === 'healthy').length;
-                const totalCount = capabilities.length;
+            for (const [categoryKey, categoryData] of Object.entries(capabilitiesStructure)) {
+                const categoryName = categoryData.name || categoryKey;
+                const caps = categoryData.capabilities || [];
+                
+                // Count healthy capabilities
+                let healthyCount = 0;
+                caps.forEach(cap => {
+                    const capStatus = capabilitiesStatus[cap.id]?.status || 'unknown';
+                    if (capStatus === 'active' || capStatus === 'healthy') healthyCount++;
+                });
                 
                 html += `
                     <div class="category-section">
                         <div class="category-header">
                             <h3 class="category-title">${categoryName}</h3>
-                            <span style="color: #a0a0a0;">${healthyCount}/${totalCount} سالم</span>
+                            <span style="color: #a0a0a0;">${healthyCount}/${caps.length} سالم</span>
                         </div>
                         <div class="capabilities-grid">
                 `;
                 
-                capabilities.forEach(cap => {
-                    const capName = capabilityNames[cap.capability] || cap.capability;
+                caps.forEach(cap => {
+                    const capId = cap.id;
+                    const capName = cap.name || capId;
+                    const capInfo = capabilitiesStatus[capId] || {};
+                    const capStatus = capInfo.status || 'unknown';
+                    const logs = capInfo.logs || [];
+                    
+                    // Count log types
+                    let successCount = 0, warningCount = 0, errorCount = 0;
+                    logs.forEach(log => {
+                        if (log.event_type === 'success') successCount++;
+                        else if (log.event_type === 'warning') warningCount++;
+                        else if (log.event_type === 'error') errorCount++;
+                    });
+                    
+                    // Map status to CSS class
+                    let statusClass = 'unknown';
+                    if (capStatus === 'active' || capStatus === 'healthy') statusClass = 'healthy';
+                    else if (capStatus === 'warning') statusClass = 'degraded';
+                    else if (capStatus === 'error' || capStatus === 'failing') statusClass = 'failing';
+                    
                     html += `
-                        <div class="capability-item ${cap.status}">
+                        <div class="capability-item ${statusClass}">
                             <div class="capability-name">${capName}</div>
                             <div class="capability-stats">
-                                <span class="stat success">✓ ${cap.success_count}</span>
-                                <span class="stat warning">⚠ ${cap.warning_count}</span>
-                                <span class="stat error">✗ ${cap.error_count}</span>
+                                <span class="stat success">✓ ${successCount}</span>
+                                <span class="stat warning">⚠ ${warningCount}</span>
+                                <span class="stat error">✗ ${errorCount}</span>
                             </div>
                             <div class="capability-actions">
-                                <button class="btn btn-primary" onclick="showLogs('${cap.capability}')">📋 لاگ‌ها</button>
-                                <button class="btn btn-secondary" onclick="showAnalysis('${cap.capability}')">🤖 تحلیل LLM</button>
-                                <button class="btn btn-secondary" onclick="triggerLog('${cap.capability}')">📝 ثبت لاگ تست</button>
+                                <button class="btn btn-primary" onclick="showLogs('${capId}')">📋 لاگ‌ها</button>
+                                <button class="btn btn-secondary" onclick="showAnalysis('${capId}')">🤖 تحلیل LLM</button>
+                                <button class="btn btn-secondary" onclick="triggerLog('${capId}')">📝 ثبت لاگ تست</button>
                             </div>
                         </div>
                     `;
@@ -565,7 +600,7 @@
             modal.classList.add('active');
             
             try {
-                const response = await fetch(`${API_BASE}/${capability}/logs?limit=20`);
+                const response = await fetch(`${API_BASE}/capability/${capability}/logs?limit=20`);
                 const logs = await response.json();
                 
                 if (logs.length === 0) {
@@ -601,7 +636,7 @@
             modal.classList.add('active');
             
             try {
-                const response = await fetch(`${API_BASE}/${capability}/analysis`);
+                const response = await fetch(`${API_BASE}/capability/${capability}/analysis`);
                 const analysis = await response.json();
                 
                 if (!analysis) {
@@ -655,15 +690,13 @@
             const randomMessage = messages[randomStatus][Math.floor(Math.random() * messages[randomStatus].length)];
             
             try {
-                await fetch(`${API_BASE}/log`, {
+                await fetch(`${API_BASE}/capability/${capability}/log`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        capability: capability,
-                        category: getCapabilityCategory(capability),
-                        status: randomStatus,
+                        event_type: randomStatus,
                         message: randomMessage,
-                        data: { test: true, timestamp: new Date().toISOString() }
+                        details: { test: true, timestamp: new Date().toISOString() }
                     })
                 });
                 

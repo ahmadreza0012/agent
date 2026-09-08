@@ -1,3 +1,4 @@
 {"timestamp": "2026-09-08T14:47:35.846660", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Idempotency (جلوگیری از سفارش تکراری)", "details": {"random_value": 92}}
 {"timestamp": "2026-09-08T14:48:01.290530", "event_type": "info", "message": "عملیات عادی در حال اجرا - Idempotency (جلوگیری از سفارش تکراری)", "details": {"random_value": 13}}
 {"timestamp": "2026-09-08T16:14:42.307212", "event_type": "info", "message": "عملیات عادی در حال اجرا - Idempotency (جلوگیری از سفارش تکراری)", "details": {"random_value": 27}}
+{"timestamp": "2026-09-08T18:32:37.414975", "event_type": "info", "message": "عملیات عادی در حال اجرا - Idempotency (جلوگیری از سفارش تکراری)", "details": {"random_value": 89}}
