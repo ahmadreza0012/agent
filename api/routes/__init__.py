@@ -10,6 +10,7 @@ from .risk import router as risk_router
 from .strategy import router as strategy_router
 from .system import router as system_router
 from .metrics import router as metrics_router
+from .capabilities import router as capabilities_router
 
 __all__ = [
     'health_router',
@@ -20,4 +21,5 @@ __all__ = [
     'strategy_router',
     'system_router',
     'metrics_router',
+    'capabilities_router',
 ]
