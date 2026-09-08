@@ -1,1 +1,7 @@
-(empty)
+```
+# Logs
+*.log
+
+# Environment
+.env.local
+```
