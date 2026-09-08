@@ -1,0 +1,3 @@
+{"timestamp": "2026-09-08T14:46:59.238662", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Trailing Stop", "details": {"random_value": 12}}
+{"timestamp": "2026-09-08T14:47:16.856905", "event_type": "info", "message": "عملیات عادی در حال اجرا - Trailing Stop", "details": {"random_value": 66}}
+{"timestamp": "2026-09-08T14:47:35.846549", "event_type": "success", "message": "عملیات با موفقیت انجام شد - Trailing Stop", "details": {"random_value": 15}}
