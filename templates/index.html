@@ -69,18 +69,31 @@
                 document.getElementById('uptime').innerText = data.uptime;
                 document.getElementById('cycle-count').innerText = data.cycle_count;
                 document.getElementById('active-logs').innerText = data.active_logs;
-                renderCapabilities(data.capabilities);
+                renderCapabilities(data.capabilities_status, data.capabilities_structure);
                 renderSystemLogs(data.system_logs);
             } catch (error) { console.error('Error fetching data:', error); }
         }
-        function renderCapabilities(capabilities) {
+        function renderCapabilities(capabilitiesStatus, capabilitiesStructure) {
             const container = document.getElementById('capabilities-container');
-            if (!capabilities || capabilities.length === 0) return;
+            if (!capabilitiesStatus || Object.keys(capabilitiesStatus).length === 0) return;
             const categories = {};
-            capabilities.forEach(cap => { if (!categories[cap.category]) categories[cap.category] = []; categories[cap.category].push(cap); });
+            for (const [capId, capData] of Object.entries(capabilitiesStatus)) {
+                const capInfo = capabilitiesStructure[capId] || {name: capId, icon: '📦', category: 'unknown'};
+                if (!categories[capInfo.category]) categories[capInfo.category] = [];
+                categories[capInfo.category].push({
+                    id: capId,
+                    name: capInfo.name,
+                    icon: capInfo.icon,
+                    category: capInfo.category,
+                    status: capData.status,
+                    status_text: capData.status === 'active' ? 'فعال' : capData.status === 'warning' ? 'هشدار' : 'خطا',
+                    logs: capData.logs || []
+                });
+            }
             let html = '';
             for (const [catName, caps] of Object.entries(categories)) {
-                html += `<div class="category-section"><div class="category-title">📦 ${catName}</div><div class="capabilities-grid">`;
+                const catDisplayName = capabilitiesStructure[Object.keys(caps)[0]]?.category || catName;
+                html += `<div class="category-section"><div class="category-title">📦 ${catDisplayName}</div><div class="capabilities-grid">`;
                 caps.forEach(cap => {
                     let statusClass = 'status-active';
                     if (cap.status === 'warning') statusClass = 'status-warning';
@@ -119,6 +132,28 @@
                 const data = await response.json();
                 let clipboardText = "📊 گزارش کامل لاگ‌ها و تحلیل‌های LLM\n";
                 clipboardText += `تاریخ گزارش: ${new Date().toLocaleString('fa-IR')}\n================================================\n\n`;
+                
+                // افزودن ارزیابی‌های دسته‌بندی
+                if (data.category_evaluations) {
+                    clipboardText += "📋 ارزیابی‌های LLM برای هر دسته‌بندی:\n";
+                    clipboardText += "================================================\n";
+                    for (const [catKey, evaluation] of Object.entries(data.category_evaluations)) {
+                        const catName = data.capabilities_structure[catKey]?.name || catKey;
+                        clipboardText += `\n📂 دسته‌بندی: ${catName}\n`;
+                        clipboardText += "------------------------------------------------\n";
+                        if (evaluation) {
+                            clipboardText += `   وضعیت: ${evaluation.status || 'نامشخص'}\n`;
+                            clipboardText += `   تحلیل: ${evaluation.analysis || evaluation.llm_evaluation || 'تحلیلی موجود نیست'}\n`;
+                            if (evaluation.issues) clipboardText += `   مشکلات: ${JSON.stringify(evaluation.issues)}\n`;
+                            if (evaluation.recommendations) clipboardText += `   پیشنهادات: ${JSON.stringify(evaluation.recommendations)}\n`;
+                        } else {
+                            clipboardText += "   ⚠️ هیچ ارزیابی برای این دسته‌بندی موجود نیست\n";
+                        }
+                        clipboardText += "\n";
+                    }
+                }
+                
+                // افزودن لاگ‌های هر قابلیت
                 const categories = {};
                 data.capabilities.forEach(cap => { if (!categories[cap.category]) categories[cap.category] = []; categories[cap.category].push(cap); });
                 for (const [catName, caps] of Object.entries(categories)) {
@@ -134,7 +169,7 @@
                     });
                     clipboardText += "\n";
                 }
-                navigator.clipboard.writeText(clipboardText).then(() => { alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!'); }).catch(err => { console.error('خطا در کپی:', err); alert('❌ خطا در کپی کردن متن.'); });
+                navigator.clipboard.writeText(clipboardText).then(() => { alert('✅ تمام لاگ‌ها، تحلیل‌های LLM و ارزیابی‌های دسته‌بندی با موفقیت کپی شدند!'); }).catch(err => { console.error('خطا در کپی:', err); alert('❌ خطا در کپی کردن متن.'); });
             } catch (error) { console.error('خطا در دریافت داده‌ها:', error); alert('❌ خطا در دریافت داده‌ها برای کپی.'); }
         }
         fetchData();
