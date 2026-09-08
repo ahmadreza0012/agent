@@ -1,0 +1,2 @@
+{"timestamp": "2026-09-08T14:47:35.846874", "event_type": "info", "message": "عملیات عادی در حال اجرا - Benchmarking", "details": {"random_value": 36}}
+{"timestamp": "2026-09-08T14:48:01.290657", "event_type": "warning", "message": "هشدار: عملکرد زیر بهینه - Benchmarking", "details": {"random_value": 23}}

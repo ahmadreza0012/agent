@@ -1,13 +1,4 @@
 ```
-# Compiled Python files
-*.pyc
 __pycache__/
-
-# Logs and temp files
-*.log
-*.tmp
-
-# Editors
-.vscode/
-.idea/
+*.pyc
 ```
