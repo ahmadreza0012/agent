@@ -17,3 +17,8 @@ INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 18:13:13] "GET / HTTP/1.1" 200 -
 INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 18:13:15] "GET / HTTP/1.1" 200 -
 INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 18:13:18] "GET / HTTP/1.1" 200 -
 INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 18:13:20] "GET / HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 18:18:06] "[33mGET /api/data HTTP/1.1[0m" 404 -
+INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 18:18:24] "[33mGET /api/data HTTP/1.1[0m" 404 -
+INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 18:18:47] "GET /api/capabilities HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 18:18:50] "GET / HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 18:18:53] "GET /api/logs/1 HTTP/1.1" 200 -
