@@ -1,4 +1,5 @@
 nohup: ignoring input
+WARNING:__main__:GROQ_API_KEY not found in environment variables. LLM features will be disabled.
  * Serving Flask app 'app'
  * Debug mode: off
 INFO:werkzeug:[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
@@ -6,6 +7,4 @@ INFO:werkzeug:[31m[1mWARNING: This is a development server. Do not use it in a
  * Running on http://127.0.0.1:5000
  * Running on http://21.0.1.252:5000
 INFO:werkzeug:[33mPress CTRL+C to quit[0m
-INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 16:59:08] "GET / HTTP/1.1" 200 -
-INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 16:59:12] "GET / HTTP/1.1" 200 -
-INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 16:59:14] "GET /static/index.html HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [08/Sep/2026 17:42:33] "GET / HTTP/1.1" 200 -
