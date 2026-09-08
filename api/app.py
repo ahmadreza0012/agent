@@ -16,7 +16,8 @@ import uvicorn
 
 from .routes import (
     health_router, status_router, portfolio_router, orders_router,
-    risk_router, strategy_router, system_router, metrics_router
+    risk_router, strategy_router, system_router, metrics_router,
+    capabilities_router
 )
 from .middleware import LoggingMiddleware, RateLimitMiddleware, AuthMiddleware
 
@@ -105,6 +106,7 @@ app.include_router(risk_router, prefix="/api/v1")
 app.include_router(strategy_router, prefix="/api/v1")
 app.include_router(system_router, prefix="/api/v1")
 app.include_router(metrics_router, prefix="/api/v1")
+app.include_router(capabilities_router, prefix="/api/v1")
 
 
 @app.get("/")
