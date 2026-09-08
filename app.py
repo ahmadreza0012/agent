@@ -1,454 +1,468 @@
-"""
-Flask Web Server for Crypto Portfolio Optimization System
-==========================================================
-This module converts the main trading pipeline into a web server that:
-1. Stays running continuously on Railway
-2. Exposes endpoints for health checks and running the trading pipeline
-3. Implements sleep mode to stay within free tier limits
-4. Responds to UptimeRobot monitors
-
-Endpoints:
-- GET /health : Health check endpoint (returns 200 OK)
-- POST /run   : Run the full trading pipeline
-- GET  /status: Get current system status
-- POST /wake  : Wake up from sleep mode
-
-Usage:
-    python app.py
-    
-Environment Variables:
-    PORT          : Port to run on (default: 8000)
-    GROQ_API_KEY  : Optional, for real sentiment analysis
-    SLEEP_MODE    : Set to "true" to enable sleep mode (default: false)
-"""
-
 import os
+import sqlite3
 import logging
-import sys
-import json
+from datetime import datetime
+from flask import Flask, request, jsonify, render_template_string, send_from_directory
+from flask_cors import CORS
 import threading
 import time
-from datetime import datetime
-from typing import Dict, Optional
+import random
+import json
+import requests
+from concurrent.futures import ThreadPoolExecutor
 
-import pandas as pd
-from flask import Flask, jsonify, request
+# Configuration
+app = Flask(__name__)
+CORS(app)
+app.config['SECRET_KEY'] = 'your-secret-key'
+app.config['DATABASE'] = 'trading_system.db'
+app.config['LOG_DIR'] = 'capabilities_logs'
+app.config['LLM_API_KEY'] = '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'
+app.config['LLM_API_URL'] = 'https://api.groq.com/openai/v1/chat/completions'
+app.config['LLM_MODEL'] = 'groq/compound'
 
-# Import the main system components
-from main import CryptoPortfolioSystem, print_final_summary
+# Ensure log directory exists
+os.makedirs(app.config['LOG_DIR'], exist_ok=True)
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('portfolio_backtest.log')
-    ]
-)
+# Setup Logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-app = Flask(__name__)
+# Thread pool for async LLM calls
+executor = ThreadPoolExecutor(max_workers=10)
 
-# Global state
-system_state = {
-    'status': 'idle',
-    'last_run': None,
-    'last_result': None,
-    'is_running': False,
-    'start_time': datetime.now().isoformat(),
-    'total_runs': 0,
-    'successful_runs': 0,
-    'failed_runs': 0,
-}
+# Capabilities Definition
+CAPABILITIES = [
+    # Core Trading
+    {"id": 1, "name": "الگوریتم ترید کریپتو", "category": "ترید الگوریتمی", "status": "active"},
+    {"id": 2, "name": "پشتیبانی چند صرافی", "category": "ترید الگوریتمی", "status": "active"},
+    {"id": 3, "name": "دریافت داده بازار", "category": "ترید الگوریتمی", "status": "active"},
+    {"id": 4, "name": "تحلیل چند تایم‌فریمی", "category": "ترید الگوریتمی", "status": "active"},
+    {"id": 5, "name": "استراتژی‌های تکنیکال", "category": "ترید الگوریتمی", "status": "active"},
+    {"id": 6, "name": "تشخیص Market Regime", "category": "ترید الگوریتمی", "status": "active"},
+    {"id": 7, "name": "ترکیب استراتژی (Ensemble)", "category": "ترید الگوریتمی", "status": "active"},
+    {"id": 8, "name": "بهینه‌سازی پورتفولیو", "category": "ترید الگوریتمی", "status": "active"},
+    
+    # Risk Management
+    {"id": 9, "name": "مدیریت ریسک کلی", "category": "مدیریت ریسک", "status": "active"},
+    {"id": 10, "name": "تعیین اندازه پوزیشن", "category": "مدیریت ریسک", "status": "active"},
+    {"id": 11, "name": "Stop Loss / Take Profit", "category": "مدیریت ریسک", "status": "active"},
+    {"id": 12, "name": "Trailing Stop", "category": "مدیریت ریسک", "status": "active"},
+    {"id": 13, "name": "Breakeven Logic", "category": "مدیریت ریسک", "status": "active"},
+    {"id": 14, "name": "Partial Take Profit", "category": "مدیریت ریسک", "status": "active"},
+    {"id": 15, "name": "محدودیت Exposure", "category": "مدیریت ریسک", "status": "active"},
+    {"id": 16, "name": "Circuit Breaker", "category": "مدیریت ریسک", "status": "active"},
+    {"id": 17, "name": "Kill Switch", "category": "مدیریت ریسک", "status": "active"},
+    {"id": 18, "name": "Live Safety Engine", "category": "مدیریت ریسک", "status": "active"},
 
-# Thread lock for preventing concurrent runs
-run_lock = threading.Lock()
+    # Order & Position Mgmt
+    {"id": 19, "name": "Order Manager", "category": "اجرای سفارشات", "status": "active"},
+    {"id": 20, "name": "Idempotency Check", "category": "اجرای سفارشات", "status": "active"},
+    {"id": 21, "name": "Fill Manager", "category": "اجرای سفارشات", "status": "active"},
+    {"id": 22, "name": "Position Manager", "category": "اجرای سفارشات", "status": "active"},
+    {"id": 23, "name": "Exchange Reconciliation", "category": "اجرای سفارشات", "status": "active"},
+    {"id": 24, "name": "Crash Recovery", "category": "اجرای سفارشات", "status": "active"},
+    {"id": 25, "name": "Persistence/DB", "category": "اجرای سفارشات", "status": "active"},
 
+    # Backtesting & Quant
+    {"id": 26, "name": "Walk-Forward Backtest", "category": "بک‌تست و کوانت", "status": "active"},
+    {"id": 27, "name": "Out-of-Sample Test", "category": "بک‌تست و کوانت", "status": "active"},
+    {"id": 28, "name": "Transaction Cost Model", "category": "بک‌تست و کوانت", "status": "active"},
+    {"id": 29, "name": "Slippage Model", "category": "بک‌تست و کوانت", "status": "active"},
+    {"id": 30, "name": "No-Trade Zone", "category": "بک‌تست و کوانت", "status": "active"},
+    {"id": 31, "name": "Benchmarking", "category": "بک‌تست و کوانت", "status": "active"},
+    {"id": 32, "name": "Performance Metrics", "category": "بک‌تست و کوانت", "status": "active"},
+    {"id": 33, "name": "Monte Carlo Analysis", "category": "بک‌تست و کوانت", "status": "active"},
 
-def get_sleep_mode_enabled() -> bool:
-    """Check if sleep mode is enabled via environment variable."""
-    return os.getenv('SLEEP_MODE', 'false').lower() == 'true'
+    # AI / ML
+    {"id": 34, "name": "ML Pipeline", "category": "هوش مصنوعی (ML)", "status": "active"},
+    {"id": 35, "name": "Feature Engineering", "category": "هوش مصنوعی (ML)", "status": "active"},
+    {"id": 36, "name": "Causal Features", "category": "هوش مصنوعی (ML)", "status": "active"},
+    {"id": 37, "name": "Purged Walk-Forward", "category": "هوش مصنوعی (ML)", "status": "active"},
+    {"id": 38, "name": "ML Prediction", "category": "هوش مصنوعی (ML)", "status": "active"},
+    {"id": 39, "name": "Model Registry", "category": "هوش مصنوعی (ML)", "status": "active"},
+    {"id": 40, "name": "Drift Monitoring", "category": "هوش مصنوعی (ML)", "status": "active"},
+    {"id": 41, "name": "ML Strategy Integration", "category": "هوش مصنوعی (ML)", "status": "active"},
 
+    # AI / Sentiment
+    {"id": 42, "name": "Sentiment Analysis", "category": "هوش مصنوعی (Sentiment)", "status": "active"},
+    {"id": 43, "name": "News/Context Analysis", "category": "هوش مصنوعی (Sentiment)", "status": "active"},
+    {"id": 44, "name": "LLM Integration", "category": "هوش مصنوعی (Sentiment)", "status": "active"},
+    {"id": 45, "name": "Sentiment as Signal", "category": "هوش مصنوعی (Sentiment)", "status": "active"},
 
-def should_allow_request() -> bool:
-    """
-    In sleep mode, only allow health checks and wake calls.
-    Block expensive operations unless explicitly woken up.
-    """
-    if not get_sleep_mode_enabled():
-        return True
-    
-    # In sleep mode, allow requests only if recently woken up
-    last_wake = system_state.get('last_wake_time')
-    if last_wake:
-        wake_dt = datetime.fromisoformat(last_wake)
-        # Allow operations for 1 hour after wake
-        if (datetime.now() - wake_dt).total_seconds() < 3600:
-            return True
-    
-    return False
+    # Infrastructure
+    {"id": 46, "name": "FastAPI Core", "category": "زیرساخت", "status": "active"},
+    {"id": 47, "name": "Trading API", "category": "زیرساخت", "status": "active"},
+    {"id": 48, "name": "Health Monitoring", "category": "زیرساخت", "status": "active"},
+    {"id": 49, "name": "Logging System", "category": "زیرساخت", "status": "active"},
+    {"id": 50, "name": "Observability", "category": "زیرساخت", "status": "active"},
+    {"id": 51, "name": "Config Management", "category": "زیرساخت", "status": "active"},
+    {"id": 52, "name": "Database (SQLite/PG)", "category": "زیرساخت", "status": "active"},
+    {"id": 53, "name": "Docker Support", "category": "زیرساخت", "status": "active"},
+    {"id": 54, "name": "CI/CD Pipeline", "category": "زیرساخت", "status": "active"},
+    {"id": 55, "name": "Paper Trading", "category": "زیرساخت", "status": "active"},
+    {"id": 56, "name": "Shadow Trading", "category": "زیرساخت", "status": "active"},
+    {"id": 57, "name": "Live Trading Arch", "category": "زیرساخت", "status": "active"},
+    {"id": 58, "name": "Security Module", "category": "زیرساخت", "status": "active"},
+    {"id": 59, "name": "Alert System", "category": "زیرساخت", "status": "active"},
+    {"id": 60, "name": "Admin Dashboard", "category": "زیرساخت", "status": "active"},
+]
 
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    """
-    Health check endpoint for Railway and UptimeRobot.
-    Returns 200 OK with basic status information.
-    """
-    logger.info("Health check requested")
-    
-    response_data = {
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat(),
-        'uptime_since': system_state['start_time'],
-        'sleep_mode': get_sleep_mode_enabled(),
-        'version': '2.0'
-    }
-    
-    return jsonify(response_data), 200
-
-
-@app.route('/wake', methods=['POST'])
-def wake_up():
-    """
-    Wake up the system from sleep mode.
-    This allows expensive operations for a limited time window.
-    """
-    logger.info("Wake-up signal received")
-    
-    system_state['last_wake_time'] = datetime.now().isoformat()
-    system_state['status'] = 'awake'
-    
-    response_data = {
-        'status': 'awake',
-        'message': 'System awakened. Operations allowed for 1 hour.',
-        'wake_time': system_state['last_wake_time'],
-        'expires_at': (datetime.now().replace(hour=datetime.now().hour) + 
-                      pd.Timedelta(hours=1)).isoformat()
-    }
-    
-    return jsonify(response_data), 200
-
-
-@app.route('/status', methods=['GET'])
-def get_status():
-    """
-    Get current system status and statistics.
-    """
-    logger.info("Status requested")
-    
-    # Calculate uptime
-    start_dt = datetime.fromisoformat(system_state['start_time'])
-    uptime_seconds = (datetime.now() - start_dt).total_seconds()
-    uptime_hours = uptime_seconds / 3600
-    
-    response_data = {
-        'status': system_state['status'],
-        'is_running': system_state['is_running'],
-        'last_run': system_state['last_run'],
-        'total_runs': system_state['total_runs'],
-        'successful_runs': system_state['successful_runs'],
-        'failed_runs': system_state['failed_runs'],
-        'success_rate': (system_state['successful_runs'] / system_state['total_runs'] * 100 
-                        if system_state['total_runs'] > 0 else 0),
-        'uptime_hours': round(uptime_hours, 2),
-        'sleep_mode': get_sleep_mode_enabled(),
-        'last_wake_time': system_state.get('last_wake_time'),
-    }
-    
-    return jsonify(response_data), 200
-
-
-@app.route('/run', methods=['POST'])
-def run_pipeline():
-    """
-    Run the full crypto portfolio optimization pipeline.
-    
-    Expected JSON payload (optional):
-    {
-        "since_days": 365,
-        "n_folds": 1,
-        "use_auto_selection": true,
-        "symbols": ["BTC/USDT", "ETH/USDT", ...]
-    }
-    """
-    logger.info("=" * 60)
-    logger.info("Pipeline execution requested via /run endpoint")
-    logger.info("=" * 60)
-    
-    # Check if we should allow this request
-    if get_sleep_mode_enabled() and not should_allow_request():
-        logger.warning("Request blocked: system in sleep mode. Send POST /wake first.")
-        return jsonify({
-            'error': 'System in sleep mode',
-            'message': 'Send POST /wake to activate the system for 1 hour',
-            'status': 'sleeping'
-        }), 503
-    
-    # Check if already running
-    if system_state['is_running']:
-        logger.warning("Pipeline already running, rejecting concurrent request")
-        return jsonify({
-            'error': 'Pipeline already running',
-            'status': 'busy'
-        }), 409
-    
-    # Acquire lock
-    with run_lock:
-        system_state['is_running'] = True
-        system_state['status'] = 'running'
-        start_time = datetime.now()
+HTML_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>داشبورد سیستم ترید الگوریتمی</title>
+    <style>
+        body { font-family: Tahoma, Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { text-align: center; color: #333; margin-bottom: 30px; }
+        .category { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .category h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-top: 0; }
+        .capabilities-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
+        .capability-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 15px; transition: all 0.3s; }
+        .capability-card:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.15); transform: translateY(-2px); }
+        .capability-name { font-weight: bold; color: #2c3e50; margin-bottom: 10px; }
+        .capability-status { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; }
+        .status-active { background: #d4edda; color: #155724; }
+        .btn-simulate { background: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-top: 10px; width: 100%; }
+        .btn-simulate:hover { background: #2980b9; }
+        .logs-section { margin-top: 15px; padding-top: 15px; border-top: 1px solid #dee2e6; }
+        .log-entry { background: #fff; padding: 10px; margin: 8px 0; border-radius: 4px; border-right: 4px solid #3498db; font-size: 13px; }
+        .log-info { border-right-color: #3498db; }
+        .log-warning { border-right-color: #f39c12; }
+        .log-error { border-right-color: #e74c3c; }
+        .llm-analysis { background: #e8f4f8; padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 12px; color: #2c3e50; }
+        .llm-label { font-weight: bold; color: #2980b9; }
+        .loading { color: #7f8c8d; font-style: italic; }
+        .summary-bar { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-around; }
+        .summary-item { text-align: center; }
+        .summary-number { font-size: 24px; font-weight: bold; color: #3498db; }
+        .summary-label { font-size: 14px; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 داشبورد نظارت بر قابلیت‌های سیستم ترید</h1>
         
-        try:
-            # Parse request parameters
-            data = request.get_json(silent=True) or {}
-            since_days = data.get('since_days', 365)
-            n_folds = data.get('n_folds', 1)
-            use_auto_selection = data.get('use_auto_selection', True)
-            symbols = data.get('symbols', ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT'])
+        <div class="summary-bar">
+            <div class="summary-item">
+                <div class="summary-number" id="total-caps">60</div>
+                <div class="summary-label">کل قابلیت‌ها</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-number" id="total-logs">0</div>
+                <div class="summary-label">کل لاگ‌ها</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-number" id="total-analyzed">0</div>
+                <div class="summary-label">تحلیل شده با LLM</div>
+            </div>
+        </div>
+
+        <button onclick="simulateAll()" style="background: #27ae60; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-size: 16px; margin-bottom: 20px;">
+            🎲 شبیه‌سازی فعالیت همه قابلیت‌ها
+        </button>
+
+        <div id="dashboard"></div>
+    </div>
+
+    <script>
+        let capabilitiesData = {};
+        
+        async function loadCapabilities() {
+            const response = await fetch('/api/capabilities');
+            capabilitiesData = await response.json();
+            renderDashboard();
+        }
+        
+        async function loadLogs(capId) {
+            const response = await fetch(`/api/logs/${capId}`);
+            return await response.json();
+        }
+        
+        function renderDashboard() {
+            const dashboard = document.getElementById('dashboard');
+            dashboard.innerHTML = '';
             
-            logger.info(f"Running pipeline with: since_days={since_days}, n_folds={n_folds}, "
-                       f"symbols={len(symbols)} assets")
+            for (const [category, caps] of Object.entries(capabilitiesData)) {
+                const catDiv = document.createElement('div');
+                catDiv.className = 'category';
+                catDiv.innerHTML = `<h2>${category}</h2>`;
+                
+                const grid = document.createElement('div');
+                grid.className = 'capabilities-grid';
+                
+                caps.forEach(cap => {
+                    const card = document.createElement('div');
+                    card.className = 'capability-card';
+                    card.id = `cap-${cap.id}`;
+                    card.innerHTML = `
+                        <div class="capability-name">${cap.name}</div>
+                        <span class="capability-status status-active">فعال</span>
+                        <button class="btn-simulate" onclick="simulateCapability(${cap.id})">🎲 شبیه‌سازی</button>
+                        <div class="logs-section" id="logs-${cap.id}">
+                            <div class="loading">در حال بارگذاری لاگ‌ها...</div>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                    
+                    // Load logs for this capability
+                    loadLogs(cap.id).then(logs => renderLogs(cap.id, logs));
+                });
+                
+                catDiv.appendChild(grid);
+                dashboard.appendChild(catDiv);
+            }
             
-            # Initialize and run the system
-            system = CryptoPortfolioSystem(
-                symbols=symbols,
-                initial_capital=100000,
-            )
+            updateSummary();
+        }
+        
+        function renderLogs(capId, logs) {
+            const logsDiv = document.getElementById(`logs-${capId}`);
+            if (!logsDiv) return;
             
-            results = system.run_full_pipeline(
-                since_days=since_days,
-                n_folds=n_folds,
-                use_auto_selection=use_auto_selection
-            )
+            if (logs.length === 0) {
+                logsDiv.innerHTML = '<div style="color: #95a5a6; font-size: 13px;">هنوز لاگی ثبت نشده است.</div>';
+                return;
+            }
             
-            # Process evaluation results
-            evaluation = results.get('evaluation', {})
-            if evaluation:
-                summary = {
-                    'mean_monthly_return': evaluation.get('mean_monthly_return', 0),
-                    'median_monthly_return': evaluation.get('median_monthly_return', 0),
-                    'worst_monthly_return': evaluation.get('worst_monthly_return', 0),
-                    'pct_months_positive': evaluation.get('pct_months_positive', 0),
-                    'worst_max_drawdown': evaluation.get('worst_max_drawdown', 0),
-                    'mean_sharpe': evaluation.get('mean_sharpe', 0),
-                    'target_achieved_on_average': evaluation.get('target_achieved_on_average', False),
-                    'target_achieved_every_month': evaluation.get('target_achieved_every_month', False),
-                    'drawdown_within_limit': evaluation.get('drawdown_within_limit', False),
-                    'n_calendar_months_observed': evaluation.get('n_calendar_months_observed', 0),
+            logsDiv.innerHTML = '';
+            logs.forEach(log => {
+                const logDiv = document.createElement('div');
+                logDiv.className = `log-entry log-${log.level.toLowerCase()}`;
+                
+                let llmHtml = '';
+                if (log.llm_status === 'pending') {
+                    llmHtml = `<div class="llm-analysis"><span class="llm-label">🤖 تحلیل LLM:</span> <span class="loading">${log.llm_analysis || 'در حال تحلیل...'}</span></div>`;
+                } else if (log.llm_status === 'success') {
+                    llmHtml = `<div class="llm-analysis"><span class="llm-label">🤖 تحلیل LLM:</span> ${log.llm_analysis}</div>`;
+                } else if (log.llm_status === 'error') {
+                    llmHtml = `<div class="llm-analysis" style="background: #fdeaea;"><span class="llm-label">⚠️ خطا در تحلیل:</span> ${log.llm_analysis}</div>`;
                 }
-            else:
-                summary = {'error': 'No evaluation results'}
-            
-            # Update state
-            end_time = datetime.now()
-            duration_seconds = (end_time - start_time).total_seconds()
-            
-            system_state['last_run'] = end_time.isoformat()
-            system_state['last_result'] = summary
-            system_state['total_runs'] += 1
-            system_state['successful_runs'] += 1
-            system_state['status'] = 'completed'
-            
-            logger.info(f"Pipeline completed successfully in {duration_seconds:.2f} seconds")
-            
-            response_data = {
-                'status': 'success',
-                'message': 'Pipeline executed successfully',
-                'duration_seconds': round(duration_seconds, 2),
-                'timestamp': end_time.isoformat(),
-                'results': summary,
-                'data_points': len(results.get('prices', [])),
-                'warning': evaluation.get('n_calendar_months_observed', 0) < 6
-            }
-            
-            return jsonify(response_data), 200
-            
-        except Exception as e:
-            logger.error(f"Pipeline failed: {e}", exc_info=True)
-            
-            # Update state
-            end_time = datetime.now()
-            duration_seconds = (end_time - start_time).total_seconds()
-            
-            system_state['total_runs'] += 1
-            system_state['failed_runs'] += 1
-            system_state['status'] = 'failed'
-            
-            response_data = {
-                'status': 'error',
-                'message': str(e),
-                'duration_seconds': round(duration_seconds, 2),
-                'timestamp': end_time.isoformat(),
-                'error_type': type(e).__name__
-            }
-            
-            return jsonify(response_data), 500
-            
-        finally:
-            system_state['is_running'] = False
-
-
-@app.route('/metrics', methods=['GET'])
-def get_metrics():
-    """
-    Get detailed metrics about system performance.
-    Useful for monitoring dashboards.
-    """
-    logger.info("Metrics requested")
-    
-    start_dt = datetime.fromisoformat(system_state['start_time'])
-    uptime_seconds = (datetime.now() - start_dt).total_seconds()
-    
-    metrics = {
-        'uptime': {
-            'seconds': int(uptime_seconds),
-            'hours': round(uptime_seconds / 3600, 2),
-            'days': round(uptime_seconds / 86400, 2)
-        },
-        'runs': {
-            'total': system_state['total_runs'],
-            'successful': system_state['successful_runs'],
-            'failed': system_state['failed_runs'],
-            'success_rate': round(system_state['successful_runs'] / max(system_state['total_runs'], 1) * 100, 2)
-        },
-        'current_status': {
-            'is_running': system_state['is_running'],
-            'status': system_state['status'],
-            'last_run': system_state['last_run']
-        },
-        'configuration': {
-            'sleep_mode': get_sleep_mode_enabled(),
-            'last_wake_time': system_state.get('last_wake_time')
+                
+                logDiv.innerHTML = `
+                    <div style="margin-bottom: 5px;">
+                        <strong>[${log.level}]</strong> ${log.message}
+                    </div>
+                    <div style="color: #7f8c8d; font-size: 11px;">${new Date(log.timestamp).toLocaleString('fa-IR')}</div>
+                    ${llmHtml}
+                `;
+                logsDiv.appendChild(logDiv);
+            });
         }
-    }
+        
+        async function simulateCapability(capId) {
+            await fetch('/api/simulate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({capability_id: capId})
+            });
+            setTimeout(() => loadLogs(capId).then(logs => renderLogs(capId, logs)), 1000);
+        }
+        
+        async function simulateAll() {
+            for (let i = 1; i <= 60; i++) {
+                setTimeout(() => simulateCapability(i), i * 100);
+            }
+        }
+        
+        function updateSummary() {
+            // Count total logs from all loaded capabilities
+            let totalLogs = 0;
+            let analyzedLogs = 0;
+            
+            document.querySelectorAll('.log-entry').forEach(log => {
+                totalLogs++;
+                if (log.querySelector('.llm-analysis')) analyzedLogs++;
+            });
+            
+            document.getElementById('total-logs').textContent = totalLogs;
+            document.getElementById('total-analyzed').textContent = analyzedLogs;
+        }
+        
+        // Initial load
+        loadCapabilities();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadCapabilities, 30000);
+    </script>
+</body>
+</html>
+'''
+
+def get_db_connection():
+    conn = sqlite3.connect(app.config['DATABASE'])
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            capability_id INTEGER,
+            timestamp TEXT,
+            level TEXT,
+            message TEXT,
+            data TEXT,
+            llm_analysis TEXT,
+            llm_status TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def call_llm_analysis(capability_name, log_message, log_level, log_data):
+    """Calls Groq API to analyze the log"""
+    try:
+        headers = {
+            "Authorization": f"Bearer {app.config['LLM_API_KEY']}",
+            "Content-Type": "application/json"
+        }
+        
+        prompt = f"""
+        You are an expert Trading System Auditor. 
+        Capability: {capability_name}
+        Log Level: {log_level}
+        Log Message: {log_message}
+        Data: {log_data}
+        
+        Task: Analyze this log entry. Is this behavior normal? Does it indicate a risk? 
+        Provide a concise 1-sentence conclusion in Persian.
+        """
+        
+        payload = {
+            "model": app.config['LLM_MODEL'],
+            "messages": [
+                {"role": "system", "content": "You are a helpful trading system auditor assistant speaking Persian."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.3,
+            "max_tokens": 150
+        }
+        
+        response = requests.post(app.config['LLM_API_URL'], json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
+        result = response.json()
+        analysis = result['choices'][0]['message']['content']
+        return analysis, "success"
     
-    return jsonify(metrics), 200
+    except Exception as e:
+        logger.error(f"LLM API Error: {str(e)}")
+        return f"خطا در تحلیل: {str(e)}", "error"
 
+def process_log_async(capability_id, level, message, data_json):
+    """Background task to save log and call LLM"""
+    cap_name = next((c['name'] for c in CAPABILITIES if c['id'] == capability_id), "Unknown")
+    
+    # Initial Save
+    conn = get_db_connection()
+    c = conn.cursor()
+    timestamp = datetime.now().isoformat()
+    c.execute('''
+        INSERT INTO logs (capability_id, timestamp, level, message, data, llm_analysis, llm_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (capability_id, timestamp, level, message, json.dumps(data_json), "در حال تحلیل...", "pending"))
+    log_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    
+    # Call LLM
+    analysis, status = call_llm_analysis(cap_name, message, level, data_json)
+    
+    # Update DB with LLM result
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('''
+        UPDATE logs SET llm_analysis = ?, llm_status = ? WHERE id = ?
+    ''', (analysis, status, log_id))
+    conn.commit()
+    conn.close()
 
-@app.route('/', methods=['GET'])
+@app.route('/')
 def index():
-    """
-    Root endpoint with API documentation.
-    """
-    docs = {
-        'name': 'Crypto Portfolio Optimization API',
-        'version': '2.0',
-        'description': 'Automated crypto portfolio optimization with AI sentiment analysis',
-        'endpoints': {
-            'GET /': 'This documentation',
-            'GET /health': 'Health check for UptimeBot/Railway',
-            'POST /wake': 'Wake up from sleep mode (enables operations for 1 hour)',
-            'GET /status': 'Get current system status',
-            'POST /run': 'Run the trading pipeline',
-            'GET /metrics': 'Get detailed system metrics'
-        },
-        'example_usage': {
-            'health_check': 'curl https://your-app.railway.app/health',
-            'wake_up': 'curl -X POST https://your-app.railway.app/wake',
-            'run_pipeline': 'curl -X POST -H "Content-Type: application/json" -d \'{"since_days": 365, "n_folds": 1}\' https://your-app.railway.app/run',
-            'get_status': 'curl https://your-app.railway.app/status'
-        },
-        'current_status': {
-            'uptime_since': system_state['start_time'],
-            'total_runs': system_state['total_runs'],
-            'sleep_mode': get_sleep_mode_enabled()
-        }
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/api/capabilities', methods=['GET'])
+def get_capabilities():
+    # Group by category
+    categories = {}
+    for cap in CAPABILITIES:
+        cat = cap['category']
+        if cat not in categories:
+            categories[cat] = []
+        categories[cat].append(cap)
+    return jsonify(categories)
+
+@app.route('/api/logs/<int:cap_id>', methods=['GET'])
+def get_logs(cap_id):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM logs WHERE capability_id = ? ORDER BY timestamp DESC LIMIT 20', (cap_id,))
+    rows = c.fetchall()
+    conn.close()
+    
+    logs = []
+    for row in rows:
+        logs.append({
+            "id": row['id'],
+            "timestamp": row['timestamp'],
+            "level": row['level'],
+            "message": row['message'],
+            "data": json.loads(row['data']) if row['data'] else {},
+            "llm_analysis": row['llm_analysis'],
+            "llm_status": row['llm_status']
+        })
+    return jsonify(logs)
+
+@app.route('/api/log', methods=['POST'])
+def add_log():
+    data = request.json
+    cap_id = data.get('capability_id')
+    level = data.get('level', 'INFO')
+    message = data.get('message')
+    log_data = data.get('data', {})
+    
+    if not cap_id or not message:
+        return jsonify({"error": "Missing fields"}), 400
+    
+    # Run in background thread
+    executor.submit(process_log_async, cap_id, level, message, log_data)
+    
+    return jsonify({"status": "Log received, analysis in progress"}), 202
+
+@app.route('/api/simulate', methods=['POST'])
+def simulate_activity():
+    data = request.json
+    cap_id = data.get('capability_id')
+    
+    if not cap_id:
+        # Pick random if no ID provided
+        cap = random.choice(CAPABILITIES)
+        cap_id = cap['id']
+    else:
+        cap = next((c for c in CAPABILITIES if c['id'] == cap_id), random.choice(CAPABILITIES))
+    
+    levels = ['INFO', 'WARNING', 'ERROR']
+    level = random.choices(levels, weights=[70, 20, 10])[0]
+    
+    messages = {
+        'INFO': f"عملیات {cap['name']} با موفقیت انجام شد.",
+        'WARNING': f"هشدار: تاخیر در {cap['name']} مشاهده شد.",
+        'ERROR': f"خطا: شکست در اجرای {cap['name']}."
     }
     
-    return jsonify(docs), 200
-
-
-# Error handlers
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Endpoint not found'}), 404
-
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({'error': 'Internal server error'}), 500
-
-
-@app.errorhandler(405)
-def method_not_allowed(error):
-    return jsonify({'error': 'Method not allowed'}), 405
-
-
-def main():
-    """
-    Main entry point for the Flask application.
-    Runs with gunicorn in production (Railway) or Flask dev server locally.
-    """
-    # Get port from environment variable (Railway sets this automatically)
-    port = int(os.getenv('PORT', 8000))
-    host = os.getenv('HOST', '0.0.0.0')
-    debug = os.getenv('DEBUG', 'false').lower() == 'true'
+    payload_data = {"random_value": random.random(), "timestamp": datetime.now().isoformat()}
     
-    # Check if running on Railway (has RAILWAY_ environment variables)
-    is_railway = bool(os.getenv('RAILWAY_PROJECT_ID') or os.getenv('RAILWAY_SERVICE_NAME'))
+    # Trigger log creation directly
+    executor.submit(process_log_async, cap_id, level, messages[level], payload_data)
     
-    logger.info("=" * 60)
-    logger.info("Starting Crypto Portfolio Optimization Web Server")
-    logger.info("=" * 60)
-    logger.info(f"Host: {host}")
-    logger.info(f"Port: {port}")
-    logger.info(f"Debug mode: {debug}")
-    logger.info(f"Sleep mode: {get_sleep_mode_enabled()}")
-    logger.info(f"Platform: {'Railway' if is_railway else 'Local/Other'}")
-    logger.info("=" * 60)
-    
-    if is_railway or not debug:
-        # Production mode: Run with gunicorn programmatically
-        logger.info("Running in production mode with gunicorn...")
-        try:
-            from gunicorn.app.base import BaseApplication
-            
-            class GunicornApp(BaseApplication):
-                def __init__(self, app, options=None):
-                    self.options = options or {}
-                    self.application = app
-                    super().__init__()
-                
-                def load_config(self):
-                    config = {
-                        'bind': f"{host}:{port}",
-                        'workers': 1,  # Single worker for free tier
-                        'threads': 2,  # Multiple threads for concurrency
-                        'timeout': 120,  # Long timeout for pipeline execution
-                        'keepalive': 5,
-                        'accesslog': '-',  # stdout
-                        'errorlog': '-',   # stdout
-                        'loglevel': 'info',
-                        'capture_output': True,
-                        'enable_stdio_inheritance': True,
-                    }
-                    for key, value in self.options.items():
-                        if key in self.cfg.settings and value is not None:
-                            self.cfg.set(key.lower(), value)
-                    return config
-                
-                def load(self):
-                    return self.application
-            
-            # Run gunicorn
-            GunicornApp(app, {
-                'bind': f"{host}:{port}",
-                'workers': 1,
-                'threads': 2,
-                'timeout': 120,
-            }).run()
-            
-        except ImportError:
-            logger.warning("Gunicorn not available, falling back to Flask dev server")
-            app.run(host=host, port=port, debug=False, threaded=True)
-    else:
-        # Development mode: Use Flask's built-in server
-        logger.info("Running in development mode with Flask...")
-        app.run(host=host, port=port, debug=debug, threaded=True)
+    return jsonify({"status": "Simulation triggered", "capability": cap['name'], "level": level})
 
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    init_db()
+    app.run(host='0.0.0.0', port=5000, debug=False)
