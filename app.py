@@ -14,12 +14,15 @@ from concurrent.futures import ThreadPoolExecutor
 # Configuration
 app = Flask(__name__)
 CORS(app)
-app.config['SECRET_KEY'] = 'your-secret-key'
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'your-secret-key')
 app.config['DATABASE'] = 'trading_system.db'
 app.config['LOG_DIR'] = 'capabilities_logs'
-app.config['LLM_API_KEY'] = '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'
+app.config['LLM_API_KEY'] = os.getenv('GROQ_API_KEY')  # Load from environment variable
 app.config['LLM_API_URL'] = 'https://api.groq.com/openai/v1/chat/completions'
 app.config['LLM_MODEL'] = 'groq/compound'
+
+if not app.config['LLM_API_KEY']:
+    logger.warning("GROQ_API_KEY not found in environment variables. LLM features will be disabled.")
 
 # Ensure log directory exists
 os.makedirs(app.config['LOG_DIR'], exist_ok=True)
