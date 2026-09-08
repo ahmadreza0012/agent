@@ -731,6 +731,7 @@ HTML_TEMPLATE = '''
         <div class="controls">
             <button class="refresh-btn" onclick="refreshData()">🔄 بروزرسانی</button>
             <button class="refresh-btn" onclick="simulateActivity()">🎲 شبیه‌سازی فعالیت</button>
+            <button class="refresh-btn" style="background: rgba(74, 222, 128, 0.3);" onclick="copyAllLogsAndAnalysis()">📋 کپی تمام لاگ‌ها و تحلیل‌های LLM</button>
         </div>
         
         <div id="capabilities-container">
@@ -879,6 +880,86 @@ HTML_TEMPLATE = '''
                 setTimeout(refreshData, 500);
             } catch (error) {
                 console.error('Error simulating activity:', error);
+            }
+        }
+        
+        async function copyAllLogsAndAnalysis() {
+            try {
+                const response = await fetch('/api/data');
+                const data = await response.json();
+                
+                let clipboardText = "📊 گزارش کامل لاگ‌ها و تحلیل‌های LLM\n";
+                clipboardText += `تاریخ گزارش: ${new Date().toLocaleString('fa-IR')}\n`;
+                clipboardText += "================================================\n\n";
+                
+                // افزودن ارزیابی‌های دسته‌بندی
+                if (data.category_evaluations) {
+                    clipboardText += "📋 ارزیابی‌های LLM برای هر دسته‌بندی:\n";
+                    clipboardText += "================================================\n";
+                    for (const [catKey, evaluation] of Object.entries(data.category_evaluations)) {
+                        const catName = data.capabilities_structure[catKey]?.name || catKey;
+                        clipboardText += `\n📂 دسته‌بندی: ${catName}\n`;
+                        clipboardText += "------------------------------------------------\n";
+                        if (evaluation) {
+                            clipboardText += `   وضعیت: ${evaluation.status || 'نامشخص'}\n`;
+                            clipboardText += `   تحلیل: ${evaluation.analysis || evaluation.llm_evaluation || 'تحلیلی موجود نیست'}\n`;
+                            if (evaluation.issues) clipboardText += `   مشکلات: ${JSON.stringify(evaluation.issues)}\n`;
+                            if (evaluation.recommendations) clipboardText += `   پیشنهادات: ${JSON.stringify(evaluation.recommendations)}\n`;
+                        } else {
+                            clipboardText += "   ⚠️ هیچ ارزیابی برای این دسته‌بندی موجود نیست\n";
+                        }
+                        clipboardText += "\n";
+                    }
+                }
+                
+                // افزودن لاگ‌های هر قابلیت
+                const categories = {};
+                for (const [capId, capData] of Object.entries(data.capabilities_status)) {
+                    for (const [catKey, catData] of Object.entries(data.capabilities_structure)) {
+                        for (const cap of catData.capabilities) {
+                            if (cap.id === capId) {
+                                if (!categories[catKey]) categories[catKey] = [];
+                                categories[catKey].push({
+                                    id: capId,
+                                    name: cap.name,
+                                    icon: cap.icon,
+                                    status: capData.status,
+                                    logs: capData.logs || []
+                                });
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                for (const [catKey, caps] of Object.entries(categories)) {
+                    const catName = data.capabilities_structure[catKey]?.name || catKey;
+                    clipboardText += `\n📂 دسته‌بندی: ${catName}\n`;
+                    clipboardText += "------------------------------------------------\n";
+                    caps.forEach(cap => {
+                        if (cap.logs && cap.logs.length > 0) {
+                            clipboardText += `\n🔹 قابلیت: ${cap.name} (${cap.icon})\n`;
+                            clipboardText += `   وضعیت فعلی: ${cap.status}\n`;
+                            cap.logs.forEach(log => {
+                                clipboardText += `   └─ [${log.timestamp}] ${log.message}\n`;
+                                if (log.llm_analysis) {
+                                    clipboardText += `      🤖 تحلیل LLM: ${log.llm_analysis}\n`;
+                                }
+                            });
+                        }
+                    });
+                    clipboardText += "\n";
+                }
+                
+                navigator.clipboard.writeText(clipboardText).then(() => {
+                    alert('✅ تمام لاگ‌ها، تحلیل‌های LLM و ارزیابی‌های دسته‌بندی با موفقیت کپی شدند!');
+                }).catch(err => {
+                    console.error('خطا در کپی:', err);
+                    alert('❌ خطا در کپی کردن متن.');
+                });
+            } catch (error) {
+                console.error('خطا در دریافت داده‌ها:', error);
+                alert('❌ خطا در دریافت داده‌ها برای کپی.');
             }
         }
         
