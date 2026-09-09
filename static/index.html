@@ -752,40 +752,65 @@
         // Copy all logs and LLM analysis
         async function copyAllLogsAndAnalysis() {
             try {
-                const response = await fetch(`${API_BASE}/data`);
-                const data = await response.json();
+                // Fetch dashboard data
+                const dashboardResponse = await fetch(`${API_BASE}/v1/capabilities/dashboard`);
+                const dashboardData = await dashboardResponse.json();
                 
                 let clipboardText = "=== گزارش کامل لاگ‌ها و تحلیل‌های LLM ===\n";
                 clipboardText += `تاریخ گزارش: ${new Date().toLocaleString('fa-IR')}\n`;
-                clipboardText += `تعداد کل قابلیت‌ها: ${data.total_capabilities}\n`;
-                clipboardText += `خلاصه وضعیت: سالم=${data.summary.healthy}, کاهشی=${data.summary.degraded}, ناموفق=${data.summary.failing}\n\n`;
+                clipboardText += `تعداد کل قابلیت‌ها: ${dashboardData.total_capabilities}\n`;
+                clipboardText += `خلاصه وضعیت: سالم=${dashboardData.summary.healthy}, کاهشی=${dashboardData.summary.degraded}, ناموفق=${dashboardData.summary.failing}\n\n`;
                 
-                for (const [categoryKey, categoryData] of Object.entries(data.categories)) {
+                // Fetch logs for each capability
+                for (const [categoryKey, capabilities] of Object.entries(dashboardData.categories)) {
                     clipboardText += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
                     clipboardText += `دسته‌بندی: ${categoryNames[categoryKey] || categoryKey}\n`;
-                    clipboardText += `تعداد قابلیت‌ها: ${categoryData.count}\n`;
+                    clipboardText += `تعداد قابلیت‌ها: ${capabilities.length}\n`;
                     clipboardText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
                     
-                    for (const capability of categoryData.capabilities) {
-                        const capName = capabilityNames[capability.id] || capability.id;
+                    for (const cap of capabilities) {
+                        const capName = capabilityNames[cap.capability] || cap.capability;
+                        
+                        // Fetch logs for this capability
+                        let logs = [];
+                        try {
+                            const logsResponse = await fetch(`${API_BASE}/v1/capabilities/${cap.capability}/logs?limit=50`);
+                            if (logsResponse.ok) {
+                                logs = await logsResponse.json();
+                            }
+                        } catch (logError) {
+                            console.error(`Error fetching logs for ${cap.capability}:`, logError);
+                        }
+                        
                         clipboardText += `┌─────────────────────────────────────\n`;
                         clipboardText += `│ قابلیت: ${capName}\n`;
-                        clipboardText += `│ وضعیت: ${capability.status}\n`;
-                        clipboardText += `│ تعداد لاگ: ${capability.log_count}\n`;
+                        clipboardText += `│ وضعیت: ${cap.status}\n`;
+                        clipboardText += `│ تعداد لاگ: ${logs.length}\n`;
                         clipboardText += `└─────────────────────────────────────\n`;
                         
-                        if (capability.logs && capability.logs.length > 0) {
-                            for (const log of capability.logs) {
+                        if (logs && logs.length > 0) {
+                            for (const log of logs.slice(-10)) {
                                 clipboardText += `\n  📝 لاگ:\n`;
                                 clipboardText += `     زمان: ${log.timestamp}\n`;
                                 clipboardText += `     وضعیت: ${log.status}\n`;
                                 clipboardText += `     پیام: ${log.message}\n`;
                                 
-                                if (log.llm_analysis) {
-                                    clipboardText += `\n  🤖 تحلیل LLM:\n`;
-                                    clipboardText += `     نتیجه‌گیری: ${log.llm_analysis.conclusion || 'ندارد'}\n`;
-                                    clipboardText += `     ریسک: ${log.llm_analysis.risk_level || 'نامشخص'}\n`;
-                                    clipboardText += `     توصیه: ${log.llm_analysis.recommendation || 'ندارد'}\n`;
+                                // Fetch LLM analysis if available
+                                if (log.status === 'success' || log.status === 'warning' || log.status === 'error') {
+                                    try {
+                                        const analysisResponse = await fetch(`${API_BASE}/v1/capabilities/${cap.capability}/analysis`);
+                                        if (analysisResponse.ok) {
+                                            const analysis = await analysisResponse.json();
+                                            if (analysis) {
+                                                clipboardText += `\n  🤖 تحلیل LLM:\n`;
+                                                clipboardText += `     نتیجه‌گیری: ${analysis.analysis || 'ندارد'}\n`;
+                                                clipboardText += `     ریسک: ${analysis.risk_level || 'نامشخص'}\n`;
+                                                clipboardText += `     توصیه: ${analysis.recommendation || 'ندارد'}\n`;
+                                            }
+                                        }
+                                    } catch (analysisError) {
+                                        // Ignore analysis errors
+                                    }
                                 }
                                 clipboardText += `\n`;
                             }
@@ -799,8 +824,29 @@
                 clipboardText += `پایان گزارش\n`;
                 clipboardText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
                 
-                await navigator.clipboard.writeText(clipboardText);
-                alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!');
+                // Use Clipboard API with fallback
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(clipboardText);
+                    alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!');
+                } else {
+                    // Fallback for older browsers
+                    const textArea = document.createElement('textarea');
+                    textArea.value = clipboardText;
+                    textArea.style.position = 'fixed';
+                    textArea.style.left = '-999999px';
+                    textArea.style.top = '-999999px';
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!');
+                    } catch (err) {
+                        console.error('خطا در کپی:', err);
+                        alert('❌ خطا در کپی کردن متن. لطفاً به صورت دستی کپی کنید.');
+                    }
+                    document.body.removeChild(textArea);
+                }
                 
             } catch (error) {
                 console.error('Error copying logs:', error);
