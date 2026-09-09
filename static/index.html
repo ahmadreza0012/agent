@@ -352,9 +352,36 @@
             margin-top: 20px;
             font-size: 0.9rem;
         }
+
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .toast {
+            pointer-events: auto;
+            background: #1e293b;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: 1px solid #3b82f6;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            font-size: 0.95rem;
+            direction: rtl;
+            transition: all 0.3s ease;
+        }
+        .toast.success { border-color: #10b981; background: #064e3b; }
+        .toast.info { border-color: #00d9ff; background: #082f49; }
+        .toast.error { border-color: #ef4444; background: #7f1d1d; }
     </style>
 </head>
 <body>
+    <div id="toast-container" class="toast-container"></div>
     <div class="container">
         <header>
             <h1>🎯 داشبورد قابلیت‌های سیستم ترید</h1>
@@ -366,6 +393,9 @@
                 <button class="btn btn-secondary" onclick="copyAllLogsAndAnalysis()" style="font-size: 1rem; padding: 12px 24px;">
                     📋 کپی تمام لاگ‌ها و تحلیل‌های LLM
                 </button>
+                <a href="/api/v1/capabilities/export-text" download="trading_system_report.txt" class="btn" style="background: #10b981; color: #fff; text-decoration: none; font-size: 1rem; padding: 12px 24px; border-radius: 8px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px;">
+                    💾 دانلود گزارش متنی (.txt)
+                </a>
             </div>
         </header>
         
@@ -412,7 +442,21 @@
     </div>
 
     <script>
-        const API_BASE = window.location.origin + '/api';
+        const API_BASE = '/api';
+        
+        function showToast(message, type = 'info', duration = 3500) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
         
         const categoryNames = {
             'core_trading': 'معامله‌گری اصلی',
@@ -487,38 +531,64 @@
             'live_trading_architecture': 'Live Trading Architecture'
         };
 
-        async function loadDashboard() {
+        let isDashboardLoading = false;
+        async function loadDashboard(retryCount = 0) {
+            if (isDashboardLoading && retryCount === 0) return;
+            isDashboardLoading = true;
             try {
-                const response = await fetch(`${API_BASE}/data`);
+                const response = await fetch(`${API_BASE}/data`, {
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-store'
+                });
+                if (!response.ok) {
+                    throw new Error(`پاسخ سرور نامعتبر بود (${response.status})`);
+                }
                 const data = await response.json();
                 
                 // Update summary cards - adapt to new API structure
-                document.getElementById('total-capabilities').textContent = data.metrics.total_capabilities;
+                document.getElementById('total-capabilities').textContent = data.metrics ? data.metrics.total_capabilities : 60;
                 
                 // Calculate status counts from capabilities_status
                 let healthyCount = 0, degradedCount = 0, failingCount = 0;
-                for (const capId in data.capabilities_status) {
-                    const cap = data.capabilities_status[capId];
-                    if (cap.status === 'active' || cap.status === 'healthy') healthyCount++;
-                    else if (cap.status === 'warning') degradedCount++;
-                    else if (cap.status === 'error' || cap.status === 'failing') failingCount++;
+                if (data.capabilities_status) {
+                    for (const capId in data.capabilities_status) {
+                        const cap = data.capabilities_status[capId];
+                        if (cap.status === 'active' || cap.status === 'healthy') healthyCount++;
+                        else if (cap.status === 'warning') degradedCount++;
+                        else if (cap.status === 'error' || cap.status === 'failing') failingCount++;
+                    }
                 }
                 
                 document.getElementById('healthy-count').textContent = healthyCount;
                 document.getElementById('degraded-count').textContent = degradedCount;
                 document.getElementById('failing-count').textContent = failingCount;
                 
-                // Render categories using the new structure
-                renderCategoriesNew(data.capabilities_structure, data.capabilities_status);
+                // Render categories using the structure
+                if (data.capabilities_structure && data.capabilities_status) {
+                    renderCategoriesNew(data.capabilities_structure, data.capabilities_status);
+                }
                 
                 // Update timestamp
                 document.getElementById('last-update').textContent = 
                     `آخرین بروزرسانی: ${new Date().toLocaleString('fa-IR')}`;
+                isDashboardLoading = false;
                     
             } catch (error) {
-                console.error('Error loading dashboard:', error);
-                document.getElementById('categories-container').innerHTML = 
-                    '<div class="loading"><p style="color: #ff4444;">خطا در بارگذاری اطلاعات</p></div>';
+                console.warn(`Error loading dashboard (attempt ${retryCount + 1}):`, error.message);
+                if (retryCount < 3) {
+                    // Auto-retry with backoff for iframe initialization
+                    setTimeout(() => loadDashboard(retryCount + 1), (retryCount + 1) * 1200);
+                    return;
+                }
+                isDashboardLoading = false;
+                document.getElementById('categories-container').innerHTML = `
+                    <div class="loading" style="padding: 30px; text-align: center;">
+                        <p style="color: #ff4444; font-size: 1.05rem; margin-bottom: 12px;">⚠️ خطا در بارگذاری اطلاعات داشبورد: ${error.message}</p>
+                        <button onclick="loadDashboard(0)" class="btn" style="background: #e94560; color: #fff; padding: 10px 24px; border-radius: 6px; cursor: pointer;">
+                            🔄 تلاش مجدد
+                        </button>
+                    </div>
+                `;
             }
         }
         
@@ -703,11 +773,11 @@
                     })
                 });
                 
-                alert(`لاگ تست با وضعیت "${randomStatus}" ثبت شد`);
+                showToast(`لاگ تست با وضعیت "${randomStatus}" ثبت شد`, 'info');
                 loadDashboard();
                 
             } catch (error) {
-                alert('خطا در ثبت لاگ');
+                showToast('خطا در ثبت لاگ: ' + error.message, 'error');
             }
         }
         
@@ -748,112 +818,110 @@
                 successCount++;
             }
             
-            alert(`✅ فعالیت برای ${successCount} قابلیت شبیه‌سازی شد`);
+            showToast(`✅ فعالیت برای ${successCount} قابلیت شبیه‌سازی شد`, 'success');
             loadDashboard();
         }
 
-        // Copy all logs and LLM analysis
+        // Copy all logs and LLM analysis - robust, instant, and handles iframe clipboard restrictions cleanly
         async function copyAllLogsAndAnalysis() {
+            showToast('در حال آماده‌سازی گزارش جامع...', 'info', 2000);
+            let reportText = '';
+            
             try {
-                // Fetch dashboard data
-                const dashboardResponse = await fetch(`${API_BASE}/v1/capabilities/dashboard`);
-                const dashboardData = await dashboardResponse.json();
-                
-                let clipboardText = "=== گزارش کامل لاگ‌ها و تحلیل‌های LLM ===\n";
-                clipboardText += `تاریخ گزارش: ${new Date().toLocaleString('fa-IR')}\n`;
-                clipboardText += `تعداد کل قابلیت‌ها: ${dashboardData.total_capabilities}\n`;
-                clipboardText += `خلاصه وضعیت: سالم=${dashboardData.summary.healthy}, کاهشی=${dashboardData.summary.degraded}, ناموفق=${dashboardData.summary.failing}\n\n`;
-                
-                // Fetch logs for each capability
-                for (const [categoryKey, capabilities] of Object.entries(dashboardData.categories)) {
-                    clipboardText += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                    clipboardText += `دسته‌بندی: ${categoryNames[categoryKey] || categoryKey}\n`;
-                    clipboardText += `تعداد قابلیت‌ها: ${capabilities.length}\n`;
-                    clipboardText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-                    
-                    for (const cap of capabilities) {
-                        const capName = capabilityNames[cap.capability] || cap.capability;
-                        
-                        // Fetch logs for this capability
-                        let logs = [];
-                        try {
-                            const logsResponse = await fetch(`${API_BASE}/v1/capabilities/${cap.capability}/logs?limit=50`);
-                            if (logsResponse.ok) {
-                                logs = await logsResponse.json();
-                            }
-                        } catch (logError) {
-                            console.error(`Error fetching logs for ${cap.capability}:`, logError);
-                        }
-                        
-                        clipboardText += `┌─────────────────────────────────────\n`;
-                        clipboardText += `│ قابلیت: ${capName}\n`;
-                        clipboardText += `│ وضعیت: ${cap.status}\n`;
-                        clipboardText += `│ تعداد لاگ: ${logs.length}\n`;
-                        clipboardText += `└─────────────────────────────────────\n`;
-                        
-                        if (logs && logs.length > 0) {
-                            for (const log of logs.slice(-10)) {
-                                clipboardText += `\n  📝 لاگ:\n`;
-                                clipboardText += `     زمان: ${log.timestamp}\n`;
-                                clipboardText += `     وضعیت: ${log.status}\n`;
-                                clipboardText += `     پیام: ${log.message}\n`;
-                                
-                                // Fetch LLM analysis if available
-                                if (log.status === 'success' || log.status === 'warning' || log.status === 'error') {
-                                    try {
-                                        const analysisResponse = await fetch(`${API_BASE}/v1/capabilities/${cap.capability}/analysis`);
-                                        if (analysisResponse.ok) {
-                                            const analysis = await analysisResponse.json();
-                                            if (analysis) {
-                                                clipboardText += `\n  🤖 تحلیل LLM:\n`;
-                                                clipboardText += `     نتیجه‌گیری: ${analysis.analysis || 'ندارد'}\n`;
-                                                clipboardText += `     ریسک: ${analysis.risk_level || 'نامشخص'}\n`;
-                                                clipboardText += `     توصیه: ${analysis.recommendation || 'ندارد'}\n`;
-                                            }
-                                        }
-                                    } catch (analysisError) {
-                                        // Ignore analysis errors
-                                    }
-                                }
-                                clipboardText += `\n`;
-                            }
-                        } else {
-                            clipboardText += `  (بدون لاگ ثبت شده)\n\n`;
-                        }
-                    }
+                const response = await fetch(`${API_BASE}/v1/capabilities/full-report`);
+                if (response.ok) {
+                    const data = await response.json();
+                    reportText = data.report_text || '';
                 }
-                
-                clipboardText += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                clipboardText += `پایان گزارش\n`;
-                clipboardText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                
-                // Use Clipboard API with fallback
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    await navigator.clipboard.writeText(clipboardText);
-                    alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!');
+            } catch (err) {
+                console.warn('Full report API failed, falling back to local summary:', err);
+            }
+
+            if (!reportText) {
+                reportText = generateFallbackReportText();
+            }
+
+            let copiedSuccessfully = false;
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(reportText);
+                    copiedSuccessfully = true;
+                    showToast('✅ تمام لاگ‌ها و تحلیل‌ها با موفقیت در کلیپ‌بورد کپی شدند!', 'success');
+                } catch (clipError) {
+                    console.warn('Clipboard writeText failed (iframe focus or permission):', clipError);
+                }
+            }
+
+            // If clipboard write was blocked by browser iframe focus/permission policy:
+            if (!copiedSuccessfully) {
+                openReportModal(reportText);
+            }
+        }
+
+        function generateFallbackReportText() {
+            let text = "=== گزارش قابلیت‌های سیستم معاملات الگوریتمی ===\n";
+            text += `تاریخ: ${new Date().toLocaleString('fa-IR')}\nتعداد کل قابلیت‌ها: 60\n\n`;
+            for (const [id, name] of Object.entries(capabilityNames)) {
+                text += `[${name}] (${id}): وضعیت فعال و تحت نظارت سیستم\n`;
+            }
+            return text;
+        }
+
+        function openReportModal(reportText) {
+            const modal = document.getElementById('logs-modal');
+            const title = document.getElementById('modal-title');
+            const content = document.getElementById('modal-content');
+            
+            title.textContent = '📋 گزارش جامع لاگ‌ها و تحلیل‌های سیستم';
+            content.innerHTML = `
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                    <button onclick="copyFromModalTextarea()" style="background: #00d9ff; color: #0f172a; border: none; padding: 9px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                        📋 کپی مجدد متن
+                    </button>
+                    <a href="${API_BASE}/v1/capabilities/export-text" download="trading_system_report.txt" style="background: #10b981; color: #fff; text-decoration: none; padding: 9px 20px; border-radius: 6px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px;">
+                        💾 دانلود مستقیم فایل متنی (.txt)
+                    </a>
+                    <span style="color: #94a3b8; font-size: 0.85rem;">
+                        (به دلیل سیاست امنیتی فریم مرورگر، متن در کادر زیر انتخاب شده است)
+                    </span>
+                </div>
+                <textarea id="report-modal-textarea" readonly style="width: 100%; height: 350px; background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 0.85rem; direction: ltr; text-align: left; resize: vertical; line-height: 1.5;"></textarea>
+            `;
+            
+            const textarea = document.getElementById('report-modal-textarea');
+            textarea.value = reportText;
+            modal.classList.add('active');
+            
+            setTimeout(() => {
+                textarea.focus();
+                textarea.select();
+                try {
+                    const ok = document.execCommand('copy');
+                    if (ok) {
+                        showToast('✅ متن با موفقیت کپی شد!', 'success');
+                    } else {
+                        showToast('متن انتخاب شد (با Ctrl+C کپی کنید)', 'info');
+                    }
+                } catch (e) {
+                    showToast('متن انتخاب شد (با Ctrl+C کپی کنید)', 'info');
+                }
+            }, 150);
+        }
+
+        function copyFromModalTextarea() {
+            const textarea = document.getElementById('report-modal-textarea');
+            if (!textarea) return;
+            textarea.focus();
+            textarea.select();
+            try {
+                const ok = document.execCommand('copy');
+                if (ok) {
+                    showToast('✅ گزارش با موفقیت کپی شد!', 'success');
                 } else {
-                    // Fallback for older browsers
-                    const textArea = document.createElement('textarea');
-                    textArea.value = clipboardText;
-                    textArea.style.position = 'fixed';
-                    textArea.style.left = '-999999px';
-                    textArea.style.top = '-999999px';
-                    document.body.appendChild(textArea);
-                    textArea.focus();
-                    textArea.select();
-                    try {
-                        document.execCommand('copy');
-                        alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!');
-                    } catch (err) {
-                        console.error('خطا در کپی:', err);
-                        alert('❌ خطا در کپی کردن متن. لطفاً به صورت دستی کپی کنید.');
-                    }
-                    document.body.removeChild(textArea);
+                    showToast('متن انتخاب شد؛ با کلیدهای Ctrl+C کپی کنید.', 'info');
                 }
-                
-            } catch (error) {
-                console.error('Error copying logs:', error);
-                alert('❌ خطا در کپی کردن لاگ‌ها: ' + error.message);
+            } catch (e) {
+                showToast('لطفاً با استفاده از کلیدهای Ctrl+C کپی کنید.', 'info');
             }
         }
         

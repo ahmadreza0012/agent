@@ -427,6 +427,104 @@ app.get('/api/v1/capabilities/dashboard', (req, res) => {
   });
 });
 
+// GET /api/v1/capabilities/full-report - Aggregated full report in one instantaneous call
+app.get(['/api/v1/capabilities/full-report', '/api/report/full'], (req, res) => {
+  let reportText = "=== گزارش کامل لاگ‌ها و تحلیل‌های هوشمند سیستم ترید ===\n";
+  reportText += `تاریخ گزارش: ${new Date().toLocaleString('fa-IR')}\n`;
+  reportText += `تعداد کل قابلیت‌ها: 60\n`;
+
+  let healthy = 0, degraded = 0, failing = 0;
+  for (const cap of ALL_CAPS_LIST) {
+    const logs = inMemoryLogs.get(cap.id) || inMemoryLogs.get(cap.alias) || [];
+    const errors = logs.filter(l => l.event_type === 'error' || l.status === 'error').length;
+    const warnings = logs.filter(l => l.event_type === 'warning' || l.status === 'warning').length;
+    if (errors > 0) failing++;
+    else if (warnings > 0) degraded++;
+    else healthy++;
+  }
+  reportText += `خلاصه وضعیت: سالم=${healthy}، هشدار/کاهشی=${degraded}، ناموفق=${failing}\n\n`;
+
+  for (const [catKey, catData] of Object.entries(CAPABILITY_STRUCTURE)) {
+    reportText += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    reportText += `دسته‌بندی: ${catData.name} (${catKey})\n`;
+    reportText += `تعداد قابلیت‌ها: ${catData.capabilities.length}\n`;
+    reportText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    for (const cap of catData.capabilities) {
+      const logs = inMemoryLogs.get(cap.id) || inMemoryLogs.get(cap.alias) || [];
+      const analysis = inMemoryAnalysis.get(cap.id) || inMemoryAnalysis.get(cap.alias);
+      const errors = logs.filter(l => l.event_type === 'error' || l.status === 'error').length;
+      const warnings = logs.filter(l => l.event_type === 'warning' || l.status === 'warning').length;
+      const status = errors > 0 ? 'failing' : (warnings > 0 ? 'degraded' : 'healthy');
+
+      reportText += `┌─────────────────────────────────────\n`;
+      reportText += `│ قابلیت: ${cap.name} [${cap.id}]\n`;
+      reportText += `│ وضعیت: ${status}\n`;
+      reportText += `│ تعداد کل لاگ‌ها: ${logs.length}\n`;
+      reportText += `└─────────────────────────────────────\n`;
+
+      if (logs.length > 0) {
+        for (const log of logs.slice(-5)) {
+          reportText += `  📝 لاگ: [${new Date(log.timestamp).toLocaleString('fa-IR')}] [${(log.status || log.event_type || 'info').toUpperCase()}]: ${log.message}\n`;
+        }
+      } else {
+        reportText += `  (بدون لاگ ثبت شده)\n`;
+      }
+
+      if (analysis) {
+        reportText += `  🤖 تحلیل هوشمند:\n`;
+        reportText += `     نتیجه: ${analysis.analysis || 'نامشخص'}\n`;
+        reportText += `     سطح ریسک: ${analysis.risk_level || 'low'}\n`;
+        reportText += `     توصیه: ${analysis.recommendation || 'ندارد'}\n`;
+        reportText += `     اطمینان: ${Math.round((analysis.confidence || 0.9) * 100)}%\n`;
+      }
+      reportText += `\n`;
+    }
+  }
+
+  reportText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  reportText += `پایان گزارش جامع سیستم ترید\n`;
+  reportText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+
+  res.json({
+    success: true,
+    total_capabilities: 60,
+    summary: { healthy, degraded, failing },
+    report_text: reportText,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// GET /api/v1/capabilities/export-text - Downloadable raw text file
+app.get(['/api/v1/capabilities/export-text', '/api/report/download'], (req, res) => {
+  let reportText = "=== گزارش کامل لاگ‌ها و تحلیل‌های هوشمند سیستم ترید ===\n";
+  reportText += `تاریخ گزارش: ${new Date().toLocaleString('fa-IR')}\n`;
+  reportText += `تعداد کل قابلیت‌ها: 60\n\n`;
+
+  for (const [catKey, catData] of Object.entries(CAPABILITY_STRUCTURE)) {
+    reportText += `\n========================================\n`;
+    reportText += `دسته‌بندی: ${catData.name}\n`;
+    reportText += `========================================\n\n`;
+
+    for (const cap of catData.capabilities) {
+      const logs = inMemoryLogs.get(cap.id) || inMemoryLogs.get(cap.alias) || [];
+      const analysis = inMemoryAnalysis.get(cap.id) || inMemoryAnalysis.get(cap.alias);
+      reportText += `[${cap.name} - ${cap.id}]\n`;
+      if (analysis) {
+        reportText += `تحلیل: ${analysis.analysis}\nتوصیه: ${analysis.recommendation} (ریسک: ${analysis.risk_level})\n`;
+      }
+      for (const log of logs.slice(-5)) {
+        reportText += `  - ${log.timestamp} [${log.status}]: ${log.message}\n`;
+      }
+      reportText += `\n`;
+    }
+  }
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="trading_system_report.txt"');
+  res.send(reportText);
+});
+
 // GET capabilities structure
 app.get(['/api/capabilities', '/api/v1/capabilities'], (req, res) => {
   res.json(CAPABILITY_STRUCTURE);
