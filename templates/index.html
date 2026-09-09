@@ -181,8 +181,34 @@
                     });
                     clipboardText += "\n";
                 }
-                navigator.clipboard.writeText(clipboardText).then(() => { alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!'); }).catch(err => { console.error('خطا در کپی:', err); alert('❌ خطا در کپی کردن متن.'); });
-            } catch (error) { console.error('خطا در دریافت داده‌ها:', error); alert('❌ خطا در دریافت داده‌ها برای کپی.'); }
+                
+                // روش اول: استفاده از Clipboard API
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(clipboardText);
+                    alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!');
+                } else {
+                    // روش دوم: fallback برای مرورگرهای قدیمی‌تر
+                    const textArea = document.createElement('textarea');
+                    textArea.value = clipboardText;
+                    textArea.style.position = 'fixed';
+                    textArea.style.left = '-999999px';
+                    textArea.style.top = '-999999px';
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        alert('✅ تمام لاگ‌ها و تحلیل‌های LLM با موفقیت کپی شدند!');
+                    } catch (err) {
+                        console.error('خطا در کپی:', err);
+                        alert('❌ خطا در کپی کردن متن. لطفاً به صورت دستی کپی کنید.');
+                    }
+                    document.body.removeChild(textArea);
+                }
+            } catch (error) { 
+                console.error('خطا در کپی:', error); 
+                alert('❌ خطا در کپی کردن: ' + error.message); 
+            }
         }
         
         fetchData();
