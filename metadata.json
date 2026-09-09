@@ -1,0 +1,8 @@
+{
+  "name": "Crypto Trading Bot Dashboard",
+  "description": "نظارت بلادرنگ بر ۶۰ قابلیت ربات معاملاتی کریپتو همراه با تحلیل هوشمند و لاگ‌های اختصاصی",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
