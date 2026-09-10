@@ -6,6 +6,17 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { executeCapabilityDomain, CAPABILITY_HANDLERS } from './capability_engine.js';
 import { paperRouter } from './paper_exchange_engine.js';
+import { mcpRouter } from './mcp_server.js';
+import {
+  getDatabaseStats,
+  getClosedTrades,
+  getOrders,
+  getCapabilityExecutions,
+  getTrainingEpochs,
+  getAgentCycles
+} from './trading_db_manager.js';
+import { agentLearner } from './self_improving_agent.js';
+import { evaluateMarketWith60Features } from './sixty_features_quant_engine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1228,6 +1239,107 @@ app.post('/api/v1/api-keys/ping-test', async (req, res) => {
 // Mount Real-time Paper Trading & Virtual Exchange API
 app.use('/api/v1/paper', paperRouter);
 app.use('/api/paper', paperRouter);
+
+// Mount Model Context Protocol (MCP) Router
+app.use('/api/v1/mcp', mcpRouter);
+app.use('/api/mcp', mcpRouter);
+
+// Database persistence endpoints
+app.get('/api/v1/database/stats', (req, res) => {
+  try {
+    const stats = getDatabaseStats();
+    res.json({ success: true, stats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/v1/database/trades', (req, res) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+    const trades = getClosedTrades(limit);
+    res.json({ success: true, count: trades.length, trades });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/v1/database/orders', (req, res) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+    const orders = getOrders(limit);
+    res.json({ success: true, count: orders.length, orders });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/v1/database/capability-executions', (req, res) => {
+  try {
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 60));
+    const capabilityId = req.query.capability_id || null;
+    const executions = getCapabilityExecutions(limit, capabilityId);
+    res.json({ success: true, count: executions.length, executions });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/v1/database/cycles', (req, res) => {
+  try {
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+    const cycles = getAgentCycles(limit);
+    res.json({ success: true, count: cycles.length, cycles });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Self-improving Agent & LLM Evolution endpoints
+app.get('/api/v1/agent/evolution', (req, res) => {
+  try {
+    const status = agentLearner.getStatus();
+    const dbStats = getDatabaseStats();
+    res.json({ success: true, agent: status, database: dbStats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/v1/agent/train', (req, res) => {
+  try {
+    const notes = req.body?.notes || 'آموزش دستی نسل جدید از طریق داشبورد توسعه ایجنت';
+    const trainResult = agentLearner.trainNextGeneration({ notes });
+    res.json({ success: true, result: trainResult, agent: agentLearner.getStatus() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/v1/agent/features-weights', (req, res) => {
+  try {
+    res.json({
+      success: true,
+      generation: agentLearner.generationId,
+      weights: agentLearner.featureWeights,
+      conviction_threshold: agentLearner.convictionThreshold,
+      risk_multiplier: agentLearner.riskMultiplier
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/v1/agent/60-features/evaluate', async (req, res) => {
+  try {
+    const symbol = req.body?.symbol || 'BTC/USDT';
+    const price = Number(req.body?.price) || 78500;
+    const result = await evaluateMarketWith60Features(symbol, price);
+    res.json({ success: true, evaluation: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Catch-all for other /api routes
 app.use('/api', (req, res) => {

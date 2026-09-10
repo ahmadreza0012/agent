@@ -14,6 +14,9 @@
  */
 
 import express from 'express';
+import { recordOrder, recordClosedTrade, getClosedTrades, getDatabaseStats } from './trading_db_manager.js';
+import { evaluateMarketWith60Features } from './sixty_features_quant_engine.js';
+import { agentLearner } from './self_improving_agent.js';
 
 export const paperRouter = express.Router();
 
@@ -209,7 +212,7 @@ export const PAPER_ACCOUNT = {
   trades: [],
   bot: {
     enabled: false,
-    strategy: 'EMA_CROSS', // 'EMA_CROSS' | 'RSI_REVERSION' | 'MACD_MOMENTUM' | 'BOLLINGER_BREAKOUT'
+    strategy: '60_FEATURES_CONSENSUS', // '60_FEATURES_CONSENSUS' | 'EMA_CROSS' | 'RSI_REVERSION' | 'MACD_MOMENTUM' | 'BOLLINGER_BREAKOUT'
     symbol: 'BTC/USDT',
     leverage: 5,
     risk_pct_per_trade: 8,
@@ -221,7 +224,7 @@ export const PAPER_ACCOUNT = {
 };
 
 // Seed initial sample historical trade for realistic stats
-PAPER_ACCOUNT.trades.push({
+const initialSeedTrade = {
   id: 'tr_sample_01',
   symbol: 'BTC/USDT',
   side: 'LONG',
@@ -236,8 +239,16 @@ PAPER_ACCOUNT.trades.push({
   opened_at: new Date(Date.now() - 7200000).toISOString(),
   closed_at: new Date(Date.now() - 3600000).toISOString(),
   close_reason: 'TAKE_PROFIT'
-});
+};
+PAPER_ACCOUNT.trades.push(initialSeedTrade);
 PAPER_ACCOUNT.cash_balance += 130.85;
+
+// Also ensure initial seed trade is persisted in SQLite
+try {
+  recordClosedTrade(initialSeedTrade);
+} catch (seedErr) {
+  console.warn('Initial SQLite seed trade:', seedErr.message);
+}
 
 // Update PnL of all open positions based on live prices
 function updatePositionsPnL() {
@@ -363,6 +374,14 @@ export function openPaperPosition({
   };
 
   PAPER_ACCOUNT.positions.unshift(newPos);
+
+  // Persist order in SQLite database
+  try {
+    recordOrder(newPos);
+  } catch (dbErr) {
+    console.warn('Failed to persist order in SQLite:', dbErr.message);
+  }
+
   return newPos;
 }
 
@@ -410,6 +429,17 @@ export function executeClosePosition(positionId, reason = 'MANUAL') {
 
   PAPER_ACCOUNT.trades.unshift(closedTrade);
   PAPER_ACCOUNT.positions.splice(idx, 1);
+
+  // Persist closed trade into SQLite database and trigger self-improvement
+  try {
+    recordClosedTrade(closedTrade);
+    // Reinforcement learning feedback update on completed trade
+    agentLearner.trainNextGeneration({
+      notes: `یادگیری خودکار از معامله بسته شده ${closedTrade.symbol} (${closedTrade.side}) سود/زیان: ${closedTrade.net_pnl} USDT`
+    });
+  } catch (dbErr) {
+    console.warn('Failed to persist closed trade in SQLite:', dbErr.message);
+  }
 
   return closedTrade;
 }
@@ -628,6 +658,28 @@ function calculateRSI(values, period = 14) {
   return 100 - (100 / (1 + rs));
 }
 
+function computeBollingerBands(closes, period = 20, multiplier = 2) {
+  const upper = [];
+  const middle = [];
+  const lower = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (i < period - 1) {
+      middle.push(closes[i]);
+      upper.push(closes[i]);
+      lower.push(closes[i]);
+      continue;
+    }
+    const slice = closes.slice(i - period + 1, i + 1);
+    const mean = slice.reduce((a, b) => a + b, 0) / period;
+    const variance = slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / period;
+    const stdDev = Math.sqrt(variance);
+    middle.push(+mean.toFixed(2));
+    upper.push(+(mean + multiplier * stdDev).toFixed(2));
+    lower.push(+(mean - multiplier * stdDev).toFixed(2));
+  }
+  return { upper, middle, lower };
+}
+
 // Generate realistic Order Book depth for symbols
 function generateOrderBook(symbolId) {
   const ticker = MARKET_TICKERS.get(symbolId) || { price: 78000, tickDecimals: 2 };
@@ -660,44 +712,187 @@ function generateOrderBook(symbolId) {
 // ROUTER DEFINITIONS
 // ==========================================
 
+// Helper function for candle calculation and technical indicators
+export function getCandlesAndIndicators(symbol = 'BTC/USDT', limit = 65) {
+  const allCandles = CANDLE_HISTORY.get(symbol) || [];
+  const list = limit ? allCandles.slice(-limit) : allCandles;
+  const closes = list.map(c => c.close);
+  const ema9 = calculateEMA(closes, 9);
+  const ema21 = calculateEMA(closes, 21);
+  const rsi = closes.map((_, idx) => calculateRSI(closes.slice(0, idx + 1), 14));
+  const bb = computeBollingerBands(closes, 20, 2);
+
+  const lastClose = closes[closes.length - 1] || 0;
+  const lastEma9 = ema9[ema9.length - 1] || lastClose;
+  const lastEma21 = ema21[ema21.length - 1] || lastClose;
+  const lastRsi = rsi[rsi.length - 1] || 50;
+  const lastUpper = bb.upper[bb.upper.length - 1] || lastClose;
+  const lastLower = bb.lower[bb.lower.length - 1] || lastClose;
+
+  // Agent verdict & technical breakdown
+  const isBullishEma = lastEma9 > lastEma21;
+  const rsiCondition = lastRsi < 35 ? 'اشباع فروش (آماده جهش صعودی)' : (lastRsi > 65 ? 'اشباع خرید (احتمال اصلاح)' : 'خنثی و متعادل');
+  
+  let agentSignal = 'NEUTRAL / پایش';
+  let agentReason = 'رصد و پایش وضعیت اندیکاتورها بدون شکست سطوح کلیدی';
+
+  if (isBullishEma && lastRsi < 65) {
+    agentSignal = 'خرید (LONG)';
+    agentReason = `تقاطع صعودی میانگین متحرک EMA(9) از EMA(21) با مقدار RSI=${lastRsi.toFixed(1)}؛ تایید مومنتوم خریداران`;
+  } else if (!isBullishEma && lastRsi > 35) {
+    agentSignal = 'فروش (SHORT)';
+    agentReason = `فشار فروش و تقاطع نزولی EMA(9) به زیر EMA(21) با مقدار RSI=${lastRsi.toFixed(1)}؛ تایید سیگنال اصلاحی`;
+  }
+
+  // Get active and closed trades for this symbol
+  const symbolTrades = [
+    ...PAPER_ACCOUNT.positions.filter(p => p.symbol === symbol).map(p => ({
+      id: p.id,
+      side: p.side,
+      type: 'OPEN_POSITION',
+      entry_price: p.entry_price,
+      size: p.size,
+      leverage: p.leverage,
+      time: new Date(p.created_at).getTime(),
+      pnl: p.unrealized_pnl
+    })),
+    ...PAPER_ACCOUNT.trades.filter(t => t.symbol === symbol).slice(0, 10).map(t => ({
+      id: t.id,
+      side: t.side,
+      type: 'CLOSED_TRADE',
+      entry_price: t.entry_price,
+      exit_price: t.exit_price,
+      size: t.size,
+      time: new Date(t.closed_at).getTime(),
+      pnl: t.net_pnl,
+      reason: t.close_reason
+    }))
+  ];
+
+  return {
+    symbol,
+    candles: list,
+    indicators: {
+      ema9,
+      ema21,
+      rsi,
+      bollinger: bb,
+      latest: {
+        price: lastClose,
+        ema9: +lastEma9.toFixed(2),
+        ema21: +lastEma21.toFixed(2),
+        rsi: +lastRsi.toFixed(1),
+        bb_upper: lastUpper,
+        bb_lower: lastLower,
+        trend: isBullishEma ? 'صعودی (Bullish)' : 'نزولی (Bearish)',
+        rsi_state: rsiCondition,
+        agent_signal: agentSignal,
+        agent_reason: agentReason,
+        observer_mode: true
+      }
+    },
+    trades: symbolTrades
+  };
+}
+
+// GET unified terminal bundle (all exchange state in a single fast atomic request)
+paperRouter.get(['/bundle', '/terminal-bundle', '/state'], (req, res) => {
+  try {
+    const symbol = req.query.symbol || 'BTC/USDT';
+    const limit = parseInt(req.query.limit) || 65;
+    const candlesData = getCandlesAndIndicators(symbol, limit);
+    updatePositionsPnL();
+    const accountSummary = getAccountSummary();
+    const ob = generateOrderBook(symbol);
+    const agentLogs = (PAPER_ACCOUNT.bot.logs || []).map(l => {
+      let action = 'SCAN';
+      if (l.message.includes('خرید') || l.message.includes('LONG')) action = 'BUY';
+      else if (l.message.includes('فروش') || l.message.includes('SHORT')) action = 'SELL';
+      else if (l.message.includes('سیگنال')) action = 'SIGNAL';
+      return { timestamp: l.timestamp, action, message: l.message };
+    });
+
+    res.json({
+      success: true,
+      symbol,
+      candles: candlesData.candles,
+      indicators: candlesData.indicators,
+      trades: candlesData.trades,
+      account: accountSummary,
+      positions: PAPER_ACCOUNT.positions,
+      closed_trades: PAPER_ACCOUNT.trades.slice(0, 50),
+      orderbook: ob,
+      agent: {
+        status: PAPER_ACCOUNT.bot.enabled ? 'active' : 'idle',
+        enabled: PAPER_ACCOUNT.bot.enabled,
+        strategy: PAPER_ACCOUNT.bot.strategy || '60_FEATURES_CONSENSUS',
+        symbol: PAPER_ACCOUNT.bot.symbol || 'BTC/USDT',
+        leverage: PAPER_ACCOUNT.bot.leverage || 5,
+        risk_pct_per_trade: PAPER_ACCOUNT.bot.risk_pct_per_trade || 8,
+        last_evaluated: PAPER_ACCOUNT.bot.last_evaluated,
+        last_signal: PAPER_ACCOUNT.bot.last_signal,
+        thought_logs: agentLogs
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET all market tickers & exchange prices
-paperRouter.get('/market', (req, res) => {
-  const tickersList = Array.from(MARKET_TICKERS.values());
-  res.json({
-    success: true,
-    timestamp: new Date().toISOString(),
-    tickers: tickersList
-  });
+paperRouter.get(['/market', '/tickers'], (req, res) => {
+  try {
+    const tickersList = Array.from(MARKET_TICKERS.values());
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      tickers: tickersList
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // GET order book for symbol
 paperRouter.get('/orderbook', (req, res) => {
-  const symbol = req.query.symbol || 'BTC/USDT';
-  const ob = generateOrderBook(symbol);
-  res.json({ success: true, orderbook: ob });
+  try {
+    const symbol = req.query.symbol || 'BTC/USDT';
+    const ob = generateOrderBook(symbol);
+    res.json({ success: true, orderbook: ob });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-// GET candle history for chart
+// GET candle history and technical indicators for chart
 paperRouter.get('/candles', (req, res) => {
-  const symbol = req.query.symbol || 'BTC/USDT';
-  const list = CANDLE_HISTORY.get(symbol) || [];
-  res.json({
-    success: true,
-    symbol,
-    candles: list
-  });
+  try {
+    const symbol = req.query.symbol || 'BTC/USDT';
+    const limit = parseInt(req.query.limit) || 65;
+    const data = getCandlesAndIndicators(symbol, limit);
+    res.json({
+      success: true,
+      ...data
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // GET paper account status, balance, positions
 paperRouter.get('/account', (req, res) => {
-  updatePositionsPnL();
-  const summary = getAccountSummary();
-  res.json({
-    success: true,
-    account: summary,
-    positions: PAPER_ACCOUNT.positions,
-    trades: PAPER_ACCOUNT.trades.slice(0, 50)
-  });
+  try {
+    updatePositionsPnL();
+    const summary = getAccountSummary();
+    res.json({
+      success: true,
+      account: summary,
+      positions: PAPER_ACCOUNT.positions,
+      trades: PAPER_ACCOUNT.trades.slice(0, 50)
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // POST place a paper order
@@ -717,7 +912,7 @@ paperRouter.post('/order', (req, res) => {
 });
 
 // POST close single position
-paperRouter.post('/close-position', (req, res) => {
+paperRouter.post(['/close-position', '/position/close', '/close'], (req, res) => {
   try {
     const { position_id } = req.body;
     const closedTrade = executeClosePosition(position_id, 'MANUAL');
@@ -736,7 +931,7 @@ paperRouter.post('/close-position', (req, res) => {
 });
 
 // POST close all positions
-paperRouter.post('/close-all', (req, res) => {
+paperRouter.post(['/close-all', '/positions/close-all'], (req, res) => {
   try {
     const posIds = PAPER_ACCOUNT.positions.map(p => p.id);
     const closed = [];
@@ -766,7 +961,7 @@ paperRouter.post('/reset', (req, res) => {
 });
 
 // POST toggle auto-trading bot
-paperRouter.post('/bot-toggle', (req, res) => {
+paperRouter.post(['/bot-toggle', '/agent/toggle', '/bot/toggle'], (req, res) => {
   const { enabled, strategy, symbol, leverage, risk_pct } = req.body;
   if (typeof enabled === 'boolean') {
     PAPER_ACCOUNT.bot.enabled = enabled;
@@ -776,13 +971,108 @@ paperRouter.post('/bot-toggle', (req, res) => {
   if (leverage) PAPER_ACCOUNT.bot.leverage = parseInt(leverage) || 5;
   if (risk_pct) PAPER_ACCOUNT.bot.risk_pct_per_trade = parseFloat(risk_pct) || 8;
 
-  addBotLog(`تنظیمات ربات خودکار به‌روزرسانی شد: وضعیت=${PAPER_ACCOUNT.bot.enabled ? 'روشن' : 'خاموش'}, استراتژی=${PAPER_ACCOUNT.bot.strategy}`);
+  addBotLog(`تنظیمات ایجنت معامله‌گر به‌روزرسانی شد: وضعیت=${PAPER_ACCOUNT.bot.enabled ? 'روشن' : 'خاموش'}, استراتژی=${PAPER_ACCOUNT.bot.strategy}`);
 
   res.json({
     success: true,
-    message: `ربات معامله‌گر خودکار با پول غیرواقعی ${PAPER_ACCOUNT.bot.enabled ? 'فعال' : 'غیرفعال'} شد`,
+    message: `ایجنت معامله‌گر خودکار ${PAPER_ACCOUNT.bot.enabled ? 'فعال' : 'غیرفعال'} شد`,
     bot: PAPER_ACCOUNT.bot
   });
+});
+
+// GET agent status and thought logs
+paperRouter.get(['/agent/status', '/bot/status'], (req, res) => {
+  const logs = (PAPER_ACCOUNT.bot.logs || []).map(l => {
+    let action = 'SCAN';
+    if (l.message.includes('خرید') || l.message.includes('LONG')) action = 'BUY';
+    else if (l.message.includes('فروش') || l.message.includes('SHORT')) action = 'SELL';
+    else if (l.message.includes('سیگنال')) action = 'SIGNAL';
+    return {
+      timestamp: l.timestamp,
+      action,
+      message: l.message
+    };
+  });
+
+  res.json({
+    success: true,
+    status: PAPER_ACCOUNT.bot.enabled ? 'active' : 'idle',
+    enabled: PAPER_ACCOUNT.bot.enabled,
+    strategy: PAPER_ACCOUNT.bot.strategy || 'EMA_CROSS',
+    symbol: PAPER_ACCOUNT.bot.symbol || 'BTC/USDT',
+    leverage: PAPER_ACCOUNT.bot.leverage || 5,
+    risk_pct_per_trade: PAPER_ACCOUNT.bot.risk_pct_per_trade || 8,
+    last_evaluated: PAPER_ACCOUNT.bot.last_evaluated,
+    last_signal: PAPER_ACCOUNT.bot.last_signal,
+    thought_logs: logs
+  });
+});
+
+// POST trigger immediate agent evaluation step utilizing all 60 capabilities & self-improving weights
+paperRouter.post(['/agent/step', '/bot/step', '/agent/trigger'], async (req, res) => {
+  try {
+    const symbol = req.body?.symbol || PAPER_ACCOUNT.bot.symbol || 'BTC/USDT';
+    const ticker = MARKET_TICKERS.get(symbol);
+    const candles = CANDLE_HISTORY.get(symbol) || [];
+    const closes = candles.length > 0 ? candles.map(c => c.close) : [ticker?.price || 78000];
+    const currentPrice = closes[closes.length - 1] || ticker?.price || 78000;
+
+    // Execute comprehensive 60 domain capabilities quantitative consensus
+    const consensus60 = await evaluateMarketWith60Features(symbol, currentPrice, {
+      candles,
+      orderBook: { bids: [], asks: [] },
+      account: getAccountSummary()
+    });
+
+    const action = consensus60.overall_signal;
+    const reason = consensus60.decision_rationale;
+
+    addBotLog(`[تصمیم‌گیری ۶۰ ویژگی] ایجنت نسل ${consensus60.agent_generation} بازار را ارزیابی نمود: سیگنال ${action} (امتیاز اجماع: ${consensus60.composite_score})`);
+
+    // If forceTrade or bot enabled, execute order
+    let executedOrder = null;
+    if (req.body?.forceTrade || (PAPER_ACCOUNT.bot.enabled && action !== 'HOLD')) {
+      try {
+        const side = action === 'BUY' ? 'LONG' : (action === 'SELL' ? 'SHORT' : 'LONG');
+        const summary = getAccountSummary();
+        const tradeUsd = Math.max(100, summary.free_margin * (PAPER_ACCOUNT.bot.risk_pct_per_trade / 100));
+        const assetSize = +(tradeUsd / currentPrice).toFixed(4);
+
+        if (assetSize > 0 && summary.free_margin > 150) {
+          const sl = side === 'LONG' ? +(currentPrice * 0.985).toFixed(2) : +(currentPrice * 1.015).toFixed(2);
+          const tp = side === 'LONG' ? +(currentPrice * 1.035).toFixed(2) : +(currentPrice * 0.965).toFixed(2);
+          executedOrder = openPaperPosition({
+            symbol,
+            side,
+            type: 'MARKET',
+            size: assetSize,
+            leverage: PAPER_ACCOUNT.bot.leverage,
+            price: currentPrice,
+            stop_loss: sl,
+            take_profit: tp
+          });
+          addBotLog(`🤖 ورود خودکار بر اساس اجماع ۶۰ ویژگی: ${side} ${assetSize} ${symbol} به قیمت $${currentPrice.toLocaleString()}`);
+        }
+      } catch (tradeErr) {
+        addBotLog(`هشدار ایجنت هنگام ثبت پوزیشن: ${tradeErr.message}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      action,
+      reason,
+      price: currentPrice,
+      composite_score: consensus60.composite_score,
+      agent_generation: consensus60.agent_generation,
+      category_analysis: consensus60.category_analysis,
+      total_features_evaluated: consensus60.total_features_evaluated,
+      executed_order: executedOrder,
+      account: getAccountSummary()
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // GET closed trades history
