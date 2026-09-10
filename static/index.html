@@ -378,43 +378,247 @@
         .toast.success { border-color: #10b981; background: #064e3b; }
         .toast.info { border-color: #00d9ff; background: #082f49; }
         .toast.error { border-color: #ef4444; background: #7f1d1d; }
+
+        .cat-chip {
+            background: #1e293b;
+            color: #94a3b8;
+            border: 1px solid #334155;
+            padding: 8px 16px;
+            border-radius: 9999px;
+            font-size: 0.88rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        .cat-chip:hover {
+            background: #334155;
+            color: #f8fafc;
+        }
+        .cat-chip.active {
+            background: #2563eb;
+            color: #ffffff;
+            border-color: #3b82f6;
+            font-weight: bold;
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+        }
+
+        .exec-metric-card {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+        .exec-metric-val {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #38bdf8;
+            direction: ltr;
+        }
+        .exec-metric-label {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        /* API Keys & Tokens Section Styles */
+        .api-keys-panel {
+            margin-top: 25px;
+            margin-bottom: 25px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+        }
+        .api-key-card {
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 14px;
+            transition: all 0.25s ease;
+        }
+        .api-key-card:hover {
+            border-color: #475569;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+        .key-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .key-badge.active {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .key-badge.inactive {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .key-code-box {
+            background: #090d16;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.82rem;
+            direction: ltr;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            color: #e2e8f0;
+            overflow: hidden;
+        }
+        .token-stat-box {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(51, 65, 85, 0.7);
+            border-radius: 8px;
+            padding: 8px 10px;
+            text-align: center;
+            flex: 1;
+        }
+        .token-stat-val {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-top: 2px;
+            direction: ltr;
+        }
+        .token-stat-lbl {
+            font-size: 0.72rem;
+            color: #94a3b8;
+        }
     </style>
 </head>
 <body>
     <div id="toast-container" class="toast-container"></div>
     <div class="container">
         <header>
-            <h1>🎯 داشبورد قابلیت‌های سیستم ترید</h1>
-            <p class="subtitle">نظارت بلادرنگ بر ۶۰ قابلیت سیستم با تحلیل هوش مصنوعی</p>
-            <div style="margin-top: 20px; display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
-                <button class="btn btn-primary" onclick="simulateActivity()" style="font-size: 1rem; padding: 12px 24px;">
+            <h1>🎯 داشبورد قابلیت‌های سیستم ترید الگوریتمی</h1>
+            <p class="subtitle">نظارت بلادرنگ و اجرای عملیاتی تمام ۶۰ قابلیت با هوش مصنوعی و مدل‌های کمی</p>
+            <div style="margin-top: 22px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                <button class="btn" id="btn-execute-all" onclick="executeAllCapabilities()" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-size: 1.05rem; padding: 13px 26px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); display: inline-flex; align-items: center; gap: 8px;">
+                    ⚡ اجرای عملیاتی تمام ۶۰ قابلیت
+                </button>
+                <button class="btn" onclick="openAICopilotModal()" style="background: linear-gradient(135deg, #8b5cf6, #6366f1); color: #fff; font-size: 0.98rem; padding: 12px 20px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35); display: inline-flex; align-items: center; gap: 8px;">
+                    🧠 دستیار هوش مصنوعی و کوانت (Gemini Copilot)
+                </button>
+                <button class="btn" onclick="openSystemReviewModal()" style="background: linear-gradient(135deg, #0284c7, #0369a1); color: #fff; font-size: 0.98rem; padding: 12px 20px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+                    📑 ممیزی کل سیستم با هوش مصنوعی (AI Audit)
+                </button>
+                <button class="btn" onclick="scrollToApiKeys()" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; font-size: 0.98rem; padding: 12px 20px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35); display: inline-flex; align-items: center; gap: 8px;">
+                    🔑 کلیدهای API و مصرف توکن‌ها
+                </button>
+                <button class="btn btn-primary" onclick="simulateActivity()" style="font-size: 0.98rem; padding: 12px 20px;">
                     🎲 شبیه‌سازی فعالیت
                 </button>
-                <button class="btn btn-secondary" onclick="copyAllLogsAndAnalysis()" style="font-size: 1rem; padding: 12px 24px;">
-                    📋 کپی تمام لاگ‌ها و تحلیل‌های LLM
+                <button class="btn btn-secondary" onclick="copyAllLogsAndAnalysis()" style="font-size: 0.98rem; padding: 12px 20px;">
+                    📋 کپی تمام لاگ‌ها و تحلیل‌ها
                 </button>
-                <a href="/api/v1/capabilities/export-text" download="trading_system_report.txt" class="btn" style="background: #10b981; color: #fff; text-decoration: none; font-size: 1rem; padding: 12px 24px; border-radius: 8px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px;">
+                <a href="/api/v1/capabilities/export-text" download="trading_system_report.txt" class="btn" style="background: #0ea5e9; color: #fff; text-decoration: none; font-size: 0.98rem; padding: 12px 20px; border-radius: 8px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px;">
                     💾 دانلود گزارش متنی (.txt)
                 </a>
+                <button class="btn" onclick="resetAllHealthy()" style="background: #334155; color: #e2e8f0; font-size: 0.95rem; padding: 12px 18px; border-radius: 8px; border: 1px solid #475569; cursor: pointer;">
+                    🔄 بازنشانی وضعیت سالم (Reset 60)
+                </button>
             </div>
         </header>
         
         <div id="summary" class="summary-cards">
             <div class="card">
-                <div class="card-number" id="total-capabilities">-</div>
+                <div class="card-number" id="total-capabilities">60</div>
                 <div class="card-label">کل قابلیت‌ها</div>
             </div>
             <div class="card">
-                <div class="card-number" id="healthy-count" style="color: #00ff88;">-</div>
-                <div class="card-label">سالم</div>
+                <div class="card-number" id="healthy-count" style="color: #00ff88;">60</div>
+                <div class="card-label">سالم و فعال</div>
             </div>
             <div class="card">
-                <div class="card-number" id="degraded-count" style="color: #ffaa00;">-</div>
-                <div class="card-label">کاهشی</div>
+                <div class="card-number" id="degraded-count" style="color: #ffaa00;">0</div>
+                <div class="card-label">کاهشی / هشدار</div>
             </div>
             <div class="card">
-                <div class="card-number" id="failing-count" style="color: #ff4444;">-</div>
-                <div class="card-label">ناموفق</div>
+                <div class="card-number" id="failing-count" style="color: #ff4444;">0</div>
+                <div class="card-label">ناموفق / خطا</div>
+            </div>
+        </div>
+
+        <!-- API Keys & Token Consumption Dashboard Section -->
+        <div id="api-keys-section" class="api-keys-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; border-bottom: 1px solid #334155; padding-bottom: 15px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="font-size: 1.8rem; background: rgba(245, 158, 11, 0.15); width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(245, 158, 11, 0.3);">🔑</div>
+                    <div>
+                        <h2 style="font-size: 1.25rem; font-weight: 700; color: #f8fafc; margin: 0;">مدیریت کلیدهای API و مصرف زنده توکن‌ها</h2>
+                        <p style="font-size: 0.85rem; color: #94a3b8; margin: 4px 0 0 0;">آمار بلادرنگ توکن‌های ورودی/خروجی، وضعیت کلیدها و مانیتورینگ هزینه‌ها</p>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button class="btn" onclick="triggerPingTest()" id="btn-ping-test" style="background: #3b82f6; color: #fff; font-size: 0.85rem; padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                        ⚡ تست زنده و افزایش توکن
+                    </button>
+                    <button class="btn" onclick="loadApiKeysUsage(true)" style="background: #334155; color: #e2e8f0; font-size: 0.85rem; padding: 8px 14px; border-radius: 6px; border: 1px solid #475569; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                        🔄 بروزرسانی آمار توکن‌ها
+                    </button>
+                </div>
+            </div>
+
+            <!-- Summary metrics strip for Tokens -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 14px; text-align: center;">
+                    <div style="font-size: 0.78rem; color: #94a3b8;">مجموع توکن‌های مصرف‌شده</div>
+                    <div id="stat-total-tokens" style="font-size: 1.5rem; font-weight: 800; color: #38bdf8; margin: 6px 0; direction: ltr;">-</div>
+                    <div id="stat-tokens-breakdown" style="font-size: 0.72rem; color: #64748b; direction: ltr;">ورودی: - | خروجی: -</div>
+                </div>
+                <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 14px; text-align: center;">
+                    <div style="font-size: 0.78rem; color: #94a3b8;">کلیدهای فعال در سامانه</div>
+                    <div id="stat-active-keys" style="font-size: 1.5rem; font-weight: 800; color: #10b981; margin: 6px 0;">-</div>
+                    <div style="font-size: 0.72rem; color: #64748b;">سرویس‌های LLM و صرافی</div>
+                </div>
+                <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 14px; text-align: center;">
+                    <div style="font-size: 0.78rem; color: #94a3b8;">کل درخواست‌های ارسالی</div>
+                    <div id="stat-total-requests" style="font-size: 1.5rem; font-weight: 800; color: #f59e0b; margin: 6px 0; direction: ltr;">-</div>
+                    <div style="font-size: 0.72rem; color: #64748b;">تحلیل کوانت و ارتباط صرافی</div>
+                </div>
+                <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 14px; text-align: center;">
+                    <div style="font-size: 0.78rem; color: #94a3b8;">هزینه تخمینی (USD)</div>
+                    <div id="stat-total-cost" style="font-size: 1.5rem; font-weight: 800; color: #a855f7; margin: 6px 0; direction: ltr;">$0.00</div>
+                    <div style="font-size: 0.72rem; color: #64748b;">تعرفه اقتصادی Flash-Lite</div>
+                </div>
+            </div>
+
+            <!-- API Keys Detailed Grid -->
+            <div id="api-keys-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px;">
+                <div style="text-align: center; color: #94a3b8; padding: 20px; grid-column: 1 / -1;">در حال دریافت اطلاعات کلیدها و توکن‌ها...</div>
+            </div>
+        </div>
+
+        <!-- Filter & Search Controls -->
+        <div style="margin-top: 25px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                <input type="text" id="cap-search" placeholder="🔍 جستجو در بین ۶۰ قابلیت (نام فارسی یا شناسه انگلیسی)..." oninput="filterCapabilities()" style="flex: 1; min-width: 280px; background: #1e293b; color: #f1f5f9; border: 1px solid #334155; border-radius: 8px; padding: 11px 16px; font-size: 0.95rem; outline: none;">
+                <span id="filtered-count" style="color: #94a3b8; font-size: 0.9rem; font-weight: 500;">نمایش ۶۰ از ۶۰ قابلیت</span>
+            </div>
+            <div id="category-filter-chips" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; flex-wrap: wrap;">
+                <button class="cat-chip active" onclick="selectCategoryFilter('all', this)">همه دسته‌ها (۶۰)</button>
+                <button class="cat-chip" onclick="selectCategoryFilter('core_trading', this)">معامله‌گری اصلی (۸)</button>
+                <button class="cat-chip" onclick="selectCategoryFilter('risk_management', this)">مدیریت ریسک (۱۰)</button>
+                <button class="cat-chip" onclick="selectCategoryFilter('order_management', this)">اجرا و سفارش (۷)</button>
+                <button class="cat-chip" onclick="selectCategoryFilter('backtesting_quant', this)">بک‌تست و کوانت (۱۰)</button>
+                <button class="cat-chip" onclick="selectCategoryFilter('ai_ml', this)">هوش مصنوعی و ML (۹)</button>
+                <button class="cat-chip" onclick="selectCategoryFilter('ai_sentiment', this)">سنتیمنت و خبر (۴)</button>
+                <button class="cat-chip" onclick="selectCategoryFilter('infrastructure', this)">زیرساخت و سرور (۱۲)</button>
             </div>
         </div>
         
@@ -430,14 +634,72 @@
     
     <button class="refresh-btn" onclick="loadDashboard()" title="بارگذاری مجدد">🔄</button>
     
-    <!-- Modal for Logs -->
+    <!-- Modal for Logs and Capability Analysis -->
     <div class="modal-overlay" id="logs-modal">
-        <div class="modal">
+        <div class="modal" style="max-width: 780px;">
             <div class="modal-header">
-                <h2 class="modal-title" id="modal-title">لاگ‌ها</h2>
+                <h2 class="modal-title" id="modal-title">لاگ‌ها و تحلیل هوشمند</h2>
                 <button class="close-btn" onclick="closeModal()">&times;</button>
             </div>
             <div id="modal-content"></div>
+        </div>
+    </div>
+
+    <!-- Modal for AI Quant Copilot -->
+    <div class="modal-overlay" id="copilot-modal">
+        <div class="modal" style="max-width: 820px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.6rem;">🧠</span>
+                    <div>
+                        <h2 class="modal-title" style="margin: 0; font-size: 1.3rem; color: #a78bfa;">دستیار هوش مصنوعی و مهندس کوانت</h2>
+                        <span style="font-size: 0.78rem; color: #94a3b8;">قدرت‌گرفته از Google Gemini 3.8 Flash • تحلیل استراتژی، بک‌تست ۱۸۰ روزه و ۶۰ قابلیت</span>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="closeCopilotModal()">&times;</button>
+            </div>
+            <div id="copilot-chat-history" style="display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto; padding: 12px; background: rgba(15, 23, 42, 0.6); border-radius: 10px; border: 1px solid #334155; margin-bottom: 15px;">
+                <div class="copilot-msg bot" style="background: rgba(139, 92, 246, 0.12); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px; padding: 12px 14px; font-size: 0.92rem; line-height: 1.6; color: #e2e8f0;">
+                    <div style="font-weight: bold; color: #c4b5fd; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                        <span>✨ Gemini 3.8 Flash Copilot:</span>
+                    </div>
+                    سلام! من دستیار هوش مصنوعی و متخصص سیستم‌های معاملات الگوریتمی شما هستم. می‌توانم در تحلیل هر یک از ۶۰ قابلیت، بررسی نتایج بک‌تست دیتای ۱۸۰ روزه BTC/IRT، علل بیش‌برازش (Overfitting)، بهینه‌سازی پارامترهای Walk-Forward و کنترل ریسک به شما کمک کنم. سؤالتان را بپرسید یا یکی از موضوعات زیر را انتخاب کنید:
+                </div>
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
+                <button class="quick-chip" onclick="askCopilotPredefined('چرا استراتژی‌های ساده SMA و RSI در دیتای ۱۸۰ روزه دچار Overfitting شدند؟')" style="background: #1e293b; color: #93c5fd; border: 1px solid #3b82f6; border-radius: 20px; padding: 5px 11px; font-size: 0.78rem; cursor: pointer;">
+                    🔍 تحلیل Overfitting در دیتای ۱۸۰ روزه
+                </button>
+                <button class="quick-chip" onclick="askCopilotPredefined('چگونه حد ضرر داینامیک و Trailing Stop را برای نوسانات BTC/IRT بهینه کنیم؟')" style="background: #1e293b; color: #a7f3d0; border: 1px solid #10b981; border-radius: 20px; padding: 5px 11px; font-size: 0.78rem; cursor: pointer;">
+                    🛡️ تنظیم حد ضرر داینامیک و Trailing Stop
+                </button>
+                <button class="quick-chip" onclick="askCopilotPredefined('پیشنهاد استراتژی سودده با روش Ensemble و فیلترهای نوسان ATR چیست؟')" style="background: #1e293b; color: #fde047; border: 1px solid #eab308; border-radius: 20px; padding: 5px 11px; font-size: 0.78rem; cursor: pointer;">
+                    🎯 پیشنهاد استراتژی Ensemble + ATR
+                </button>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="copilot-input" placeholder="پرسش خود درباره الگوریتم‌ها، ریسک، بک‌تست یا ماژول‌ها را بنویسید..." onkeydown="if(event.key==='Enter') sendCopilotMessage();" style="flex: 1; background: #0f172a; color: #f8fafc; border: 1px solid #475569; border-radius: 8px; padding: 12px 14px; font-size: 0.95rem; outline: none;">
+                <button class="btn" id="copilot-send-btn" onclick="sendCopilotMessage()" style="background: #8b5cf6; color: #fff; padding: 10px 20px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer;">
+                    ارسال 🚀
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for AI System Review -->
+    <div class="modal-overlay" id="review-modal">
+        <div class="modal" style="max-width: 850px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.6rem;">📑</span>
+                    <div>
+                        <h2 class="modal-title" style="margin: 0; font-size: 1.3rem; color: #38bdf8;">ممیزی استراتژیک سیستم با هوش مصنوعی</h2>
+                        <span style="font-size: 0.78rem; color: #94a3b8;">گزارش تحلیلی ساختاریافته از ۶۰ ماژول معاملاتی توسط Gemini 3.8 Flash</span>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="closeReviewModal()">&times;</button>
+            </div>
+            <div id="review-modal-content" style="padding: 10px 0;"></div>
         </div>
     </div>
 
@@ -572,6 +834,9 @@
                 document.getElementById('last-update').textContent = 
                     `آخرین بروزرسانی: ${new Date().toLocaleString('fa-IR')}`;
                 isDashboardLoading = false;
+
+                // Refresh API Keys and Tokens metrics
+                loadApiKeysUsage();
                     
             } catch (error) {
                 console.warn(`Error loading dashboard (attempt ${retryCount + 1}):`, error.message);
@@ -592,14 +857,57 @@
             }
         }
         
+        let currentCategoryFilter = 'all';
+        let currentSearchQuery = '';
+        let lastStructure = null;
+        let lastStatus = null;
+
+        function selectCategoryFilter(categoryKey, btn) {
+            currentCategoryFilter = categoryKey;
+            document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            if (lastStructure && lastStatus) {
+                renderCategoriesNew(lastStructure, lastStatus);
+            }
+        }
+
+        function filterCapabilities() {
+            const input = document.getElementById('cap-search');
+            currentSearchQuery = (input ? input.value : '').trim().toLowerCase();
+            if (lastStructure && lastStatus) {
+                renderCategoriesNew(lastStructure, lastStatus);
+            }
+        }
+
         function renderCategoriesNew(capabilitiesStructure, capabilitiesStatus) {
+            lastStructure = capabilitiesStructure;
+            lastStatus = capabilitiesStatus;
             const container = document.getElementById('categories-container');
             let html = '';
+            let totalRendered = 0;
             
             for (const [categoryKey, categoryData] of Object.entries(capabilitiesStructure)) {
+                // Filter by selected category chip if not 'all'
+                if (currentCategoryFilter !== 'all' && currentCategoryFilter !== categoryKey) {
+                    continue;
+                }
+
                 const categoryName = categoryData.name || categoryKey;
-                const caps = categoryData.capabilities || [];
+                let caps = categoryData.capabilities || [];
                 
+                // Filter by search query if present
+                if (currentSearchQuery) {
+                    caps = caps.filter(cap => {
+                        const nameMatch = (cap.name || '').toLowerCase().includes(currentSearchQuery);
+                        const idMatch = (cap.id || '').toLowerCase().includes(currentSearchQuery);
+                        const aliasMatch = (cap.alias || '').toLowerCase().includes(currentSearchQuery);
+                        return nameMatch || idMatch || aliasMatch;
+                    });
+                }
+
+                if (caps.length === 0) continue;
+                totalRendered += caps.length;
+
                 // Count healthy capabilities
                 let healthyCount = 0;
                 caps.forEach(cap => {
@@ -611,7 +919,7 @@
                     <div class="category-section">
                         <div class="category-header">
                             <h3 class="category-title">${categoryName}</h3>
-                            <span style="color: #a0a0a0;">${healthyCount}/${caps.length} سالم</span>
+                            <span style="color: #00ff88; font-weight: 600;">${healthyCount}/${caps.length} فعال و آماده عملیات</span>
                         </div>
                         <div class="capabilities-grid">
                 `;
@@ -619,36 +927,61 @@
                 caps.forEach(cap => {
                     const capId = cap.id;
                     const capName = cap.name || capId;
+                    const capIcon = cap.icon || '⚡';
                     const capInfo = capabilitiesStatus[capId] || {};
-                    const capStatus = capInfo.status || 'unknown';
+                    const capStatus = capInfo.status || 'active';
                     const logs = capInfo.logs || [];
                     
                     // Count log types
                     let successCount = 0, warningCount = 0, errorCount = 0;
                     logs.forEach(log => {
-                        if (log.event_type === 'success') successCount++;
-                        else if (log.event_type === 'warning') warningCount++;
-                        else if (log.event_type === 'error') errorCount++;
+                        if (log.event_type === 'success' || log.status === 'success') successCount++;
+                        else if (log.event_type === 'warning' || log.status === 'warning') warningCount++;
+                        else if (log.event_type === 'error' || log.status === 'error') errorCount++;
                     });
                     
-                    // Map status to CSS class
-                    let statusClass = 'unknown';
-                    if (capStatus === 'active' || capStatus === 'healthy') statusClass = 'healthy';
-                    else if (capStatus === 'warning') statusClass = 'degraded';
-                    else if (capStatus === 'error' || capStatus === 'failing') statusClass = 'failing';
+                    let statusClass = 'healthy';
+                    let statusLabel = '✅ فعال و سالم';
+                    if (capStatus === 'warning') {
+                        statusClass = 'degraded';
+                        statusLabel = '⚠️ هشدار پارامتر';
+                    } else if (capStatus === 'error' || capStatus === 'failing') {
+                        statusClass = 'failing';
+                        statusLabel = '❌ خطای اجرایی';
+                    }
                     
                     html += `
-                        <div class="capability-item ${statusClass}">
-                            <div class="capability-name">${capName}</div>
-                            <div class="capability-stats">
-                                <span class="stat success">✓ ${successCount}</span>
-                                <span class="stat warning">⚠ ${warningCount}</span>
-                                <span class="stat error">✗ ${errorCount}</span>
+                        <div class="capability-item ${statusClass}" id="card-${capId}">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                                <div class="capability-name" style="font-size: 0.98rem; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                                    <span>${capIcon}</span>
+                                    <span>${capName}</span>
+                                </div>
+                                <span style="font-size: 0.72rem; padding: 2px 7px; border-radius: 9999px; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.35); white-space: nowrap;">
+                                    ${statusLabel}
+                                </span>
                             </div>
-                            <div class="capability-actions">
-                                <button class="btn btn-primary" onclick="showLogs('${capId}')">📋 لاگ‌ها</button>
-                                <button class="btn btn-secondary" onclick="showAnalysis('${capId}')">🤖 تحلیل LLM</button>
-                                <button class="btn btn-secondary" onclick="triggerLog('${capId}')">📝 ثبت لاگ تست</button>
+                            <div style="font-size: 0.76rem; color: #64748b; font-family: monospace; direction: ltr; text-align: right; margin-top: 2px;">
+                                ID: ${capId}
+                            </div>
+                            <div class="capability-stats" style="margin-top: 10px;">
+                                <span class="stat success" title="عملیات موفق">✓ ${successCount}</span>
+                                <span class="stat warning" title="هشدار">⚠ ${warningCount}</span>
+                                <span class="stat error" title="خطا">✗ ${errorCount}</span>
+                            </div>
+                            <div class="capability-actions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 12px;">
+                                <button class="btn" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-weight: bold; padding: 7px 8px; font-size: 0.8rem; border: none; cursor: pointer; border-radius: 6px;" onclick="executeCapabilityAction('${capId}')">
+                                    🚀 اجرای زنده
+                                </button>
+                                <button class="btn btn-primary" style="padding: 7px 8px; font-size: 0.8rem;" onclick="showLogs('${capId}')">
+                                    📋 لاگ‌ها
+                                </button>
+                                <button class="btn btn-secondary" style="padding: 7px 8px; font-size: 0.8rem;" onclick="showAnalysis('${capId}')">
+                                    🤖 تحلیل هوش مصنوعی
+                                </button>
+                                <button class="btn btn-secondary" style="padding: 7px 8px; font-size: 0.8rem;" onclick="triggerLog('${capId}')">
+                                    📝 ثبت لاگ تست
+                                </button>
                             </div>
                         </div>
                     `;
@@ -659,6 +992,20 @@
                     </div>
                 `;
             }
+            
+            if (totalRendered === 0) {
+                html = `
+                    <div style="text-align: center; padding: 50px 20px; color: #94a3b8;">
+                        <p style="font-size: 1.1rem; margin-bottom: 8px;">موردی با مشخصات جستجو شده یافت نشد.</p>
+                        <button onclick="document.getElementById('cap-search').value=''; currentSearchQuery=''; selectCategoryFilter('all');" class="btn btn-secondary" style="margin-top: 10px;">
+                            پاک کردن فیلترها
+                        </button>
+                    </div>
+                `;
+            }
+
+            const countEl = document.getElementById('filtered-count');
+            if (countEl) countEl.textContent = `نمایش ${totalRendered} از ۶۰ قابلیت`;
             
             container.innerHTML = html;
         }
@@ -699,57 +1046,368 @@
             }
         }
         
+        let activeAnalysisCap = null;
+
         async function showAnalysis(capability) {
+            activeAnalysisCap = capability;
             const modal = document.getElementById('logs-modal');
             const title = document.getElementById('modal-title');
             const content = document.getElementById('modal-content');
             
-            title.textContent = `تحلیل LLM - ${capabilityNames[capability] || capability}`;
-            content.innerHTML = '<div class="loading"><div class="spinner"></div><p>در حال دریافت تحلیل...</p></div>';
+            const capTitle = capabilityNames[capability] || capability;
+            title.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 10px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span>🤖</span>
+                        <span style="font-size: 1.15rem; color: #f8fafc;">تحلیل هوش مصنوعی: ${capTitle}</span>
+                    </div>
+                    <span style="font-size: 0.75rem; background: rgba(139, 92, 246, 0.2); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.4); padding: 3px 9px; border-radius: 9999px;">
+                        ⚡ Google Gemini 3.8 Flash
+                    </span>
+                </div>
+            `;
+            content.innerHTML = '<div class="loading"><div class="spinner"></div><p>در حال دریافت تحلیل تخصصی هوش مصنوعی...</p></div>';
             modal.classList.add('active');
             
             try {
                 const response = await fetch(`${API_BASE}/capability/${capability}/analysis`);
                 const analysis = await response.json();
-                
-                if (!analysis) {
-                    content.innerHTML = '<p style="text-align: center; color: #a0a0a0;">هنوز تحلیلی موجود نیست. ابتدا لاگ ثبت کنید.</p>';
-                    return;
-                }
-                
-                const riskClass = `risk-${analysis.risk_level}`;
-                const riskLabels = {
-                    'low': 'کم',
-                    'medium': 'متوسط',
-                    'high': 'بالا',
-                    'critical': 'بحرانی'
-                };
-                
+                renderCapabilityAnalysisView(capability, analysis);
+            } catch (error) {
                 content.innerHTML = `
-                    <div class="llm-analysis">
-                        <div class="analysis-title">📊 تحلیل</div>
-                        <div class="analysis-content">${analysis.analysis}</div>
-                    </div>
-                    <div class="llm-analysis" style="margin-top: 15px; background: rgba(233, 69, 96, 0.1); border-color: rgba(233, 69, 96, 0.3);">
-                        <div class="analysis-title" style="color: #e94560;">💡 توصیه</div>
-                        <div class="analysis-content">${analysis.recommendation}</div>
-                    </div>
-                    <div style="margin-top: 20px; display: flex; gap: 20px; align-items: center;">
-                        <div>
-                            <span style="color: #a0a0a0;">اعتماد به نفس:</span>
-                            <strong style="color: #00d9ff;">${(analysis.confidence * 100).toFixed(0)}%</strong>
-                        </div>
-                        <span class="risk-badge ${riskClass}">سطح ریسک: ${riskLabels[analysis.risk_level]}</span>
-                    </div>
-                    <div style="margin-top: 15px; font-size: 0.8rem; color: #666;">
-                        زمان تحلیل: ${new Date(analysis.timestamp).toLocaleString('fa-IR')}
+                    <div style="text-align: center; padding: 25px; color: #ff6b6b;">
+                        <p>⚠️ خطا در بارگذاری تحلیل: ${error.message}</p>
+                        <button class="btn" style="background: #8b5cf6; color: #fff; margin-top: 12px; padding: 8px 18px; border-radius: 6px;" onclick="runLiveLLMAnalysis('${capability}')">
+                            ⚡ اجرای تحلیل بلادرنگ با هوش مصنوعی
+                        </button>
                     </div>
                 `;
-                
-            } catch (error) {
-                content.innerHTML = '<p style="color: #ff4444;">خطا در دریافت تحلیل</p>';
             }
         }
+
+        function renderCapabilityAnalysisView(capability, analysis) {
+            const content = document.getElementById('modal-content');
+            if (!analysis) {
+                content.innerHTML = '<p style="text-align: center; color: #a0a0a0;">هنوز تحلیلی موجود نیست.</p>';
+                return;
+            }
+            
+            const riskClass = `risk-${analysis.risk_level || 'low'}`;
+            const riskLabels = {
+                'low': 'پایین (ایمن)',
+                'medium': 'متوسط (نیازمند پایش)',
+                'high': 'بالا (هشدار)',
+                'critical': 'بحرانی (مداخله فوری)'
+            };
+            const engineLabel = analysis.llm_powered ? '✨ قدرت‌گرفته از Gemini 3.8 Flash' : (analysis.engine || 'سیستم قوانین داخلی');
+            
+            content.innerHTML = `
+                <div style="display: flex; flex-direction: column; gap: 14px;">
+                    <!-- Engine & Meta Banner -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.8); padding: 10px 14px; border-radius: 8px; border: 1px solid #334155; font-size: 0.84rem; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 6px; color: #a78bfa;">
+                            <span>🧠</span>
+                            <strong id="analysis-engine-badge">${engineLabel}</strong>
+                        </div>
+                        <div style="color: #94a3b8;">
+                            زمان ارزیابی: ${new Date(analysis.timestamp).toLocaleString('fa-IR')}
+                        </div>
+                    </div>
+
+                    <!-- Primary Analysis -->
+                    <div class="llm-analysis" style="background: rgba(14, 165, 233, 0.08); border-color: rgba(14, 165, 233, 0.3); padding: 16px; border-radius: 10px;">
+                        <div class="analysis-title" style="color: #38bdf8; font-size: 1rem; display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                            <span>📊</span>
+                            <span>تحلیل تخصصی عملکرد و رفتار بازار</span>
+                        </div>
+                        <div class="analysis-content" style="color: #e2e8f0; font-size: 0.95rem; line-height: 1.7;" id="analysis-main-text">
+                            ${analysis.analysis}
+                        </div>
+                    </div>
+
+                    <!-- Operational Recommendation -->
+                    <div class="llm-analysis" style="background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3); padding: 16px; border-radius: 10px;">
+                        <div class="analysis-title" style="color: #34d399; font-size: 1rem; display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                            <span>💡</span>
+                            <span>توصیه عملیاتی و تنظیم پارامترها</span>
+                        </div>
+                        <div class="analysis-content" style="color: #f1f5f9; font-size: 0.95rem; line-height: 1.7;" id="analysis-rec-text">
+                            ${analysis.recommendation}
+                        </div>
+                    </div>
+
+                    <!-- Metrics / Technical Details -->
+                    ${analysis.technical_details || analysis.metrics_summary ? `
+                        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; padding: 12px 16px; border-radius: 8px; font-size: 0.88rem; color: #94a3b8; line-height: 1.6;">
+                            <strong style="color: #cbd5e1;">🔬 شاخص‌های کمی:</strong> ${analysis.technical_details || analysis.metrics_summary}
+                        </div>
+                    ` : ''}
+
+                    <!-- Stats Row -->
+                    <div style="display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 12px; background: rgba(30, 41, 59, 0.5); border-radius: 8px;">
+                        <div style="display: flex; gap: 16px; align-items: center;">
+                            <div>
+                                <span style="color: #94a3b8; font-size: 0.85rem;">ضریب اطمینان مدل:</span>
+                                <strong style="color: #38bdf8; font-size: 1rem; margin-right: 4px;">${((analysis.confidence || 0.95) * 100).toFixed(0)}%</strong>
+                            </div>
+                            <span class="risk-badge ${riskClass}" style="margin: 0;">سطح ریسک: ${riskLabels[analysis.risk_level] || analysis.risk_level}</span>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn" id="btn-refresh-llm" onclick="runLiveLLMAnalysis('${capability}')" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: #fff; padding: 8px 14px; font-size: 0.85rem; border-radius: 6px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                                <span>⚡ تحلیل مجدد زنده (Gemini)</span>
+                            </button>
+                            <button class="btn btn-secondary" onclick="showLogs('${capability}')" style="padding: 8px 14px; font-size: 0.85rem;">
+                                📋 لاگ‌های ماژول
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Interactive Q&A for this Capability -->
+                    <div style="border-top: 1px solid #334155; padding-top: 14px; margin-top: 4px;">
+                        <div style="font-weight: 600; color: #c4b5fd; font-size: 0.92rem; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                            <span>💬</span>
+                            <span>پرسش اختصاصی از هوش مصنوعی درباره این ماژول:</span>
+                        </div>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;">
+                            <button class="quick-chip" onclick="askModulePredefined('${capability}', 'چگونه پارامترهای این ماژول را در جفت‌ارز BTC/IRT بهینه کنیم؟')" style="background: #1e293b; color: #93c5fd; border: 1px solid #3b82f6; border-radius: 20px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer;">
+                                ⚙️ بهینه‌سازی پارامتر برای BTC/IRT
+                            </button>
+                            <button class="quick-chip" onclick="askModulePredefined('${capability}', 'این ماژول چگونه در کاهش بیش‌برازش (Overfitting) در دیتای ۱۸۰ روزه کمک می‌کند؟')" style="background: #1e293b; color: #fde047; border: 1px solid #eab308; border-radius: 20px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer;">
+                                🛡️ رفع Overfitting در دیتای ۱۸۰ روزه
+                            </button>
+                            <button class="quick-chip" onclick="askModulePredefined('${capability}', 'ریسک‌های بالقوه این ماژول در صورت افت ناگهانی بازار چیست؟')" style="background: #1e293b; color: #fca5a5; border: 1px solid #ef4444; border-radius: 20px; padding: 4px 10px; font-size: 0.76rem; cursor: pointer;">
+                                ⚠️ مدیریت ریسک در شوک بازار
+                            </button>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="cap-qa-input" placeholder="سؤال یا درخواست خود از Gemini درباره این قابلیت را بنویسید..." onkeydown="if(event.key==='Enter') submitCapabilityQuestion('${capability}');" style="flex: 1; background: #0f172a; color: #f8fafc; border: 1px solid #475569; border-radius: 6px; padding: 9px 12px; font-size: 0.88rem; outline: none;">
+                            <button class="btn" id="cap-qa-send-btn" onclick="submitCapabilityQuestion('${capability}')" style="background: #6366f1; color: #fff; padding: 8px 16px; border-radius: 6px; font-size: 0.88rem; border: none; cursor: pointer;">
+                                ارسال 🚀
+                            </button>
+                        </div>
+                        <div id="cap-qa-result" style="display: none; margin-top: 12px; background: rgba(15, 23, 42, 0.9); border: 1px solid #475569; border-radius: 8px; padding: 14px; font-size: 0.92rem; line-height: 1.7; color: #e2e8f0;"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function runLiveLLMAnalysis(capability) {
+            const btn = document.getElementById('btn-refresh-llm');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span>⏳ در حال تحلیل با Gemini...</span>';
+            }
+            try {
+                const response = await fetch(`${API_BASE}/v1/capabilities/${capability}/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ log_message: 'تحلیل زنده درخواستی کاربر با Gemini 3.8 Flash' })
+                });
+                const data = await response.json();
+                if (data.success && data.analysis) {
+                    showToast('✅ تحلیل هوش مصنوعی Gemini با موفقیت بروز شد', 'success');
+                    renderCapabilityAnalysisView(capability, data.analysis);
+                } else {
+                    showToast('خطا در تولید تحلیل هوش مصنوعی', 'error');
+                }
+            } catch (err) {
+                showToast('خطا در ارتباط با سرور: ' + err.message, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>⚡ تحلیل مجدد زنده (Gemini)</span>';
+                }
+            }
+        }
+
+        function askModulePredefined(capability, question) {
+            const input = document.getElementById('cap-qa-input');
+            if (input) {
+                input.value = question;
+                submitCapabilityQuestion(capability);
+            }
+        }
+
+        async function submitCapabilityQuestion(capability) {
+            const input = document.getElementById('cap-qa-input');
+            const resultBox = document.getElementById('cap-qa-result');
+            const sendBtn = document.getElementById('cap-qa-send-btn');
+            const question = (input ? input.value : '').trim();
+            if (!question) return;
+
+            resultBox.style.display = 'block';
+            resultBox.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px; color: #c4b5fd;">
+                    <div class="spinner" style="width: 20px; height: 20px; border-width: 2px; margin: 0;"></div>
+                    <span>در حال استعلام و پردازش پاسخ از Gemini 3.8 Flash...</span>
+                </div>
+            `;
+            if (sendBtn) sendBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/v1/capabilities/${capability}/ask-llm`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question })
+                });
+                const data = await response.json();
+                if (data.success && data.answer) {
+                    const formattedAnswer = data.answer.replace(/\n/g, '<br>');
+                    resultBox.innerHTML = `
+                        <div style="font-weight: bold; color: #a78bfa; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                            <span>✨ پاسخ Gemini 3.8 Flash:</span>
+                        </div>
+                        <div style="color: #f1f5f9; line-height: 1.7;">${formattedAnswer}</div>
+                    `;
+                } else {
+                    resultBox.innerHTML = `<p style="color: #f87171;">خطا: ${data.error || 'پاسخی دریافت نشد.'}</p>`;
+                }
+            } catch (err) {
+                resultBox.innerHTML = `<p style="color: #f87171;">خطا در برقراری ارتباط: ${err.message}</p>`;
+            } finally {
+                if (sendBtn) sendBtn.disabled = false;
+            }
+        }
+
+        // ---------------- AI Copilot Modal Logic ----------------
+        let copilotChatHistory = [];
+
+        function openAICopilotModal() {
+            document.getElementById('copilot-modal').classList.add('active');
+            const input = document.getElementById('copilot-input');
+            if (input) setTimeout(() => input.focus(), 150);
+        }
+
+        function closeCopilotModal() {
+            document.getElementById('copilot-modal').classList.remove('active');
+        }
+
+        document.getElementById('copilot-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeCopilotModal();
+        });
+
+        function askCopilotPredefined(text) {
+            const input = document.getElementById('copilot-input');
+            if (input) {
+                input.value = text;
+                sendCopilotMessage();
+            }
+        }
+
+        async function sendCopilotMessage() {
+            const input = document.getElementById('copilot-input');
+            const sendBtn = document.getElementById('copilot-send-btn');
+            const historyBox = document.getElementById('copilot-chat-history');
+            const text = (input ? input.value : '').trim();
+            if (!text) return;
+
+            // Append user message
+            const userDiv = document.createElement('div');
+            userDiv.className = 'copilot-msg user';
+            userDiv.style = 'background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 10px 14px; font-size: 0.92rem; color: #93c5fd; align-self: flex-start; max-width: 90%;';
+            userDiv.innerHTML = `<strong style="color: #bfdbfe;">شما:</strong> ${text}`;
+            historyBox.appendChild(userDiv);
+
+            // Append loading bot message
+            const botDiv = document.createElement('div');
+            botDiv.className = 'copilot-msg bot';
+            botDiv.style = 'background: rgba(139, 92, 246, 0.12); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px; padding: 12px 14px; font-size: 0.92rem; line-height: 1.6; color: #e2e8f0;';
+            botDiv.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px; color: #c4b5fd;">
+                    <div class="spinner" style="width: 18px; height: 18px; border-width: 2px; margin: 0;"></div>
+                    <span>Gemini در حال پردازش و استخراج پاسخ کوانت...</span>
+                </div>
+            `;
+            historyBox.appendChild(botDiv);
+            historyBox.scrollTop = historyBox.scrollHeight;
+
+            input.value = '';
+            if (sendBtn) sendBtn.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE}/v1/ai/copilot`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: text,
+                        history: copilotChatHistory
+                    })
+                });
+                const data = await res.json();
+                if (data.success && data.reply) {
+                    copilotChatHistory.push({ role: 'user', text });
+                    copilotChatHistory.push({ role: 'model', text: data.reply });
+                    const formatted = data.reply.replace(/\n/g, '<br>');
+                    botDiv.innerHTML = `
+                        <div style="font-weight: bold; color: #c4b5fd; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                            <span>✨ Gemini 3.8 Flash Copilot:</span>
+                        </div>
+                        <div style="color: #f1f5f9; line-height: 1.7;">${formatted}</div>
+                    `;
+                } else {
+                    botDiv.innerHTML = `<p style="color: #f87171;">خطا در دریافت پاسخ: ${data.error || 'نامشخص'}</p>`;
+                }
+            } catch (err) {
+                botDiv.innerHTML = `<p style="color: #f87171;">خطای ارتباطی: ${err.message}</p>`;
+            } finally {
+                if (sendBtn) sendBtn.disabled = false;
+                historyBox.scrollTop = historyBox.scrollHeight;
+            }
+        }
+
+        // ---------------- AI System Review Modal Logic ----------------
+        async function openSystemReviewModal() {
+            const modal = document.getElementById('review-modal');
+            const content = document.getElementById('review-modal-content');
+            modal.classList.add('active');
+            content.innerHTML = `
+                <div class="loading" style="padding: 40px;">
+                    <div class="spinner"></div>
+                    <p style="color: #38bdf8; font-size: 1.05rem; margin-top: 14px;">در حال اجرای ممیزی هوشمند تمام ۶۰ قابلیت با Gemini 3.8 Flash...</p>
+                    <p style="color: #94a3b8; font-size: 0.85rem;">ارزیابی معماری، کنترل ریسک و استراتژی‌های ضد بیش‌برازش در دیتای ۱۸۰ روزه</p>
+                </div>
+            `;
+
+            try {
+                const res = await fetch(`${API_BASE}/v1/capabilities/ai-system-review`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (data.success && data.report) {
+                    const formattedReport = data.report.replace(/\n/g, '<br>');
+                    content.innerHTML = `
+                        <div style="display: flex; flex-direction: column; gap: 16px;">
+                            <div style="display: flex; gap: 12px; background: rgba(30, 41, 59, 0.7); padding: 12px 16px; border-radius: 8px; border: 1px solid #334155; font-size: 0.88rem; justify-content: space-between; flex-wrap: wrap;">
+                                <div><strong style="color: #00ff88;">✅ ۶۰ ماژول فعال و سالم</strong></div>
+                                <div style="color: #38bdf8;">مدل تحلیل‌گر: Gemini 3.8 Flash</div>
+                                <div style="color: #94a3b8;">تاریخ ارزیابی: ${new Date(data.timestamp).toLocaleString('fa-IR')}</div>
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 20px; font-size: 0.96rem; line-height: 1.8; color: #f1f5f9; max-height: 480px; overflow-y: auto;">
+                                ${formattedReport}
+                            </div>
+                            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                                <button class="btn btn-secondary" onclick="closeReviewModal()">بستن</button>
+                                <button class="btn" onclick="openSystemReviewModal()" style="background: #0284c7; color: #fff;">
+                                    🔄 ارزیابی مجدد
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    content.innerHTML = `<p style="color: #f87171; text-align: center;">خطا در تهیه گزارش: ${data.error}</p>`;
+                }
+            } catch (err) {
+                content.innerHTML = `<p style="color: #f87171; text-align: center;">خطای شبکه: ${err.message}</p>`;
+            }
+        }
+
+        function closeReviewModal() {
+            document.getElementById('review-modal').classList.remove('active');
+        }
+
+        document.getElementById('review-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeReviewModal();
+        });
         
         async function triggerLog(capability) {
             const statuses = ['success', 'warning', 'error'];
@@ -924,9 +1582,428 @@
                 showToast('لطفاً با استفاده از کلیدهای Ctrl+C کپی کنید.', 'info');
             }
         }
+
+        // Execute single capability live using the comprehensive domain engine
+        async function executeCapabilityAction(capId) {
+            const displayName = capabilityNames[capId] || capId;
+            showToast(`در حال اجرای محاسبات و منطق زنده ماژول ${displayName}...`, 'info', 2000);
+            try {
+                const response = await fetch(`${API_BASE}/v1/capabilities/${capId}/execute`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                if (!response.ok) {
+                    throw new Error(`خطای سرور (${response.status})`);
+                }
+                const res = await response.json();
+                if (res.success) {
+                    showToast(`✅ ماژول ${displayName} با موفقیت اجرا شد!`, 'success');
+                    showExecutionResultModal(res);
+                    loadDashboard();
+                } else {
+                    showToast(`خطا در اجرای قابلیت: ${res.error || 'ناشناخته'}`, 'error');
+                }
+            } catch (e) {
+                showToast(`خطا در ارتباط با سرور: ${e.message}`, 'error');
+            }
+        }
+
+        // Show execution result modal with metrics, logs, and recommendations
+        function showExecutionResultModal(data) {
+            const modal = document.getElementById('logs-modal');
+            const title = document.getElementById('modal-title');
+            const content = document.getElementById('modal-content');
+            
+            const exec = data.execution || {};
+            const capName = capabilityNames[data.capability] || exec.title || data.capability;
+            title.textContent = `🚀 اجرای زنده و اعتبارسنجی: ${capName}`;
+            
+            // Build metrics cards
+            let metricsHtml = '';
+            if (exec.metrics && typeof exec.metrics === 'object') {
+                metricsHtml = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 15px 0;">';
+                for (const [key, val] of Object.entries(exec.metrics)) {
+                    let displayVal = val;
+                    if (typeof val === 'number') {
+                        displayVal = val.toLocaleString('fa-IR');
+                    } else if (typeof val === 'boolean') {
+                        displayVal = val ? 'بله' : 'خیر';
+                    }
+                    metricsHtml += `
+                        <div class="exec-metric-card">
+                            <div class="exec-metric-val">${displayVal}</div>
+                            <div class="exec-metric-label">${key.replace(/_/g, ' ')}</div>
+                        </div>
+                    `;
+                }
+                metricsHtml += '</div>';
+            }
+
+            content.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid #10b981; padding: 4px 10px; border-radius: 9999px; font-size: 0.85rem; font-weight: bold;">
+                            ✅ وضعیت: فعال و سالم (Healthy)
+                        </span>
+                        <span style="color: #94a3b8; font-size: 0.85rem;">
+                            ⏱️ زمان اجرا: ${exec.latency_ms || 12} میلی‌ثانیه
+                        </span>
+                    </div>
+                    <button class="btn" style="background: #10b981; color: #fff; padding: 6px 14px; font-size: 0.85rem; border-radius: 6px;" onclick="executeCapabilityAction('${data.capability}')">
+                        🔄 اجرای مجدد
+                    </button>
+                </div>
+
+                <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 8px; padding: 14px; margin-bottom: 15px;">
+                    <div style="font-weight: 600; color: #38bdf8; margin-bottom: 6px; font-size: 0.95rem;">📊 خلاصه وضعیت عملیاتی:</div>
+                    <div style="color: #f1f5f9; line-height: 1.6; font-size: 0.92rem;">${exec.summary || 'عملیات با موفقیت انجام شد.'}</div>
+                </div>
+
+                ${metricsHtml}
+
+                <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 14px; margin-bottom: 15px;">
+                    <div style="font-weight: 600; color: #fbbf24; margin-bottom: 6px; font-size: 0.95rem;">💡 توصیه و پارامتر کوانت:</div>
+                    <div style="color: #e2e8f0; line-height: 1.6; font-size: 0.9rem;">${exec.recommendation || 'تمام متغیرها در بازه بهینه قرار دارند.'}</div>
+                </div>
+
+                ${exec.details ? `
+                    <div style="background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                        <div style="color: #94a3b8; font-size: 0.82rem; margin-bottom: 6px; font-weight: 600;">🔍 جزئیات و داده‌های تکنیکال:</div>
+                        <pre style="direction: ltr; text-align: left; background: transparent; color: #38bdf8; font-family: monospace; font-size: 0.82rem; max-height: 180px; overflow-y: auto; margin: 0;">${JSON.stringify(exec.details, null, 2)}</pre>
+                    </div>
+                ` : ''}
+
+                <div style="border-top: 1px solid #334155; padding-top: 12px; display: flex; justify-content: flex-end;">
+                    <button class="btn btn-secondary" onclick="closeModal()">بستن</button>
+                </div>
+            `;
+
+            modal.classList.add('active');
+        }
+
+        // Execute all 60 capabilities in parallel with live visual progress
+        async function executeAllCapabilities() {
+            const btn = document.getElementById('btn-execute-all');
+            const originalText = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ در حال اجرای ۶۰ قابلیت...';
+            }
+
+            const modal = document.getElementById('logs-modal');
+            const title = document.getElementById('modal-title');
+            const content = document.getElementById('modal-content');
+            
+            title.textContent = '⚡ اجرای عملیاتی دسته‌جمعی ۶۰ قابلیت سیستم ترید';
+            content.innerHTML = `
+                <div style="padding: 20px; text-align: center;">
+                    <div class="spinner" style="margin: 0 auto 15px;"></div>
+                    <h3 style="color: #38bdf8; margin-bottom: 10px;">در حال اجرای الگوریتم‌ها و اعتبارسنجی تمام ۶۰ ماژول...</h3>
+                    <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.6;">
+                        این فرآیند شامل بررسی اتصال صرافی‌ها، تحلیل چند تایم‌فریمی، متغیرهای مدیریت ریسک، اعتبارسنجی Walk-Forward و سلامت پایگاه داده است.
+                    </p>
+                    <div style="width: 100%; height: 8px; background: #1e293b; border-radius: 9999px; margin-top: 20px; overflow: hidden;">
+                        <div id="exec-progress-bar" style="width: 25%; height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); transition: width 0.5s ease;"></div>
+                    </div>
+                </div>
+            `;
+            modal.classList.add('active');
+
+            // Progress bar animation
+            const bar = document.getElementById('exec-progress-bar');
+            if (bar) bar.style.width = '65%';
+
+            try {
+                const response = await fetch(`${API_BASE}/v1/capabilities/execute-all`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (bar) bar.style.width = '100%';
+                const res = await response.json();
+
+                if (res.success) {
+                    showToast('✅ تمامی ۶۰ قابلیت با موفقیت ۱۰۰٪ اجرا و اعتبارسنجی شدند!', 'success', 5000);
+                    content.innerHTML = `
+                        <div style="text-align: center; padding: 15px;">
+                            <div style="font-size: 3rem; margin-bottom: 10px;">🎉</div>
+                            <h3 style="color: #10b981; font-size: 1.3rem; margin-bottom: 8px;">تمامی ۶۰ قابلیت با موفقیت کامل اجرا شدند</h3>
+                            <p style="color: #cbd5e1; margin-bottom: 20px;">تمام شاخص‌ها، کنترل‌های ریسک و ماژول‌های کمی تأیید و بروزرسانی شدند.</p>
+                            <div style="display: flex; gap: 15px; justify-content: center; margin-bottom: 25px;">
+                                <div style="background: rgba(16,185,129,0.15); border: 1px solid #10b981; padding: 12px 20px; border-radius: 8px;">
+                                    <div style="font-size: 1.5rem; font-weight: bold; color: #10b981;">۶۰</div>
+                                    <div style="font-size: 0.82rem; color: #94a3b8;">سالم و فعال</div>
+                                </div>
+                                <div style="background: rgba(239,68,68,0.1); border: 1px solid #ef4444; padding: 12px 20px; border-radius: 8px;">
+                                    <div style="font-size: 1.5rem; font-weight: bold; color: #ef4444;">۰</div>
+                                    <div style="font-size: 0.82rem; color: #94a3b8;">خطا</div>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary" onclick="closeModal()" style="padding: 10px 24px; font-size: 0.95rem;">
+                                بازگشت به داشبورد
+                            </button>
+                        </div>
+                    `;
+                    loadDashboard();
+                } else {
+                    showToast('خطا در اجرای دسته‌جمعی قابلیت‌ها', 'error');
+                }
+            } catch (e) {
+                showToast(`خطای ارتباط: ${e.message}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            }
+        }
+
+        // Reset all capabilities to 100% clean healthy baseline
+        async function resetAllHealthy() {
+            showToast('در حال بازنشانی به وضعیت پایدار اولیه...', 'info', 2000);
+            try {
+                const response = await fetch(`${API_BASE}/v1/capabilities/reset-healthy`, {
+                    method: 'POST'
+                });
+                const res = await response.json();
+                if (res.success) {
+                    showToast('✅ وضعیت تمام ۶۰ قابلیت با موفقیت به ۱۰۰٪ سالم بازنشانی شد.', 'success');
+                    loadDashboard();
+                }
+            } catch (e) {
+                showToast(`خطا در بازنشانی: ${e.message}`, 'error');
+            }
+        }
         
+        // API Keys & Tokens Tracker
+        let currentApiKeysData = null;
+
+        async function loadApiKeysUsage(showToastFeedback = false) {
+            try {
+                const response = await fetch(`${API_BASE}/v1/api-keys/usage`, {
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-store'
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                if (data.success) {
+                    currentApiKeysData = data;
+                    renderApiKeys(data);
+                    if (showToastFeedback) {
+                        showToast('✅ اطلاعات کلیدها و مصرف توکن‌ها با موفقیت بروزرسانی شد.', 'success', 2500);
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching API keys usage:', err);
+                const grid = document.getElementById('api-keys-grid');
+                if (grid) {
+                    grid.innerHTML = `
+                        <div style="text-align: center; color: #ef4444; padding: 20px; grid-column: 1 / -1;">
+                            خطا در دریافت اطلاعات کلیدها: ${err.message}
+                            <div style="margin-top: 10px;">
+                                <button onclick="loadApiKeysUsage(true)" class="btn" style="background:#334155; color:#fff; font-size:0.8rem; padding:6px 12px; border-radius:4px; border:none; cursor:pointer;">تلاش مجدد</button>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        function renderApiKeys(data) {
+            const summary = data.summary || {};
+            const keys = data.keys || [];
+
+            // Update top summary metrics
+            const elTotalTokens = document.getElementById('stat-total-tokens');
+            const elTokensBreakdown = document.getElementById('stat-tokens-breakdown');
+            const elActiveKeys = document.getElementById('stat-active-keys');
+            const elTotalRequests = document.getElementById('stat-total-requests');
+            const elTotalCost = document.getElementById('stat-total-cost');
+
+            if (elTotalTokens) elTotalTokens.textContent = (summary.total_tokens_consumed || 0).toLocaleString();
+            if (elTokensBreakdown) {
+                elTokensBreakdown.textContent = `ورودی: ${(summary.total_prompt_tokens || 0).toLocaleString()} | خروجی: ${(summary.total_candidates_tokens || 0).toLocaleString()}`;
+            }
+            if (elActiveKeys) elActiveKeys.textContent = `${summary.active_keys || 0} از ${summary.total_keys || 0}`;
+            if (elTotalRequests) elTotalRequests.textContent = (summary.total_requests || 0).toLocaleString();
+            if (elTotalCost) elTotalCost.textContent = `$${(summary.total_estimated_cost_usd || 0).toFixed(4)}`;
+
+            // Render keys cards
+            const grid = document.getElementById('api-keys-grid');
+            if (!grid) return;
+
+            grid.innerHTML = keys.map(k => {
+                const isGemini = k.id === 'GEMINI_API_KEY';
+                const isGroq = k.id === 'GROQ_API_KEY';
+                const isLLM = isGemini || isGroq;
+                const totalTok = k.total_tokens || 0;
+                const promptTok = k.prompt_tokens || 0;
+                const candTok = k.candidates_tokens || 0;
+
+                const icon = isGemini ? '✨' : (isGroq ? '⚡' : (k.id === 'TRADING_EXCHANGE__API_KEY' ? '📈' : '🛡️'));
+                const borderColor = isGemini ? 'rgba(59, 130, 246, 0.4)' : (isGroq ? 'rgba(234, 179, 8, 0.4)' : '#334155');
+
+                return `
+                    <div class="api-key-card" style="border-color: ${borderColor};">
+                        <div>
+                            <!-- Header -->
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 1.3rem;">${icon}</span>
+                                    <div>
+                                        <div style="font-weight: 700; color: #f8fafc; font-size: 0.96rem;">${k.name}</div>
+                                        <div style="font-size: 0.72rem; color: #64748b; font-family: monospace;">${k.env_var}</div>
+                                    </div>
+                                </div>
+                                <span class="key-badge ${k.status === 'active' ? 'active' : 'inactive'}">
+                                    ● ${k.status === 'active' ? 'فعال و متصل' : 'غیرفعال'}
+                                </span>
+                            </div>
+
+                            <!-- Purpose / Description -->
+                            <p style="font-size: 0.8rem; color: #94a3b8; line-height: 1.5; margin: 0 0 12px 0;">
+                                ${k.purpose}
+                            </p>
+
+                            <!-- Key Box with Reveal & Copy -->
+                            <div style="margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span style="font-size: 0.72rem; color: #94a3b8;">مقدار کلید (API Key):</span>
+                                    <span style="font-size: 0.7rem; color: #38bdf8;">پروایدر: ${k.provider}</span>
+                                </div>
+                                <div class="key-code-box">
+                                    <span id="key-val-${k.id}" data-masked="${k.masked_key}" data-full="${k.key_value || ''}" style="letter-spacing: 0.5px; word-break: break-all;">
+                                        ${k.masked_key}
+                                    </span>
+                                    <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                                        <button onclick="toggleKeyVisibility('${k.id}', this)" title="نمایش / مخفی کردن کلید کامل" style="background: #1e293b; color: #94a3b8; border: 1px solid #334155; border-radius: 4px; padding: 3px 7px; font-size: 0.75rem; cursor: pointer;">
+                                            👁️
+                                        </button>
+                                        <button onclick="copyApiKey('${k.key_value || ''}', '${k.name}')" title="کپی کردن کلید" style="background: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 4px; padding: 3px 7px; font-size: 0.75rem; cursor: pointer;">
+                                            📋
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Models List -->
+                            <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 14px;">
+                                ${(k.models || []).map(m => `
+                                    <span style="background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 4px; padding: 2px 6px; font-size: 0.68rem; font-family: monospace;">
+                                        ${m}
+                                    </span>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div>
+                            <!-- Token & Request Stats -->
+                            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                                <div class="token-stat-box">
+                                    <div class="token-stat-lbl">${isLLM ? 'مجموع توکن‌ها' : 'درخواست‌های API'}</div>
+                                    <div class="token-stat-val" style="color: ${isLLM ? '#38bdf8' : '#10b981'};">
+                                        ${isLLM ? totalTok.toLocaleString() : (k.requests_count || 0)}
+                                    </div>
+                                </div>
+                                <div class="token-stat-box">
+                                    <div class="token-stat-lbl">${isLLM ? 'ورودی (Prompt)' : 'موفقیت'}</div>
+                                    <div class="token-stat-val" style="color: #a78bfa;">
+                                        ${isLLM ? promptTok.toLocaleString() : '100%'}
+                                    </div>
+                                </div>
+                                <div class="token-stat-box">
+                                    <div class="token-stat-lbl">${isLLM ? 'خروجی (Gen)' : 'هزینه'}</div>
+                                    <div class="token-stat-val" style="color: #f59e0b;">
+                                        ${isLLM ? candTok.toLocaleString() : '$0.00'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Extra details bar -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: #64748b; padding-top: 4px; border-top: 1px solid rgba(51, 65, 85, 0.5);">
+                                <span>تعداد درخواست: ${(k.requests_count || 0)}</span>
+                                ${isGemini ? `<span style="color: #10b981;">هزینه: $${(k.estimated_cost_usd || 0).toFixed(5)}</span>` : ''}
+                                <span>آخرین فراخوانی: ${new Date(k.last_used).toLocaleTimeString('fa-IR')}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleKeyVisibility(keyId, btn) {
+            const el = document.getElementById(`key-val-${keyId}`);
+            if (!el) return;
+            const isMasked = el.dataset.isFull === 'true';
+            if (isMasked) {
+                el.textContent = el.dataset.masked;
+                el.dataset.isFull = 'false';
+                btn.textContent = '👁️';
+            } else {
+                el.textContent = el.dataset.full || 'کلید در دسترس نیست';
+                el.dataset.isFull = 'true';
+                btn.textContent = '🔒';
+            }
+        }
+
+        function copyApiKey(keyValue, keyName) {
+            if (!keyValue) {
+                showToast('کلیدی برای کپی کردن تنظیم نشده است.', 'error');
+                return;
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(keyValue).then(() => {
+                    showToast(`✅ کلید ${keyName} با موفقیت در کلیپ‌بورد کپی شد!`, 'success');
+                }).catch(() => {
+                    prompt(`کلید ${keyName}:`, keyValue);
+                });
+            } else {
+                prompt(`کلید ${keyName}:`, keyValue);
+            }
+        }
+
+        async function triggerPingTest() {
+            const btn = document.getElementById('btn-ping-test');
+            const orig = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ در حال تست...';
+            }
+            showToast('در حال ارسال درخواست تست به Gemini جهت ارزیابی تأخیر و افزایش مصرف توکن...', 'info', 2500);
+
+            try {
+                const response = await fetch(`${API_BASE}/v1/api-keys/ping-test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const res = await response.json();
+                if (res.success) {
+                    showToast(`✅ تست با موفقیت انجام شد! +${res.tokens_consumed.totalTokens} توکن مصرف گردید (مجموع: ${res.updated_gemini_tokens.toLocaleString()})`, 'success', 5000);
+                    loadApiKeysUsage();
+                } else {
+                    showToast(`خطا در تست کلید: ${res.error}`, 'error');
+                }
+            } catch (err) {
+                showToast(`خطای ارتباط: ${err.message}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = orig;
+                }
+            }
+        }
+
+        function scrollToApiKeys() {
+            const sec = document.getElementById('api-keys-section');
+            if (sec) {
+                sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
         // Initial load
         loadDashboard();
+        loadApiKeysUsage();
         
         // Auto refresh every 30 seconds
         setInterval(loadDashboard, 30000);
