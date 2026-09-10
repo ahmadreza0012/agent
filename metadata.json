@@ -1,6 +1,6 @@
 {
   "name": "Crypto Trading Bot Dashboard",
-  "description": "نظارت بلادرنگ بر ۶۰ قابلیت ربات معاملاتی کریپتو همراه با تحلیل هوشمند و لاگ‌های اختصاصی",
+  "description": "داشبورد معاملات کاغذی زنده (Paper Trading) بر اساس قیمت لحظه‌ای صرافی با پول مجازی، ربات خودکار و نظارت بر ۶۰ قابلیت سیستمی",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

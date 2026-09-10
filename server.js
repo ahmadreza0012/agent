@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { executeCapabilityDomain, CAPABILITY_HANDLERS } from './capability_engine.js';
+import { paperRouter } from './paper_exchange_engine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1223,6 +1224,10 @@ app.post('/api/v1/api-keys/ping-test', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// Mount Real-time Paper Trading & Virtual Exchange API
+app.use('/api/v1/paper', paperRouter);
+app.use('/api/paper', paperRouter);
 
 // Catch-all for other /api routes
 app.use('/api', (req, res) => {
