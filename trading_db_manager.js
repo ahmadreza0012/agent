@@ -350,6 +350,20 @@ export function recordClosedTrade(trade) {
     closed_at: trade.closed_at || now,
     strategy: trade.strategy || 'AGENT_60_FEATURES'
   }).catch(() => {});
+
+  // Update data/trades_seed.json backup asynchronously
+  try {
+    const seedPath = path.join(__dirname, 'data', 'trades_seed.json');
+    const recentTrades = db.prepare('SELECT * FROM closed_trades ORDER BY closed_at DESC LIMIT 150').all();
+    const recentPositions = db.prepare('SELECT * FROM open_positions ORDER BY opened_at DESC').all();
+    fs.writeFileSync(seedPath, JSON.stringify({
+      exported_at: now,
+      closed_trades: recentTrades,
+      open_positions: recentPositions
+    }, null, 2), 'utf-8');
+  } catch (seedUpdateErr) {
+    // Non-blocking
+  }
 }
 
 // Batch record all 60 capability execution results

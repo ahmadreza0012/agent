@@ -51,18 +51,67 @@ CAPABILITIES = [
 for i in range(11, 61):
     CAPABILITIES.append({"id": i, "name": f"Trading Intelligence Core #{i}", "status": "active"})
 
-TICKERS_DATA = [
-    {"symbol": "BTC/USDT", "name": "Bitcoin", "category": "Majors", "price": 78350.5, "bid": 78345.0, "ask": 78355.0, "change24h": 2.35, "high24h": 79200.0, "low24h": 76800.0, "volume24h": 14250.0},
-    {"symbol": "ETH/USDT", "name": "Ethereum", "category": "Majors", "price": 2465.2, "bid": 2464.0, "ask": 2466.0, "change24h": 1.85, "high24h": 2510.0, "low24h": 2420.0, "volume24h": 28400.0},
-    {"symbol": "SOL/USDT", "name": "Solana", "category": "Majors", "price": 143.2, "bid": 143.1, "ask": 143.3, "change24h": 4.12, "high24h": 146.5, "low24h": 138.0, "volume24h": 45100.0},
-    {"symbol": "BNB/USDT", "name": "BNB Chain", "category": "Majors", "price": 592.1, "bid": 591.8, "ask": 592.4, "change24h": 0.85, "high24h": 598.0, "low24h": 585.0, "volume24h": 8300.0},
-    {"symbol": "XRP/USDT", "name": "Ripple", "category": "Majors", "price": 0.584, "bid": 0.583, "ask": 0.585, "change24h": 1.15, "high24h": 0.595, "low24h": 0.575, "volume24h": 65000.0},
-    {"symbol": "BTC/IRT", "name": "بیت‌کوین / تومان", "category": "بازار تومانی", "price": 7560000000, "bid": 7558000000, "ask": 7562000000, "change24h": 2.45, "high24h": 7650000000, "low24h": 7480000000, "volume24h": 125.4},
-    {"symbol": "ETH/IRT", "name": "اتریوم / تومان", "category": "بازار تومانی", "price": 238000000, "bid": 237800000, "ask": 238200000, "change24h": 1.95, "high24h": 242000000, "low24h": 234000000, "volume24h": 450.0},
-    {"symbol": "SOL/IRT", "name": "سولانا / تومان", "category": "بازار تومانی", "price": 13850000, "bid": 13840000, "ask": 13860000, "change24h": 4.25, "high24h": 14100000, "low24h": 13400000, "volume24h": 3200.0},
-    {"symbol": "TON/IRT", "name": "تون‌کوین / تومان", "category": "بازار تومانی", "price": 479000, "bid": 478500, "ask": 479500, "change24h": 0.75, "high24h": 485000, "low24h": 472000, "volume24h": 12000.0},
-    {"symbol": "USDT/IRT", "name": "تتر / تومان", "category": "بازار تومانی", "price": 96500, "bid": 96480, "ask": 96520, "change24h": 0.15, "high24h": 96700, "low24h": 96300, "volume24h": 2500000.0}
-]
+SUPPORTED_MARKET_SYMBOLS = {
+    # Majors
+    "BTC/USDT": {"name": "Bitcoin", "category": "Majors", "base": 78300.0, "decimals": 2, "is_toman": False, "min_size": 0.0001},
+    "ETH/USDT": {"name": "Ethereum", "category": "Majors", "base": 2460.0, "decimals": 2, "is_toman": False, "min_size": 0.001},
+    "SOL/USDT": {"name": "Solana", "category": "Majors", "base": 142.50, "decimals": 2, "is_toman": False, "min_size": 0.05},
+    "BNB/USDT": {"name": "BNB Chain", "category": "Majors", "base": 590.0, "decimals": 2, "is_toman": False, "min_size": 0.01},
+    "XRP/USDT": {"name": "Ripple", "category": "Majors", "base": 0.58, "decimals": 4, "is_toman": False, "min_size": 10.0},
+    "ADA/USDT": {"name": "Cardano", "category": "Majors", "base": 0.36, "decimals": 4, "is_toman": False, "min_size": 10.0},
+    "AVAX/USDT": {"name": "Avalanche", "category": "Majors", "base": 28.50, "decimals": 2, "is_toman": False, "min_size": 0.2},
+    "LINK/USDT": {"name": "Chainlink", "category": "Majors", "base": 11.80, "decimals": 2, "is_toman": False, "min_size": 0.5},
+    "DOT/USDT": {"name": "Polkadot", "category": "Majors", "base": 4.30, "decimals": 2, "is_toman": False, "min_size": 1.0},
+    "LTC/USDT": {"name": "Litecoin", "category": "Majors", "base": 68.0, "decimals": 2, "is_toman": False, "min_size": 0.1},
+    # Meme & High-Beta Scalp
+    "DOGE/USDT": {"name": "Dogecoin", "category": "Meme/Scalp", "base": 0.112, "decimals": 5, "is_toman": False, "min_size": 20.0},
+    "SHIB/USDT": {"name": "Shiba Inu", "category": "Meme/Scalp", "base": 0.0000175, "decimals": 8, "is_toman": False, "min_size": 100000.0},
+    "PEPE/USDT": {"name": "Pepe", "category": "Meme/Scalp", "base": 0.0000095, "decimals": 8, "is_toman": False, "min_size": 100000.0},
+    "WIF/USDT": {"name": "dogwifhat", "category": "Meme/Scalp", "base": 2.15, "decimals": 3, "is_toman": False, "min_size": 1.0},
+    "BONK/USDT": {"name": "Bonk", "category": "Meme/Scalp", "base": 0.0000215, "decimals": 8, "is_toman": False, "min_size": 100000.0},
+    "FLOKI/USDT": {"name": "Floki", "category": "Meme/Scalp", "base": 0.000145, "decimals": 6, "is_toman": False, "min_size": 10000.0},
+    # AI & Compute
+    "RENDER/USDT": {"name": "Render", "category": "AI & Compute", "base": 5.60, "decimals": 2, "is_toman": False, "min_size": 1.0},
+    "FET/USDT": {"name": "Artificial Superintelligence", "category": "AI & Compute", "base": 1.35, "decimals": 3, "is_toman": False, "min_size": 5.0},
+    "TAO/USDT": {"name": "Bittensor", "category": "AI & Compute", "base": 480.0, "decimals": 1, "is_toman": False, "min_size": 0.02},
+    "INJ/USDT": {"name": "Injective", "category": "DeFi & AI", "base": 19.50, "decimals": 2, "is_toman": False, "min_size": 0.5},
+    # Layer 1 / 2 & DeFi
+    "SUI/USDT": {"name": "Sui Network", "category": "Layer 1", "base": 1.85, "decimals": 3, "is_toman": False, "min_size": 2.0},
+    "NEAR/USDT": {"name": "Near Protocol", "category": "Layer 1", "base": 4.80, "decimals": 3, "is_toman": False, "min_size": 1.0},
+    "TON/USDT": {"name": "Toncoin", "category": "Layer 1", "base": 4.95, "decimals": 3, "is_toman": False, "min_size": 1.0},
+    "APT/USDT": {"name": "Aptos", "category": "Layer 1", "base": 8.40, "decimals": 2, "is_toman": False, "min_size": 0.5},
+    "ARB/USDT": {"name": "Arbitrum", "category": "Layer 2", "base": 0.52, "decimals": 4, "is_toman": False, "min_size": 10.0},
+    "OP/USDT": {"name": "Optimism", "category": "Layer 2", "base": 1.45, "decimals": 3, "is_toman": False, "min_size": 2.0},
+    "TIA/USDT": {"name": "Celestia", "category": "Modular L1", "base": 5.20, "decimals": 2, "is_toman": False, "min_size": 1.0},
+    "SEI/USDT": {"name": "Sei Network", "category": "Layer 1", "base": 0.39, "decimals": 4, "is_toman": False, "min_size": 10.0},
+    "UNI/USDT": {"name": "Uniswap", "category": "DeFi", "base": 7.20, "decimals": 2, "is_toman": False, "min_size": 0.5},
+    # Iranian Toman (IRT) Markets
+    "BTC/IRT": {"name": "بیت‌کوین / تومان", "category": "بازار تومانی", "base": 7550000000.0, "decimals": 0, "is_toman": True, "min_size": 0.0001},
+    "ETH/IRT": {"name": "اتریوم / تومان", "category": "بازار تومانی", "base": 237000000.0, "decimals": 0, "is_toman": True, "min_size": 0.001},
+    "SOL/IRT": {"name": "سولانا / تومان", "category": "بازار تومانی", "base": 13750000.0, "decimals": 0, "is_toman": True, "min_size": 0.05},
+    "TON/IRT": {"name": "تون‌کوین / تومان", "category": "بازار تومانی", "base": 477000.0, "decimals": 0, "is_toman": True, "min_size": 1.0},
+    "USDT/IRT": {"name": "تتر / تومان", "category": "بازار تومانی", "base": 96500.0, "decimals": 0, "is_toman": True, "min_size": 5.0}
+}
+
+TICKERS_DATA = []
+for sym, meta in SUPPORTED_MARKET_SYMBOLS.items():
+    bp = meta["base"]
+    dec = meta["decimals"]
+    chg = round((random.random() - 0.45) * 6.5, 2)
+    spread = 0.0002 * bp
+    vol = round(random.uniform(500.0, 55000.0), 1) if not meta["is_toman"] else round(random.uniform(50.0, 2500000.0), 1)
+    TICKERS_DATA.append({
+        "symbol": sym,
+        "name": meta["name"],
+        "category": meta["category"],
+        "price": bp,
+        "bid": round(bp - spread, dec) if dec > 0 else int(bp - spread),
+        "ask": round(bp + spread, dec) if dec > 0 else int(bp + spread),
+        "change24h": chg,
+        "high24h": round(bp * 1.025, dec) if dec > 0 else int(bp * 1.025),
+        "low24h": round(bp * 0.975, dec) if dec > 0 else int(bp * 0.975),
+        "volume24h": vol
+    })
 
 OPPORTUNITIES = [
     {"symbol": "BTC/IRT", "signal": "BUY", "score": 94, "rationale": "تلاقی RSI در کف حمایتی با واگرایی مثبت حجم در نوبیتکس"},
@@ -366,19 +415,6 @@ def get_db_stats():
 # REAL-TIME LIVE MARKET DATA & TECHNICAL INDICATOR ENGINE
 # =========================================================================
 
-SUPPORTED_MARKET_SYMBOLS = {
-    "BTC/USDT": {"base": 78350.0, "decimals": 2, "is_toman": False},
-    "ETH/USDT": {"base": 2465.0, "decimals": 2, "is_toman": False},
-    "SOL/USDT": {"base": 143.0, "decimals": 2, "is_toman": False},
-    "TON/USDT": {"base": 4.95, "decimals": 3, "is_toman": False},
-    "BTC/IRT": {"base": 7560000000.0, "decimals": 0, "is_toman": True},
-    "ETH/IRT": {"base": 238000000.0, "decimals": 0, "is_toman": True},
-    "SOL/IRT": {"base": 13850000.0, "decimals": 0, "is_toman": True},
-    "TON/IRT": {"base": 479000.0, "decimals": 0, "is_toman": True},
-    "AVAX/USDT": {"base": 28.50, "decimals": 2, "is_toman": False},
-    "ADA/USDT": {"base": 0.36, "decimals": 4, "is_toman": False}
-}
-
 LIVE_CANDLES_STORE = {}
 LIVE_MARKET_LOCK = threading.Lock()
 LAST_TICK_TIME = time.time()
@@ -639,6 +675,109 @@ def get_orderbook_data(symbol="BTC/USDT"):
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     }
+
+
+def scan_all_markets_for_opportunities():
+    """Scans all supported crypto and Toman market pairs to detect high-probability scalping opportunities"""
+    now = int(time.time() * 1000)
+    scanned_list = []
+    
+    with LIVE_MARKET_LOCK:
+        for sym, meta in SUPPORTED_MARKET_SYMBOLS.items():
+            candles = LIVE_CANDLES_STORE.get(sym, [])
+            if not candles:
+                continue
+            
+            closes = [c["close"] for c in candles]
+            volumes = [c.get("volume", 1.0) for c in candles]
+            current_price = closes[-1] if closes else meta["base"]
+            dec = meta["decimals"]
+            
+            ticker = next((t for t in TICKERS_DATA if t["symbol"] == sym), None)
+            change24h = ticker["change24h"] if ticker else 1.2
+            volume24h = ticker["volume24h"] if ticker else 1000.0
+            
+            rsi_vals = compute_rsi(closes, 14)
+            rsi14 = rsi_vals[-1] if rsi_vals else 50.0
+            ema9_vals = compute_ema(closes, 9)
+            ema21_vals = compute_ema(closes, 21)
+            curr_ema9 = ema9_vals[-1] if ema9_vals else current_price
+            curr_ema21 = ema21_vals[-1] if ema21_vals else current_price
+            prev_ema9 = ema9_vals[-2] if len(ema9_vals) > 1 else curr_ema9
+            prev_ema21 = ema21_vals[-2] if len(ema21_vals) > 1 else curr_ema21
+            
+            recent_vol = sum(volumes[-5:]) / 5 if len(volumes) >= 5 else 1.0
+            base_vol = sum(volumes[-20:]) / min(20, len(volumes)) if len(volumes) > 0 else 1.0
+            rvol = round(recent_vol / (base_vol if base_vol > 0 else 1.0), 2)
+            
+            high_low_spread_pct = round(abs(change24h) + random.uniform(1.2, 3.5), 2)
+            
+            signal = "HOLD"
+            profit_potential = 50
+            rationale = ""
+            scalp_type = "MOMENTUM_BREAKOUT"
+            
+            if rsi14 <= 38:
+                signal = "BUY"
+                scalp_type = "OVERSOLD_BOUNCE"
+                profit_potential = min(96, int(76 + (38 - rsi14) * 1.2 + (6 if rvol > 1.2 else 0)))
+                rationale = f"اشباع فروش شدید RSI={rsi14:.1f}؛ تریگر بازگشت سریع قیمتی به سمت میانگین متحرک (Mean Reversion)"
+            elif (curr_ema9 > curr_ema21 and prev_ema9 <= prev_ema21) or (curr_ema9 > curr_ema21 and change24h > 0.8 and rvol >= 1.15):
+                signal = "BUY"
+                scalp_type = "MOMENTUM_BREAKOUT"
+                profit_potential = min(97, int(78 + (9 if change24h > 3 else 4) + (7 if rvol > 1.3 else 0)))
+                rationale = f"شکست صعودی با تقاطع EMA(9) بالاتر از EMA(21) همراه با جهش حجم معاملات ({rvol}x)"
+            elif rsi14 >= 65:
+                signal = "SELL"
+                scalp_type = "OVERBOUGHT_CORRECTION"
+                profit_potential = min(94, int(75 + (rsi14 - 65) * 1.1 + (5 if rvol > 1.2 else 0)))
+                rationale = f"اشباع خرید سنگین RSI={rsi14:.1f}؛ واگرایی سقف و احتمال اصلاح زودهنگام قیمت"
+            elif (curr_ema9 < curr_ema21 and prev_ema9 >= prev_ema21) or (curr_ema9 < curr_ema21 and change24h < -1.2 and rvol >= 1.15):
+                signal = "SELL"
+                scalp_type = "BEARISH_MOMENTUM"
+                profit_potential = min(93, int(76 + (8 if change24h < -3 else 4) + (6 if rvol > 1.3 else 0)))
+                rationale = f"تقاطع نزولی میانگین‌ها و افزایش فشار فروش در تایم‌فریم معاملاتی کوتاه ({rvol}x حجم)"
+            else:
+                profit_potential = int(45 + abs(change24h) * 1.4)
+                rationale = f"بازار در فاز تثبیت؛ منتظر شکست الگو یا ورود نقدینگی جدید (RSI={rsi14:.1f})"
+                
+            sl_pct = 0.012
+            tp_pct = 0.024
+            
+            if signal == "BUY":
+                tp_price = round(current_price * (1 + tp_pct), dec) if dec > 0 else int(current_price * (1 + tp_pct))
+                sl_price = round(current_price * (1 - sl_pct), dec) if dec > 0 else int(current_price * (1 - sl_pct))
+            else:
+                tp_price = round(current_price * (1 - tp_pct), dec) if dec > 0 else int(current_price * (1 - tp_pct))
+                sl_price = round(current_price * (1 + sl_pct), dec) if dec > 0 else int(current_price * (1 + sl_pct))
+                
+            opp = {
+                "id": f"opp_{sym.replace('/', '_')}_{int(now / 15000)}",
+                "symbol": sym,
+                "name": meta["name"],
+                "category": meta["category"],
+                "price": current_price,
+                "change24h": change24h,
+                "volume24h": volume24h,
+                "rsi": round(rsi14, 1),
+                "rvol": rvol,
+                "volatility": high_low_spread_pct,
+                "signal": signal,
+                "scalp_type": scalp_type,
+                "profit_potential": profit_potential,
+                "rationale": rationale,
+                "take_profit": tp_price,
+                "stop_loss": sl_price,
+                "risk_reward": "1:2.0",
+                "expected_return_pct": round(tp_pct * 100, 1),
+                "tickDecimals": dec,
+                "minSize": meta["min_size"],
+                "scanned_at": datetime.now(timezone.utc).isoformat()
+            }
+            scanned_list.append(opp)
+            
+    scanned_list.sort(key=lambda x: x["profit_potential"], reverse=True)
+    return scanned_list
 
 
 def mask_key(k):
@@ -1164,17 +1303,30 @@ try:
             "indicators": candles_res.get("indicators", {}),
             "orderbook": ob_res.get("orderbook", {}),
             "tickers": TICKERS_DATA,
-            "opportunities": OPPORTUNITIES,
+            "opportunities": scan_all_markets_for_opportunities(),
             "agent": agent_payload
         }), 200
 
     @app.route("/api/v1/paper/opportunities", methods=["GET"])
     @app.route("/api/paper/opportunities", methods=["GET"])
     def paper_opps():
+        opps = scan_all_markets_for_opportunities()
         return jsonify({
             "success": True,
+            "count": len(opps),
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "opportunities": OPPORTUNITIES
+            "opportunities": opps
+        }), 200
+
+    @app.route("/api/v1/paper/opportunities/scan", methods=["POST"])
+    @app.route("/api/paper/opportunities/scan", methods=["POST"])
+    def paper_opps_scan():
+        opps = scan_all_markets_for_opportunities()
+        return jsonify({
+            "success": True,
+            "message": f"اسکن زنده {len(opps)} جفت‌ارز بازار کریپتو و تومان با موفقیت انجام شد.",
+            "count": len(opps),
+            "opportunities": opps
         }), 200
 
     @app.route("/api/v1/paper/agent/status", methods=["GET"])
@@ -1443,7 +1595,7 @@ except ImportError:
                     "indicators": candles_res.get("indicators", {}),
                     "orderbook": ob_res.get("orderbook", {}),
                     "tickers": TICKERS_DATA,
-                    "opportunities": OPPORTUNITIES,
+                    "opportunities": scan_all_markets_for_opportunities(),
                     "agent": agent_payload
                 })
                 return
@@ -1503,7 +1655,23 @@ except ImportError:
 
             # Paper Opportunities
             if path in ["/api/v1/paper/opportunities", "/api/paper/opportunities"]:
-                self.send_json({"success": True, "timestamp": datetime.now(timezone.utc).isoformat(), "opportunities": OPPORTUNITIES})
+                opps = scan_all_markets_for_opportunities()
+                self.send_json({
+                    "success": True,
+                    "count": len(opps),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "opportunities": opps
+                })
+                return
+
+            if path in ["/api/v1/paper/opportunities/scan", "/api/paper/opportunities/scan"]:
+                opps = scan_all_markets_for_opportunities()
+                self.send_json({
+                    "success": True,
+                    "message": f"اسکن زنده {len(opps)} جفت‌ارز با موفقیت انجام شد.",
+                    "count": len(opps),
+                    "opportunities": opps
+                })
                 return
 
             # Paper Agent Status
