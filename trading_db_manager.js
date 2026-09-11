@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { syncTradeToFirestore, syncPositionToFirestore, removePositionFromFirestore } from './firebase_service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -330,6 +331,25 @@ export function recordClosedTrade(trade) {
     fee: trade.fee,
     timestamp: trade.closed_at
   });
+
+  // Sync to Cloud Firestore for cross-session shared persistence
+  syncTradeToFirestore({
+    id: trade.id || ('ct_' + Date.now()),
+    symbol: trade.symbol,
+    side: trade.side,
+    size: Number(trade.size) || 0,
+    leverage: Number(trade.leverage) || 1,
+    entry_price: Number(trade.entry_price) || 0,
+    exit_price: Number(trade.exit_price) || 0,
+    gross_pnl: Number(trade.gross_pnl) || 0,
+    fee: Number(trade.fee) || 0,
+    net_pnl: Number(trade.net_pnl) || 0,
+    roi_pct: Number(trade.roi_pct) || 0,
+    close_reason: trade.close_reason || 'MANUAL',
+    opened_at: trade.opened_at || now,
+    closed_at: trade.closed_at || now,
+    strategy: trade.strategy || 'AGENT_60_FEATURES'
+  }).catch(() => {});
 }
 
 // Batch record all 60 capability execution results

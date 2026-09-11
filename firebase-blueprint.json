@@ -1,0 +1,51 @@
+{
+  "entities": {
+    "closed_trades": {
+      "title": "Closed Trades",
+      "description": "Historical closed trades shared across development and live preview",
+      "fields": {
+        "id": { "type": "string" },
+        "symbol": { "type": "string" },
+        "side": { "type": "string" },
+        "size": { "type": "number" },
+        "entry_price": { "type": "number" },
+        "exit_price": { "type": "number" },
+        "net_pnl": { "type": "number" },
+        "roi_pct": { "type": "number" },
+        "close_reason": { "type": "string" },
+        "opened_at": { "type": "string" },
+        "closed_at": { "type": "string" },
+        "strategy": { "type": "string" }
+      }
+    },
+    "open_positions": {
+      "title": "Open Positions",
+      "description": "Active positions shared in real-time",
+      "fields": {
+        "id": { "type": "string" },
+        "symbol": { "type": "string" },
+        "side": { "type": "string" },
+        "size": { "type": "number" },
+        "entry_price": { "type": "number" },
+        "current_price": { "type": "number" },
+        "unrealized_pnl": { "type": "number" },
+        "leverage": { "type": "number" },
+        "opened_at": { "type": "string" }
+      }
+    },
+    "orders": {
+      "title": "Orders",
+      "description": "Paper exchange order entries",
+      "fields": {
+        "id": { "type": "string" },
+        "symbol": { "type": "string" },
+        "side": { "type": "string" },
+        "type": { "type": "string" },
+        "price": { "type": "number" },
+        "size": { "type": "number" },
+        "status": { "type": "string" },
+        "created_at": { "type": "string" }
+      }
+    }
+  }
+}
