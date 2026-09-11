@@ -22,6 +22,8 @@ export function getDatabase() {
   if (!dbInstance) {
     try {
       dbInstance = new DatabaseSync(DB_PATH);
+      dbInstance.exec('PRAGMA journal_mode = WAL;');
+      dbInstance.exec('PRAGMA synchronous = NORMAL;');
       initDatabaseTables(dbInstance);
     } catch (err) {
       console.warn('[Database Recovery] Detected corrupted database:', err.message);
@@ -39,6 +41,8 @@ export function getDatabase() {
         console.warn('[Database Recovery] Could not rename corrupted file:', backupErr);
       }
       dbInstance = new DatabaseSync(DB_PATH);
+      dbInstance.exec('PRAGMA journal_mode = WAL;');
+      dbInstance.exec('PRAGMA synchronous = NORMAL;');
       initDatabaseTables(dbInstance);
     }
   }

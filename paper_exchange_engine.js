@@ -128,47 +128,49 @@ async function fetchBinanceLivePrices() {
   let fetchedFromBinance = false;
   try {
     try {
-      const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr`, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(5000)
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        for (const item of data) {
-          const matched = SUPPORTED_SYMBOLS.filter(s => s.binanceSymbol === item.symbol && !s.isToman);
-          for (const s of matched) {
-            const lastPrice = parseFloat(item.lastPrice);
-            const change24h = parseFloat(item.priceChangePercent);
-            const high24h = parseFloat(item.highPrice);
-            const low24h = parseFloat(item.lowPrice);
-            const volume24h = parseFloat(item.volume);
+      const binanceSymbols = SUPPORTED_SYMBOLS.filter(s => s.binanceSymbol && !s.isToman).map(s => s.binanceSymbol);
+      const symbolsParam = JSON.stringify(binanceSymbols);
+      const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbolsParam)}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          for (const item of data) {
+            const matched = SUPPORTED_SYMBOLS.filter(s => s.binanceSymbol === item.symbol && !s.isToman);
+            for (const s of matched) {
+              const lastPrice = parseFloat(item.lastPrice);
+              const change24h = parseFloat(item.priceChangePercent);
+              const high24h = parseFloat(item.highPrice);
+              const low24h = parseFloat(item.lowPrice);
+              const volume24h = parseFloat(item.volume);
 
-            if (!isNaN(lastPrice) && lastPrice > 0) {
-              const prev = MARKET_TICKERS.get(s.id);
-              MARKET_TICKERS.set(s.id, {
-                ...prev,
-                price: lastPrice,
-                bid: +(lastPrice * 0.9999).toFixed(s.tickDecimals),
-                ask: +(lastPrice * 1.0001).toFixed(s.tickDecimals),
-                change24h,
-                high24h,
-                low24h,
-                volume24h,
-                last_updated: new Date().toISOString()
-              });
+              if (!isNaN(lastPrice) && lastPrice > 0) {
+                const prev = MARKET_TICKERS.get(s.id);
+                MARKET_TICKERS.set(s.id, {
+                  ...prev,
+                  price: lastPrice,
+                  bid: +(lastPrice * 0.9999).toFixed(s.tickDecimals),
+                  ask: +(lastPrice * 1.0001).toFixed(s.tickDecimals),
+                  change24h,
+                  high24h,
+                  low24h,
+                  volume24h,
+                  last_updated: new Date().toISOString()
+                });
 
-              // Update candle history
-              updateLatestCandle(s.id, lastPrice, s.tickDecimals);
-              fetchedFromBinance = true;
+                // Update candle history
+                updateLatestCandle(s.id, lastPrice, s.tickDecimals);
+                fetchedFromBinance = true;
+              }
             }
           }
         }
       }
+    } catch (binanceErr) {
+      console.warn('[Price Fetcher] Binance API warning:', binanceErr.message);
     }
-  } catch (binanceErr) {
-    console.warn('[Price Fetcher] Binance API warning:', binanceErr.message);
-  }
 
   // Fallback to CoinGecko if Binance failed or was blocked
   if (!fetchedFromBinance) {
