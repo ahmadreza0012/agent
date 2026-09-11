@@ -105,6 +105,14 @@ python main.py --init-db 2>/dev/null || true
 # Create systemd service or tmux session for running the app
 echo "Setting up application runner..."
 
+# Start Web Dashboard on port 5000
+echo "Starting Web Dashboard on port 5000..."
+chmod +x start_web_api.sh 2>/dev/null || true
+./start_web_api.sh || {
+    echo "Fallback: starting python3 web_api.py..."
+    PORT=5000 nohup python3 web_api.py > server.log 2>&1 &
+}
+
 # Option 1: Using tmux (simpler)
 tmux kill-session -t $PROJECT_NAME 2>/dev/null || true
 tmux new -d -s $PROJECT_NAME "cd $APP_DIR && source venv/bin/activate && python main.py"

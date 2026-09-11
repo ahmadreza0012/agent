@@ -1379,6 +1379,21 @@ try {
       console.error('Dashboard error on port 5000:', err.message);
     }
   });
+  server5000.on('clientError', (err, socket) => {
+    if (socket.writable) {
+      socket.end('HTTP/1.0 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n<h2>توجه: لطفاً از پروتکل HTTP استفاده کنید</h2><p>آدرس صحیح: <a href="http://52.23.157.88:5000/">http://52.23.157.88:5000/</a></p>');
+    }
+  });
+} catch (e) {}
+
+// Also attempt port 80 if permissions allow, redirecting to port 5000
+try {
+  const server80 = app.listen(80, HOST, () => {
+    console.log(`🌐 Port 80 redirector active -> http://${HOST}:5000`);
+  });
+  server80.on('error', () => {
+    // Non-root or port in use, safely ignored
+  });
 } catch (e) {}
 
 // Also bind to Port 3000 to ensure AI Studio preview iframe functions seamlessly

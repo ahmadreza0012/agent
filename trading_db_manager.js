@@ -47,6 +47,36 @@ export function getDatabase() {
 function initDatabaseTables(db) {
   // Ensure base tables exist
   db.exec(`
+    CREATE TABLE IF NOT EXISTS orders (
+      order_id TEXT PRIMARY KEY,
+      client_order_id TEXT,
+      symbol TEXT NOT NULL,
+      side TEXT NOT NULL,
+      order_type TEXT DEFAULT 'MARKET',
+      price REAL DEFAULT 0,
+      amount REAL DEFAULT 0,
+      filled_amount REAL DEFAULT 0,
+      status TEXT DEFAULT 'FILLED',
+      fee REAL DEFAULT 0,
+      fee_currency TEXT DEFAULT 'USDT',
+      error_message TEXT,
+      created_at TIMESTAMP NOT NULL,
+      updated_at TIMESTAMP NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS trades (
+      order_id TEXT PRIMARY KEY,
+      symbol TEXT NOT NULL,
+      side TEXT NOT NULL,
+      price REAL DEFAULT 0,
+      amount REAL DEFAULT 0,
+      fee REAL DEFAULT 0,
+      fee_currency TEXT DEFAULT 'USDT',
+      exchange_id TEXT DEFAULT 'paper_exchange',
+      timestamp TIMESTAMP NOT NULL,
+      created_at TIMESTAMP NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS closed_trades (
       id TEXT PRIMARY KEY,
       order_id TEXT,
