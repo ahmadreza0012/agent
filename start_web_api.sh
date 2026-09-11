@@ -25,22 +25,8 @@ fi
 
 STARTED=0
 
-# 2. اولویت اول: اجرای سرور پایتون / Flask (تضمینی روی تمام سرورهای لینوکس)
-if command -v python3 &> /dev/null && [ -f "web_api.py" ]; then
-    echo "🐍 در حال راه‌اندازی سرور پایتون (web_api.py)..."
-    PORT=5000 nohup python3 web_api.py > server.log 2>&1 &
-    SERVER_PID=$!
-    echo $SERVER_PID > .server.pid
-    sleep 2
-
-    if ps -p $SERVER_PID > /dev/null 2>&1; then
-        echo "✅ سرور پایتون با PID $SERVER_PID با موفقیت اجرا شد"
-        STARTED=1
-    fi
-fi
-
-# 3. اولویت دوم: در صورت عدم اجرای پایتون، اجرای Node.js
-if [ $STARTED -eq 0 ] && command -v node &> /dev/null && [ -f "server.js" ]; then
+# 2. اولویت اول: اجرای سرور Node.js (server.js) برای تطابق ۱۰۰٪ با محیط پیش‌نمایش
+if command -v node &> /dev/null && [ -f "server.js" ]; then
     echo "⚡ در حال راه‌اندازی سرور Node.js (server.js)..."
     PORT=5000 nohup node server.js > server.log 2>&1 &
     SERVER_PID=$!
@@ -49,6 +35,20 @@ if [ $STARTED -eq 0 ] && command -v node &> /dev/null && [ -f "server.js" ]; the
 
     if ps -p $SERVER_PID > /dev/null 2>&1; then
         echo "✅ سرور Node.js با PID $SERVER_PID با موفقیت اجرا شد"
+        STARTED=1
+    fi
+fi
+
+# 3. اولویت دوم: در صورت عدم وجود Node.js، اجرای پایتون (web_api.py)
+if [ $STARTED -eq 0 ] && command -v python3 &> /dev/null && [ -f "web_api.py" ]; then
+    echo "🐍 در حال راه‌اندازی سرور پایتون (web_api.py)..."
+    PORT=5000 nohup python3 web_api.py > server.log 2>&1 &
+    SERVER_PID=$!
+    echo $SERVER_PID > .server.pid
+    sleep 2
+
+    if ps -p $SERVER_PID > /dev/null 2>&1; then
+        echo "✅ سرور پایتون با PID $SERVER_PID با موفقیت اجرا شد"
         STARTED=1
     fi
 fi
