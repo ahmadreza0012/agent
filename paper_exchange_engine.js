@@ -126,10 +126,9 @@ initMarketData();
 // Live price fetcher from Binance for ALL symbols
 async function fetchBinanceLivePrices() {
   try {
-    const symbolsToQuery = Array.from(new Set(SUPPORTED_SYMBOLS.filter(s => s.binanceSymbol && !s.isToman).map(s => s.binanceSymbol)));
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbolsToQuery))}`, {
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr`, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(4000)
+      signal: AbortSignal.timeout(5000)
     });
     if (!res.ok) return;
     const data = await res.json();
