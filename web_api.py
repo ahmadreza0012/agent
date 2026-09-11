@@ -24,6 +24,25 @@ except ImportError:
     EMBEDDED_SEED_B64 = None
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Auto-load .env file if present
+env_path = os.path.join(BASE_DIR, ".env")
+if os.path.exists(env_path):
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip('"').strip("'")
+                    if k and k not in os.environ:
+                        os.environ[k] = v
+    except Exception as e:
+        print(f"[Env Loader] Warning: {e}")
+
 DB_PATH = os.path.join(BASE_DIR, "data", "trading.db")
 START_TIME = datetime.now(timezone.utc)
 PORT = int(os.environ.get("PORT", 5000))
