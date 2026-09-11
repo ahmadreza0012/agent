@@ -1,5 +1,5 @@
 // self_improving_agent.js - Reinforcement Learning & Heuristic Self-Improvement Engine for Crypto Agent & LLM
-import { getDatabase, recordTrainingEpoch, getTrainingEpochs, getClosedTrades } from './trading_db_manager.js';
+import { getDatabase, recordTrainingEpoch, getTrainingEpochs, getClosedTrades, recordOnlineLearningObservation, getOnlineLearningObservations } from './trading_db_manager.js';
 
 // Initial baseline weight for all 60 capabilities
 export const INITIAL_60_WEIGHTS = {
@@ -89,7 +89,7 @@ class SelfImprovingAgentState {
     this.cumulativeReward = 12.40;
     this.lastPolicyLoss = 0.185;
     this.riskMultiplier = 1.0;
-    this.convictionThreshold = 0.58; // min score to trigger entry
+    this.convictionThreshold = 0.25; // min score to trigger entry based on 60-feature consensus
     this.featureWeights = { ...INITIAL_60_WEIGHTS };
     
     this.promptGuidelines = [
@@ -258,9 +258,73 @@ class SelfImprovingAgentState {
     };
   }
 
+  // Micro-learning from every single online market observation (price tick, 60-feature consensus)
+  learnFromOnlineObservation(observation = {}) {
+    const { symbol = 'BTC/USDT', price = 0, compositeScore = 0, signal = 'HOLD', featureScores = {}, source = 'MARKET_TICK' } = observation;
+    
+    // Online micro-gradient adjustment: reward features that strongly align with prevailing clear signals
+    const onlineLR = 0.003;
+    const absScore = Math.abs(compositeScore);
+    const rewardSignal = absScore > 0.20 ? (absScore * 0.1) : 0.02;
+    this.cumulativeReward = +(this.cumulativeReward + rewardSignal).toFixed(3);
+
+    const weightDeltas = {};
+    for (const [capId, fVal] of Object.entries(featureScores)) {
+      if (this.featureWeights[capId] !== undefined && typeof fVal === 'number') {
+        // If feature aligned with overall consensus, nudge weight up slightly, else down slightly
+        const featureDir = Math.sign(fVal);
+        const overallDir = Math.sign(compositeScore);
+        const alignment = (featureDir === overallDir && overallDir !== 0) ? 1.0 : -0.5;
+        const delta = +(onlineLR * alignment * Math.min(1.0, Math.abs(fVal))).toFixed(4);
+        this.featureWeights[capId] = Math.max(0.35, Math.min(3.20, +(this.featureWeights[capId] + delta).toFixed(3)));
+        weightDeltas[capId] = delta;
+      }
+    }
+
+    // Persist observation into SQLite for full traceability
+    try {
+      recordOnlineLearningObservation({
+        timestamp: new Date().toISOString(),
+        symbol,
+        price,
+        score: compositeScore,
+        signal,
+        feature_deltas: weightDeltas,
+        reward: rewardSignal,
+        source
+      });
+    } catch (err) {
+      console.warn('Could not record online observation in DB:', err.message);
+    }
+
+    return {
+      rewardSignal,
+      cumulativeReward: this.cumulativeReward,
+      featuresUpdated: Object.keys(weightDeltas).length
+    };
+  }
+
+  // Real-time reinforcement learning upon any trade close (win or loss)
+  learnFromTradeOutcome(closedTrade) {
+    if (!closedTrade) return;
+    const netPnl = Number(closedTrade.net_pnl) || 0;
+    const roi = Number(closedTrade.roi_pct) || 0;
+    const isWin = netPnl > 0;
+
+    // Direct reinforcement feedback
+    const tradeReward = isWin ? Math.min(2.5, +(netPnl / 15.0).toFixed(3)) : Math.max(-2.5, +(netPnl / 15.0).toFixed(3));
+    this.cumulativeReward = +(this.cumulativeReward + tradeReward).toFixed(3);
+
+    // If trade was profitable, advance generation and consolidate weights
+    return this.trainNextGeneration({
+      notes: `یادگیری آنلاین از نتیجه معامله ${closedTrade.symbol} [${closedTrade.side}]: ${isWin ? 'سود' : 'زیان'} $${netPnl.toFixed(2)} (بازدهی: ${roi}%)`
+    });
+  }
+
   // Get current status & diagnostics
   getStatus() {
     const epochs = getTrainingEpochs(15);
+    const observations = getOnlineLearningObservations(15);
     return {
       generation_id: this.generationId,
       current_generation: this.currentGeneration,
@@ -272,7 +336,8 @@ class SelfImprovingAgentState {
       conviction_threshold: this.convictionThreshold,
       active_features_count: Object.keys(this.featureWeights).length,
       prompt_guidelines: this.promptGuidelines,
-      recent_epochs: epochs
+      recent_epochs: epochs,
+      recent_online_observations: observations
     };
   }
 }

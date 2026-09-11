@@ -14,19 +14,57 @@
  */
 
 import express from 'express';
-import { recordOrder, recordClosedTrade, getClosedTrades, getDatabaseStats } from './trading_db_manager.js';
+import { recordOrder, recordClosedTrade, getClosedTrades, getDatabaseStats, saveOpenPositionsToDb, loadOpenPositionsFromDb, saveAccountStateToDb, loadAccountStateFromDb, recordMarketOpportunity, getRecentMarketOpportunities, updateMarketOpportunityStatus } from './trading_db_manager.js';
 import { evaluateMarketWith60Features } from './sixty_features_quant_engine.js';
 import { agentLearner } from './self_improving_agent.js';
 
 export const paperRouter = express.Router();
 
-// Supported Market Symbols
+// Supported Market Symbols Across Global Majors, Meme/Scalp, AI, Layer 1/2, and Iranian Toman Pairs
 export const SUPPORTED_SYMBOLS = [
-  { id: 'BTC/USDT', binanceSymbol: 'BTCUSDT', name: 'Bitcoin', basePrice: 78300, tickDecimals: 2, minSize: 0.001 },
-  { id: 'ETH/USDT', binanceSymbol: 'ETHUSDT', name: 'Ethereum', basePrice: 2460, tickDecimals: 2, minSize: 0.01 },
-  { id: 'SOL/USDT', binanceSymbol: 'SOLUSDT', name: 'Solana', basePrice: 142.50, tickDecimals: 2, minSize: 0.1 },
-  { id: 'TON/USDT', binanceSymbol: 'TONUSDT', name: 'Toncoin', basePrice: 4.95, tickDecimals: 3, minSize: 1.0 },
-  { id: 'BTC/IRT', binanceSymbol: 'BTCUSDT', name: 'بیت‌کوین / تومان', basePrice: 7550000000, tickDecimals: 0, minSize: 0.0001, isToman: true }
+  // Majors
+  { id: 'BTC/USDT', binanceSymbol: 'BTCUSDT', name: 'Bitcoin', category: 'Majors', basePrice: 78300, tickDecimals: 2, minSize: 0.0001 },
+  { id: 'ETH/USDT', binanceSymbol: 'ETHUSDT', name: 'Ethereum', category: 'Majors', basePrice: 2460, tickDecimals: 2, minSize: 0.001 },
+  { id: 'SOL/USDT', binanceSymbol: 'SOLUSDT', name: 'Solana', category: 'Majors', basePrice: 142.50, tickDecimals: 2, minSize: 0.05 },
+  { id: 'BNB/USDT', binanceSymbol: 'BNBUSDT', name: 'BNB Chain', category: 'Majors', basePrice: 590.00, tickDecimals: 2, minSize: 0.01 },
+  { id: 'XRP/USDT', binanceSymbol: 'XRPUSDT', name: 'Ripple', category: 'Majors', basePrice: 0.58, tickDecimals: 4, minSize: 10.0 },
+  { id: 'ADA/USDT', binanceSymbol: 'ADAUSDT', name: 'Cardano', category: 'Majors', basePrice: 0.36, tickDecimals: 4, minSize: 10.0 },
+  { id: 'AVAX/USDT', binanceSymbol: 'AVAXUSDT', name: 'Avalanche', category: 'Majors', basePrice: 28.50, tickDecimals: 2, minSize: 0.2 },
+  { id: 'LINK/USDT', binanceSymbol: 'LINKUSDT', name: 'Chainlink', category: 'Majors', basePrice: 11.80, tickDecimals: 2, minSize: 0.5 },
+  { id: 'DOT/USDT', binanceSymbol: 'DOTUSDT', name: 'Polkadot', category: 'Majors', basePrice: 4.30, tickDecimals: 2, minSize: 1.0 },
+  { id: 'LTC/USDT', binanceSymbol: 'LTCUSDT', name: 'Litecoin', category: 'Majors', basePrice: 68.00, tickDecimals: 2, minSize: 0.1 },
+
+  // High-Beta & Meme Scalping
+  { id: 'DOGE/USDT', binanceSymbol: 'DOGEUSDT', name: 'Dogecoin', category: 'Meme/Scalp', basePrice: 0.11, tickDecimals: 5, minSize: 20.0 },
+  { id: 'SHIB/USDT', binanceSymbol: 'SHIBUSDT', name: 'Shiba Inu', category: 'Meme/Scalp', basePrice: 0.000017, tickDecimals: 8, minSize: 100000 },
+  { id: 'PEPE/USDT', binanceSymbol: 'PEPEUSDT', name: 'Pepe', category: 'Meme/Scalp', basePrice: 0.0000095, tickDecimals: 8, minSize: 100000 },
+  { id: 'WIF/USDT', binanceSymbol: 'WIFUSDT', name: 'dogwifhat', category: 'Meme/Scalp', basePrice: 2.10, tickDecimals: 3, minSize: 1.0 },
+  { id: 'BONK/USDT', binanceSymbol: 'BONKUSDT', name: 'Bonk', category: 'Meme/Scalp', basePrice: 0.000021, tickDecimals: 8, minSize: 100000 },
+  { id: 'FLOKI/USDT', binanceSymbol: 'FLOKIUSDT', name: 'Floki', category: 'Meme/Scalp', basePrice: 0.000145, tickDecimals: 6, minSize: 10000 },
+
+  // AI & Next-Gen Compute
+  { id: 'RENDER/USDT', binanceSymbol: 'RENDERUSDT', name: 'Render', category: 'AI & Compute', basePrice: 5.60, tickDecimals: 2, minSize: 1.0 },
+  { id: 'FET/USDT', binanceSymbol: 'FETUSDT', name: 'Artificial Superintelligence', category: 'AI & Compute', basePrice: 1.35, tickDecimals: 3, minSize: 5.0 },
+  { id: 'TAO/USDT', binanceSymbol: 'TAOUSDT', name: 'Bittensor', category: 'AI & Compute', basePrice: 480.0, tickDecimals: 1, minSize: 0.02 },
+  { id: 'INJ/USDT', binanceSymbol: 'INJUSDT', name: 'Injective', category: 'DeFi & AI', basePrice: 19.50, tickDecimals: 2, minSize: 0.5 },
+
+  // Layer 1 & Layer 2 High Momentum
+  { id: 'SUI/USDT', binanceSymbol: 'SUIUSDT', name: 'Sui Network', category: 'Layer 1', basePrice: 1.85, tickDecimals: 3, minSize: 2.0 },
+  { id: 'NEAR/USDT', binanceSymbol: 'NEARUSDT', name: 'Near Protocol', category: 'Layer 1', basePrice: 4.80, tickDecimals: 3, minSize: 1.0 },
+  { id: 'TON/USDT', binanceSymbol: 'TONUSDT', name: 'Toncoin', category: 'Layer 1', basePrice: 4.95, tickDecimals: 3, minSize: 1.0 },
+  { id: 'APT/USDT', binanceSymbol: 'APTUSDT', name: 'Aptos', category: 'Layer 1', basePrice: 8.40, tickDecimals: 2, minSize: 0.5 },
+  { id: 'ARB/USDT', binanceSymbol: 'ARBUSDT', name: 'Arbitrum', category: 'Layer 2', basePrice: 0.52, tickDecimals: 4, minSize: 10.0 },
+  { id: 'OP/USDT', binanceSymbol: 'OPUSDT', name: 'Optimism', category: 'Layer 2', basePrice: 1.45, tickDecimals: 3, minSize: 2.0 },
+  { id: 'TIA/USDT', binanceSymbol: 'TIAUSDT', name: 'Celestia', category: 'Modular L1', basePrice: 5.20, tickDecimals: 2, minSize: 1.0 },
+  { id: 'SEI/USDT', binanceSymbol: 'SEIUSDT', name: 'Sei Network', category: 'Layer 1', basePrice: 0.39, tickDecimals: 4, minSize: 10.0 },
+  { id: 'UNI/USDT', binanceSymbol: 'UNIUSDT', name: 'Uniswap', category: 'DeFi', basePrice: 7.20, tickDecimals: 2, minSize: 0.5 },
+
+  // Iranian Toman (IRT) Markets
+  { id: 'BTC/IRT', binanceSymbol: 'BTCUSDT', name: 'بیت‌کوین / تومان', category: 'بازار تومانی', basePrice: 7550000000, tickDecimals: 0, minSize: 0.0001, isToman: true },
+  { id: 'ETH/IRT', binanceSymbol: 'ETHUSDT', name: 'اتریوم / تومان', category: 'بازار تومانی', basePrice: 237000000, tickDecimals: 0, minSize: 0.001, isToman: true },
+  { id: 'SOL/IRT', binanceSymbol: 'SOLUSDT', name: 'سولانا / تومان', category: 'بازار تومانی', basePrice: 13750000, tickDecimals: 0, minSize: 0.05, isToman: true },
+  { id: 'TON/IRT', binanceSymbol: 'TONUSDT', name: 'تون‌کوین / تومان', category: 'بازار تومانی', basePrice: 477000, tickDecimals: 0, minSize: 1.0, isToman: true },
+  { id: 'USDT/IRT', binanceSymbol: null, name: 'تتر / تومان', category: 'بازار تومانی', basePrice: 96500, tickDecimals: 0, minSize: 5.0, isToman: true }
 ];
 
 // Tomans per USDT exchange rate (approx ~96,500 Tomans)
@@ -36,6 +74,8 @@ const USDT_TO_TOMAN_RATE = 96500;
 const MARKET_TICKERS = new Map();
 // 1m candles history for charts
 const CANDLE_HISTORY = new Map();
+// Detected high-probability market opportunities
+export let RECENT_MARKET_OPPORTUNITIES = [];
 
 // Initialize initial market data & candles
 function initMarketData() {
@@ -45,6 +85,7 @@ function initMarketData() {
     MARKET_TICKERS.set(sym.id, {
       symbol: sym.id,
       name: sym.name,
+      category: sym.category || 'Crypto',
       price: currentPrice,
       bid: +(currentPrice * 0.9999).toFixed(sym.tickDecimals),
       ask: +(currentPrice * 1.0001).toFixed(sym.tickDecimals),
@@ -82,13 +123,13 @@ function initMarketData() {
 
 initMarketData();
 
-// Live price fetcher from Binance
+// Live price fetcher from Binance for ALL symbols
 async function fetchBinanceLivePrices() {
   try {
-    const symbolsQuery = JSON.stringify(["BTCUSDT", "ETHUSDT", "SOLUSDT", "TONUSDT"]);
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbolsQuery)}`, {
+    const symbolsToQuery = Array.from(new Set(SUPPORTED_SYMBOLS.filter(s => s.binanceSymbol && !s.isToman).map(s => s.binanceSymbol)));
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbolsToQuery))}`, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(3500)
+      signal: AbortSignal.timeout(4000)
     });
     if (!res.ok) return;
     const data = await res.json();
@@ -123,8 +164,12 @@ async function fetchBinanceLivePrices() {
       }
     }
 
-    // Update BTC/IRT based on real BTC price
+    // Update Toman pairs based on live prices
     const btcTicker = MARKET_TICKERS.get('BTC/USDT');
+    const ethTicker = MARKET_TICKERS.get('ETH/USDT');
+    const solTicker = MARKET_TICKERS.get('SOL/USDT');
+    const tonTicker = MARKET_TICKERS.get('TON/USDT');
+
     if (btcTicker) {
       const btcTomanPrice = Math.round(btcTicker.price * USDT_TO_TOMAN_RATE);
       const prevIrt = MARKET_TICKERS.get('BTC/IRT');
@@ -141,8 +186,59 @@ async function fetchBinanceLivePrices() {
       });
       updateLatestCandle('BTC/IRT', btcTomanPrice, 0);
     }
+
+    if (ethTicker) {
+      const ethTomanPrice = Math.round(ethTicker.price * USDT_TO_TOMAN_RATE);
+      const prev = MARKET_TICKERS.get('ETH/IRT');
+      MARKET_TICKERS.set('ETH/IRT', {
+        ...prev,
+        price: ethTomanPrice,
+        bid: Math.round(ethTomanPrice * 0.999),
+        ask: Math.round(ethTomanPrice * 1.001),
+        change24h: ethTicker.change24h,
+        high24h: Math.round(ethTicker.high24h * USDT_TO_TOMAN_RATE),
+        low24h: Math.round(ethTicker.low24h * USDT_TO_TOMAN_RATE),
+        volume24h: +(ethTicker.volume24h * 0.15).toFixed(2),
+        last_updated: new Date().toISOString()
+      });
+      updateLatestCandle('ETH/IRT', ethTomanPrice, 0);
+    }
+
+    if (solTicker) {
+      const solTomanPrice = Math.round(solTicker.price * USDT_TO_TOMAN_RATE);
+      const prev = MARKET_TICKERS.get('SOL/IRT');
+      MARKET_TICKERS.set('SOL/IRT', {
+        ...prev,
+        price: solTomanPrice,
+        bid: Math.round(solTomanPrice * 0.999),
+        ask: Math.round(solTomanPrice * 1.001),
+        change24h: solTicker.change24h,
+        high24h: Math.round(solTicker.high24h * USDT_TO_TOMAN_RATE),
+        low24h: Math.round(solTicker.low24h * USDT_TO_TOMAN_RATE),
+        volume24h: +(solTicker.volume24h * 0.15).toFixed(2),
+        last_updated: new Date().toISOString()
+      });
+      updateLatestCandle('SOL/IRT', solTomanPrice, 0);
+    }
+
+    if (tonTicker) {
+      const tonTomanPrice = Math.round(tonTicker.price * USDT_TO_TOMAN_RATE);
+      const prev = MARKET_TICKERS.get('TON/IRT');
+      MARKET_TICKERS.set('TON/IRT', {
+        ...prev,
+        price: tonTomanPrice,
+        bid: Math.round(tonTomanPrice * 0.999),
+        ask: Math.round(tonTomanPrice * 1.001),
+        change24h: tonTicker.change24h,
+        high24h: Math.round(tonTicker.high24h * USDT_TO_TOMAN_RATE),
+        low24h: Math.round(tonTicker.low24h * USDT_TO_TOMAN_RATE),
+        volume24h: +(tonTicker.volume24h * 0.15).toFixed(2),
+        last_updated: new Date().toISOString()
+      });
+      updateLatestCandle('TON/IRT', tonTomanPrice, 0);
+    }
   } catch (err) {
-    // If Binance is momentarily unreachable, simulate realistic micro-ticks (Brownian motion)
+    // Fallback to Brownian motion micro-ticks if external network is congested
     simulateMicroTicks();
   }
 }
@@ -194,6 +290,11 @@ setInterval(() => {
   });
 }, 3000);
 
+// Background multi-market opportunity scanner: every 5 seconds
+setInterval(() => {
+  scanAllMarketsForOpportunities();
+}, 5000);
+
 // Also run sub-second micro-ticks every 1s for ultra-responsive UI
 setInterval(() => {
   simulateMicroTicks();
@@ -205,50 +306,53 @@ setInterval(() => {
 // ==========================================
 
 export const PAPER_ACCOUNT = {
-  initial_balance: 10000.00,
-  cash_balance: 10000.00,
+  initial_balance: 100.00,
+  cash_balance: 100.00,
   currency: 'USDT',
   positions: [],
   trades: [],
   bot: {
-    enabled: false,
-    strategy: '60_FEATURES_CONSENSUS', // '60_FEATURES_CONSENSUS' | 'EMA_CROSS' | 'RSI_REVERSION' | 'MACD_MOMENTUM' | 'BOLLINGER_BREAKOUT'
+    enabled: true,
+    strategy: '60_FEATURES_CONSENSUS',
     symbol: 'BTC/USDT',
-    leverage: 5,
-    risk_pct_per_trade: 8,
+    leverage: 15,
+    risk_pct_per_trade: 35,
     last_evaluated: null,
     last_signal: null,
-    logs: []
+    logs: [
+      {
+        timestamp: new Date().toISOString(),
+        message: '🚀 سیستم معامله‌گری زنده با اجماع ۶۰ ویژگی و سرمایه اولیه ۱۰۰ دلار و اهرم بالا (15x) آغاز به کار کرد.'
+      }
+    ]
   },
   last_updated: new Date().toISOString()
 };
 
-// Seed initial sample historical trade for realistic stats
-const initialSeedTrade = {
-  id: 'tr_sample_01',
-  symbol: 'BTC/USDT',
-  side: 'LONG',
-  size: 0.15,
-  leverage: 5,
-  entry_price: 77200.0,
-  exit_price: 78150.0,
-  gross_pnl: 142.50,
-  fee: 11.65,
-  net_pnl: 130.85,
-  roi_pct: 12.24,
-  opened_at: new Date(Date.now() - 7200000).toISOString(),
-  closed_at: new Date(Date.now() - 3600000).toISOString(),
-  close_reason: 'TAKE_PROFIT'
-};
-PAPER_ACCOUNT.trades.push(initialSeedTrade);
-PAPER_ACCOUNT.cash_balance += 130.85;
-
-// Also ensure initial seed trade is persisted in SQLite
+// Restore persistent account state and open positions from SQLite to ensure NO data or open trade is ever wiped
 try {
-  recordClosedTrade(initialSeedTrade);
-} catch (seedErr) {
-  console.warn('Initial SQLite seed trade:', seedErr.message);
+  const loadedAccount = loadAccountStateFromDb();
+  if (loadedAccount) {
+    PAPER_ACCOUNT.initial_balance = loadedAccount.initial_balance || 100.00;
+    PAPER_ACCOUNT.cash_balance = loadedAccount.cash_balance !== undefined ? loadedAccount.cash_balance : 100.00;
+    if (loadedAccount.bot && Object.keys(loadedAccount.bot).length > 0) {
+      PAPER_ACCOUNT.bot = { ...PAPER_ACCOUNT.bot, ...loadedAccount.bot };
+    }
+  }
+  const loadedPositions = loadOpenPositionsFromDb();
+  if (loadedPositions && loadedPositions.length > 0) {
+    PAPER_ACCOUNT.positions = loadedPositions;
+    console.log(`[Persistence] Restored ${loadedPositions.length} active open position(s) from SQLite database.`);
+  }
+  const loadedTrades = getClosedTrades(100);
+  if (loadedTrades && loadedTrades.length > 0) {
+    PAPER_ACCOUNT.trades = loadedTrades;
+  }
+} catch (loadErr) {
+  console.warn('Initial SQLite restore note:', loadErr.message);
 }
+
+let lastStateSaveTime = 0;
 
 // Update PnL of all open positions based on live prices
 function updatePositionsPnL() {
@@ -298,11 +402,27 @@ function updatePositionsPnL() {
       }
     }
 
+    // Dynamic Scalp Profit Locking: If this is an opportunistic short-term scalp and hit target ROI (e.g. >= 2.2%)
+    if (pos.is_scalp && pos.unrealized_pnl_pct >= (pos.target_roi_pct || 2.2)) {
+      positionsToClose.push({ pos, reason: 'SCALP_TAKE_PROFIT' });
+      continue;
+    }
+
     // Check Liquidation: If loss exceeds 88% of margin
     if (grossPnl < 0 && Math.abs(grossPnl) >= pos.margin * 0.88) {
       positionsToClose.push({ pos, reason: 'LIQUIDATION' });
       continue;
     }
+  }
+
+  // Periodic persistence of open positions and account state to SQLite (every 5 seconds)
+  const now = Date.now();
+  if (now - lastStateSaveTime > 5000 && PAPER_ACCOUNT.positions.length > 0) {
+    lastStateSaveTime = now;
+    try {
+      saveOpenPositionsToDb(PAPER_ACCOUNT.positions);
+      saveAccountStateToDb(PAPER_ACCOUNT);
+    } catch {}
   }
 
   // Execute triggered closures
@@ -375,9 +495,11 @@ export function openPaperPosition({
 
   PAPER_ACCOUNT.positions.unshift(newPos);
 
-  // Persist order in SQLite database
+  // Persist order, active open positions, and account state in SQLite database
   try {
     recordOrder(newPos);
+    saveOpenPositionsToDb(PAPER_ACCOUNT.positions);
+    saveAccountStateToDb(PAPER_ACCOUNT);
   } catch (dbErr) {
     console.warn('Failed to persist order in SQLite:', dbErr.message);
   }
@@ -427,16 +549,20 @@ export function executeClosePosition(positionId, reason = 'MANUAL') {
     close_reason: reason
   };
 
+  if (reason === 'SCALP_TAKE_PROFIT') {
+    addBotLog(`🎯 خروج موفق و ذخیره سود اسکالپ ${pos.symbol}: سود خالص +$${netPnl.toFixed(2)} (+${roiPct.toFixed(2)}%) با استراتژی خروج سریع.`);
+  }
+
   PAPER_ACCOUNT.trades.unshift(closedTrade);
   PAPER_ACCOUNT.positions.splice(idx, 1);
 
-  // Persist closed trade into SQLite database and trigger self-improvement
+  // Persist closed trade, remaining open positions, and account state into SQLite database
   try {
     recordClosedTrade(closedTrade);
+    saveOpenPositionsToDb(PAPER_ACCOUNT.positions);
+    saveAccountStateToDb(PAPER_ACCOUNT);
     // Reinforcement learning feedback update on completed trade
-    agentLearner.trainNextGeneration({
-      notes: `یادگیری خودکار از معامله بسته شده ${closedTrade.symbol} (${closedTrade.side}) سود/زیان: ${closedTrade.net_pnl} USDT`
-    });
+    agentLearner.learnFromTradeOutcome(closedTrade);
   } catch (dbErr) {
     console.warn('Failed to persist closed trade in SQLite:', dbErr.message);
   }
@@ -479,135 +605,455 @@ export function getAccountSummary() {
   };
 }
 
-// Reset paper trading balance to default $10,000
-export function resetPaperAccount() {
-  PAPER_ACCOUNT.cash_balance = 10000.00;
-  PAPER_ACCOUNT.initial_balance = 10000.00;
+// Reset paper trading balance to initial $100 with high leverage
+export function resetPaperAccount(initialBalance = 100.00) {
+  PAPER_ACCOUNT.cash_balance = initialBalance;
+  PAPER_ACCOUNT.initial_balance = initialBalance;
   PAPER_ACCOUNT.positions = [];
   PAPER_ACCOUNT.trades = [];
-  PAPER_ACCOUNT.bot.enabled = false;
-  PAPER_ACCOUNT.bot.logs = [];
+  PAPER_ACCOUNT.bot.enabled = true;
+  PAPER_ACCOUNT.bot.strategy = '60_FEATURES_CONSENSUS';
+  PAPER_ACCOUNT.bot.leverage = 15;
+  PAPER_ACCOUNT.bot.risk_pct_per_trade = 35;
+  PAPER_ACCOUNT.bot.logs = [
+    {
+      timestamp: new Date().toISOString(),
+      message: `حساب با ۱۰۰ دلار دارایی و اهرم بالا (15x) برای شروع معاملات خودکار با ۶۰ ویژگی راه‌اندازی شد.`
+    }
+  ];
   return getAccountSummary();
 }
 
 // ==========================================
-// AUTOMATED QUANTITATIVE BOT ENGINE
+// AUTOMATED QUANTITATIVE BOT ENGINE (60 FEATURES)
 // ==========================================
 
-function evaluateAutomatedBot() {
-  if (!PAPER_ACCOUNT.bot.enabled) return;
+let isBotEvaluating = false;
+let lastBotEvalTime = 0;
 
-  const symbol = PAPER_ACCOUNT.bot.symbol || 'BTC/USDT';
-  const candles = CANDLE_HISTORY.get(symbol);
-  if (!candles || candles.length < 25) return;
+export async function evaluateAutomatedBot() {
+  if (!PAPER_ACCOUNT.bot.enabled || isBotEvaluating) return;
+  const now = Date.now();
+  if (now - lastBotEvalTime < 4000) return;
+  lastBotEvalTime = now;
 
-  const closes = candles.map(c => c.close);
-  const currentPrice = closes[closes.length - 1];
+  isBotEvaluating = true;
+  try {
+    const symbol = PAPER_ACCOUNT.bot.symbol || 'BTC/USDT';
+    const candles = CANDLE_HISTORY.get(symbol);
+    if (!candles || candles.length < 15) return;
 
-  // Calculate EMA 9 and EMA 21
-  const ema9 = calculateEMA(closes, 9);
-  const ema21 = calculateEMA(closes, 21);
-  const rsi = calculateRSI(closes, 14);
+    const closes = candles.map(c => c.close);
+    const currentPrice = closes[closes.length - 1];
+    const strategy = PAPER_ACCOUNT.bot.strategy || '60_FEATURES_CONSENSUS';
 
-  const prevEma9 = ema9[ema9.length - 2];
-  const currEma9 = ema9[ema9.length - 1];
-  const prevEma21 = ema21[ema21.length - 2];
-  const currEma21 = ema21[ema21.length - 1];
+    let signal = 'HOLD';
+    let reason = '';
+    let compositeScore = 0;
 
-  let signal = 'HOLD';
-  let reason = '';
+    if (strategy === '60_FEATURES_CONSENSUS') {
+      const consensus60 = await evaluateMarketWith60Features(symbol, currentPrice, {
+        candles,
+        orderBook: { bids: [], asks: [] },
+        account: getAccountSummary()
+      });
+      signal = consensus60.overall_signal;
+      reason = consensus60.decision_rationale;
+      compositeScore = consensus60.composite_score;
 
-  const strategy = PAPER_ACCOUNT.bot.strategy || 'EMA_CROSS';
-
-  if (strategy === 'EMA_CROSS') {
-    if (prevEma9 <= prevEma21 && currEma9 > currEma21) {
-      signal = 'BUY';
-      reason = `تقاطع صعودی EMA(9)=${currEma9.toFixed(1)} از روی EMA(21)=${currEma21.toFixed(1)}`;
-    } else if (prevEma9 >= prevEma21 && currEma9 < currEma21) {
-      signal = 'SELL';
-      reason = `تقاطع نزولی EMA(9)=${currEma9.toFixed(1)} به زیر EMA(21)=${currEma21.toFixed(1)}`;
+      // Online micro-learning: utilize every smallest market observation for agent adaptation
+      try {
+        agentLearner.learnFromOnlineObservation({
+          symbol,
+          price: currentPrice,
+          compositeScore,
+          signal,
+          featureScores: consensus60.feature_scores || {},
+          source: '60_FEATURES_CONSENSUS_TICK'
+        });
+      } catch (obsErr) {
+        console.warn('Online observation learning notice:', obsErr.message);
+      }
+    } else if (strategy === 'EMA_CROSS') {
+      const ema9 = calculateEMA(closes, 9);
+      const ema21 = calculateEMA(closes, 21);
+      const prevEma9 = ema9[ema9.length - 2];
+      const currEma9 = ema9[ema9.length - 1];
+      const prevEma21 = ema21[ema21.length - 2];
+      const currEma21 = ema21[ema21.length - 1];
+      if (prevEma9 <= prevEma21 && currEma9 > currEma21) {
+        signal = 'BUY';
+        reason = `تقاطع صعودی EMA(9)=${currEma9.toFixed(1)} از روی EMA(21)=${currEma21.toFixed(1)}`;
+      } else if (prevEma9 >= prevEma21 && currEma9 < currEma21) {
+        signal = 'SELL';
+        reason = `تقاطع نزولی EMA(9)=${currEma9.toFixed(1)} به زیر EMA(21)=${currEma21.toFixed(1)}`;
+      }
+    } else if (strategy === 'RSI_REVERSION') {
+      const rsi = calculateRSI(closes, 14);
+      if (rsi < 32) {
+        signal = 'BUY';
+        reason = `ناحیه اشباع فروش RSI=${rsi.toFixed(1)}`;
+      } else if (rsi > 68) {
+        signal = 'SELL';
+        reason = `ناحیه اشباع خرید RSI=${rsi.toFixed(1)}`;
+      }
     }
-  } else if (strategy === 'RSI_REVERSION') {
-    if (rsi < 32) {
-      signal = 'BUY';
-      reason = `ناحیه اشباع فروش RSI=${rsi.toFixed(1)} (آماده بازگشت صعودی)`;
-    } else if (rsi > 68) {
-      signal = 'SELL';
-      reason = `ناحیه اشباع خرید RSI=${rsi.toFixed(1)} (آماده اصلاح نزولی)`;
-    }
-  } else {
-    // Default momentum
-    if (currEma9 > currEma21 && rsi > 50 && rsi < 65) {
-      signal = 'BUY';
-      reason = `مومنتوم صعودی قوی (EMA9 > EMA21 و RSI=${rsi.toFixed(1)})`;
-    }
-  }
 
-  PAPER_ACCOUNT.bot.last_evaluated = new Date().toISOString();
-  PAPER_ACCOUNT.bot.last_signal = { signal, reason, rsi: +rsi.toFixed(1), price: currentPrice };
+    PAPER_ACCOUNT.bot.last_evaluated = new Date().toISOString();
+    PAPER_ACCOUNT.bot.last_signal = { signal, reason, score: compositeScore, price: currentPrice };
 
-  // Check if we should place an automated paper order
-  const existingPos = PAPER_ACCOUNT.positions.find(p => p.symbol === symbol);
+    // Check if we should place an automated paper order
+    const existingPos = PAPER_ACCOUNT.positions.find(p => p.symbol === symbol);
 
-  if (signal === 'BUY') {
-    // If we have an existing SHORT, close it
-    if (existingPos && existingPos.side === 'SHORT') {
-      executeClosePosition(existingPos.id, 'BOT_SIGNAL');
-      addBotLog(`بستن پوزیشن SHORT برای ${symbol} بر اساس سیگنال معکوس ربات`);
-    } else if (!existingPos) {
-      // Calculate order size based on risk percentage
-      const summary = getAccountSummary();
-      const tradeUsd = Math.max(100, summary.free_margin * (PAPER_ACCOUNT.bot.risk_pct_per_trade / 100));
-      const assetSize = +(tradeUsd / currentPrice).toFixed(4);
+    if (signal === 'BUY') {
+      if (existingPos && existingPos.side === 'SHORT') {
+        executeClosePosition(existingPos.id, 'BOT_REVERSE_SIGNAL');
+        addBotLog(`🔄 بستن موقعیت فروش (SHORT) برای ${symbol} بر اساس چرخش سیگنال به BUY [۶۰ ویژگی]`);
+      } else if (!existingPos) {
+        const summary = getAccountSummary();
+        const leverage = Math.max(1, Math.min(20, PAPER_ACCOUNT.bot.leverage || 15));
+        // High margin allocation: default 35% of free margin, minimum $15
+        const marginAllocated = Math.min(summary.free_margin * 0.85, Math.max(15, summary.free_margin * (PAPER_ACCOUNT.bot.risk_pct_per_trade / 100)));
+        const notionalValue = marginAllocated * leverage;
+        const assetSize = +(notionalValue / currentPrice).toFixed(4);
 
-      if (assetSize > 0 && summary.free_margin > 150) {
-        try {
-          const sl = +(currentPrice * 0.985).toFixed(2);
-          const tp = +(currentPrice * 1.035).toFixed(2);
-          openPaperPosition({
-            symbol,
-            side: 'LONG',
-            type: 'MARKET',
-            size: assetSize,
-            leverage: PAPER_ACCOUNT.bot.leverage,
-            stop_loss: sl,
-            take_profit: tp
-          });
-          addBotLog(`🤖 ورود خودکار ربات: خرید (LONG) ${assetSize} ${symbol} به قیمت $${currentPrice.toLocaleString()} - ${reason}`);
-        } catch (e) {
-          addBotLog(`خطای ربات در ثبت سفارش خرید: ${e.message}`);
+        if (assetSize > 0 && summary.free_margin >= 15) {
+          try {
+            const sl = +(currentPrice * 0.985).toFixed(2);
+            const tp = +(currentPrice * 1.035).toFixed(2);
+            openPaperPosition({
+              symbol,
+              side: 'LONG',
+              type: 'MARKET',
+              size: assetSize,
+              leverage,
+              stop_loss: sl,
+              take_profit: tp
+            });
+            addBotLog(`🚀 ورود خودکار به معامله خرید (LONG) با مارجین بالا: حجم ${assetSize} ${symbol} (اهرم ${leverage}x، مارجین ~$${marginAllocated.toFixed(1)}) به قیمت $${currentPrice.toLocaleString()} - ${reason}`);
+          } catch (e) {
+            addBotLog(`خطای ربات در ثبت سفارش خرید: ${e.message}`);
+          }
+        }
+      }
+    } else if (signal === 'SELL') {
+      if (existingPos && existingPos.side === 'LONG') {
+        executeClosePosition(existingPos.id, 'BOT_REVERSE_SIGNAL');
+        addBotLog(`🔄 بستن موقعیت خرید (LONG) برای ${symbol} بر اساس چرخش سیگنال به SELL [۶۰ ویژگی]`);
+      } else if (!existingPos) {
+        const summary = getAccountSummary();
+        const leverage = Math.max(1, Math.min(20, PAPER_ACCOUNT.bot.leverage || 15));
+        const marginAllocated = Math.min(summary.free_margin * 0.85, Math.max(15, summary.free_margin * (PAPER_ACCOUNT.bot.risk_pct_per_trade / 100)));
+        const notionalValue = marginAllocated * leverage;
+        const assetSize = +(notionalValue / currentPrice).toFixed(4);
+
+        if (assetSize > 0 && summary.free_margin >= 15) {
+          try {
+            const sl = +(currentPrice * 1.015).toFixed(2);
+            const tp = +(currentPrice * 0.965).toFixed(2);
+            openPaperPosition({
+              symbol,
+              side: 'SHORT',
+              type: 'MARKET',
+              size: assetSize,
+              leverage,
+              stop_loss: sl,
+              take_profit: tp
+            });
+            addBotLog(`🔻 ورود خودکار به معامله فروش (SHORT) با مارجین بالا: حجم ${assetSize} ${symbol} (اهرم ${leverage}x، مارجین ~$${marginAllocated.toFixed(1)}) به قیمت $${currentPrice.toLocaleString()} - ${reason}`);
+          } catch (e) {
+            addBotLog(`خطای ربات در ثبت سفارش فروش: ${e.message}`);
+          }
         }
       }
     }
-  } else if (signal === 'SELL') {
-    if (existingPos && existingPos.side === 'LONG') {
-      executeClosePosition(existingPos.id, 'BOT_SIGNAL');
-      addBotLog(`بستن پوزیشن LONG برای ${symbol} بر اساس سیگنال فروش ربات`);
-    } else if (!existingPos) {
-      const summary = getAccountSummary();
-      const tradeUsd = Math.max(100, summary.free_margin * (PAPER_ACCOUNT.bot.risk_pct_per_trade / 100));
-      const assetSize = +(tradeUsd / currentPrice).toFixed(4);
+  } catch (err) {
+    console.warn('Auto bot evaluation notice:', err.message);
+  } finally {
+    isBotEvaluating = false;
+  }
+}
 
-      if (assetSize > 0 && summary.free_margin > 150) {
+// ============================================================================
+// MULTI-MARKET OPPORTUNITY SCANNER & SHORT-TERM SCALPING ENGINE
+// ============================================================================
+
+let isScanningMarkets = false;
+let lastMarketScanTime = 0;
+
+/**
+ * Scans all supported cryptocurrency and Toman market pairs,
+ * evaluating technical confluence, volume surges, and RSI momentum
+ * to find short-term profitable scalping opportunities.
+ */
+export async function scanAllMarketsForOpportunities() {
+  if (isScanningMarkets) return RECENT_MARKET_OPPORTUNITIES;
+  const now = Date.now();
+  if (now - lastMarketScanTime < 3000 && RECENT_MARKET_OPPORTUNITIES.length > 0) {
+    return RECENT_MARKET_OPPORTUNITIES;
+  }
+  isScanningMarkets = true;
+  lastMarketScanTime = now;
+
+  const scannedList = [];
+  try {
+    for (const sym of SUPPORTED_SYMBOLS) {
+      const ticker = MARKET_TICKERS.get(sym.id);
+      if (!ticker || !ticker.price) continue;
+
+      const candles = CANDLE_HISTORY.get(sym.id) || [];
+      if (candles.length < 10) continue;
+
+      const closes = candles.map(c => c.close);
+      const volumes = candles.map(c => c.volume);
+      const currentPrice = ticker.price;
+      const change24h = Number(ticker.change24h) || 0;
+      const volume24h = Number(ticker.volume24h) || 0;
+
+      // Technical indicators: RSI, Fast/Slow EMA, RVOL
+      const rsi14 = calculateRSI(closes, Math.min(14, closes.length - 1));
+      const ema9Arr = calculateEMA(closes, 9);
+      const ema21Arr = calculateEMA(closes, Math.min(21, closes.length - 1));
+      const currEma9 = ema9Arr[ema9Arr.length - 1];
+      const currEma21 = ema21Arr[ema21Arr.length - 1];
+      const prevEma9 = ema9Arr[ema9Arr.length - 2] || currEma9;
+      const prevEma21 = ema21Arr[ema21Arr.length - 2] || currEma21;
+
+      // Volume surge ratio (rvol)
+      const recentVol = volumes.slice(-5).reduce((a, b) => a + b, 0) / 5;
+      const baseVol = volumes.slice(-20).reduce((a, b) => a + b, 0) / Math.min(20, volumes.length) || 1;
+      const rvol = +(recentVol / (baseVol || 1)).toFixed(2);
+
+      // 24h high/low spread
+      const highLowSpreadPct = ticker.low24h > 0 ? +(((ticker.high24h - ticker.low24h) / ticker.low24h) * 100).toFixed(2) : 2.5;
+
+      // Determine Scalping Strategy & Profit Expectancy
+      let signal = 'HOLD';
+      let profitPotential = 50;
+      let rationale = '';
+      let scalpType = 'MOMENTUM_BREAKOUT';
+
+      if (rsi14 <= 33) {
+        signal = 'BUY';
+        scalpType = 'OVERSOLD_BOUNCE';
+        profitPotential = Math.min(96, Math.round(76 + (33 - rsi14) * 1.2 + (rvol > 1.2 ? 6 : 0)));
+        rationale = `اشباع فروش شدید RSI=${rsi14.toFixed(1)}؛ تریگر بازگشت سریع قیمتی به سمت میانگین متحرک (Mean Reversion)`;
+      } else if ((currEma9 > currEma21 && prevEma9 <= prevEma21) || (currEma9 > currEma21 && change24h > 1.2 && rvol >= 1.25)) {
+        signal = 'BUY';
+        scalpType = 'MOMENTUM_BREAKOUT';
+        profitPotential = Math.min(97, Math.round(78 + (change24h > 3 ? 9 : 4) + (rvol > 1.4 ? 7 : 0)));
+        rationale = `شکست صعودی با تقاطع EMA(9) بالاتر از EMA(21) همراه با جهش حجم معاملات (${rvol}x)`;
+      } else if (rsi14 >= 71) {
+        signal = 'SELL';
+        scalpType = 'OVERBOUGHT_CORRECTION';
+        profitPotential = Math.min(94, Math.round(75 + (rsi14 - 71) * 1.1 + (rvol > 1.2 ? 5 : 0)));
+        rationale = `اشباع خرید سنگین RSI=${rsi14.toFixed(1)}؛ واگرایی سقف و احتمال اصلاح زودهنگام قیمت`;
+      } else if ((currEma9 < currEma21 && prevEma9 >= prevEma21) || (currEma9 < currEma21 && change24h < -1.8 && rvol >= 1.25)) {
+        signal = 'SELL';
+        scalpType = 'BEARISH_MOMENTUM';
+        profitPotential = Math.min(93, Math.round(76 + (change24h < -3 ? 8 : 4) + (rvol > 1.4 ? 6 : 0)));
+        rationale = `تقاطع نزولی میانگین‌ها و افزایش فشار فروش در تایم‌فریم معاملاتی کوتاه (${rvol}x حجم)`;
+      } else {
+        profitPotential = Math.round(45 + Math.abs(change24h) * 1.4);
+        rationale = `بازار در فاز تثبیت؛ منتظر شکست الگو یا ورود نقدینگی جدید (RSI=${rsi14.toFixed(1)})`;
+      }
+
+      // Dynamic Scalping Targets (Short-Term Scalp: ~1.2% SL, ~2.4% TP => 1:2.0 Risk/Reward)
+      const slPct = 0.012;
+      const tpPct = 0.024;
+
+      const tpPrice = signal === 'BUY'
+        ? +(currentPrice * (1 + tpPct)).toFixed(sym.tickDecimals)
+        : +(currentPrice * (1 - tpPct)).toFixed(sym.tickDecimals);
+
+      const slPrice = signal === 'BUY'
+        ? +(currentPrice * (1 - slPct)).toFixed(sym.tickDecimals)
+        : +(currentPrice * (1 + slPct)).toFixed(sym.tickDecimals);
+
+      const opp = {
+        id: 'opp_' + sym.id.replace(/[^a-zA-Z0-9]/g, '_') + '_' + Math.floor(now / 15000),
+        symbol: sym.id,
+        name: sym.name,
+        category: sym.category || 'Crypto',
+        price: currentPrice,
+        change24h,
+        volume24h,
+        rsi: +rsi14.toFixed(1),
+        rvol,
+        volatility: highLowSpreadPct,
+        signal,
+        scalp_type: scalpType,
+        profit_potential: profitPotential,
+        rationale,
+        take_profit: tpPrice,
+        stop_loss: slPrice,
+        risk_reward: '1:2.0',
+        expected_return_pct: +(tpPct * 100).toFixed(1),
+        tickDecimals: sym.tickDecimals,
+        minSize: sym.minSize,
+        scanned_at: new Date(now).toISOString()
+      };
+
+      scannedList.push(opp);
+    }
+
+    // Sort descending by profit potential
+    scannedList.sort((a, b) => b.profit_potential - a.profit_potential);
+    RECENT_MARKET_OPPORTUNITIES = scannedList;
+
+    // Persist top opportunities to SQLite
+    for (const opp of scannedList.slice(0, 10)) {
+      try {
+        recordMarketOpportunity({
+          id: opp.id,
+          symbol: opp.symbol,
+          price: opp.price,
+          change24h: opp.change24h,
+          volume24h: opp.volume24h,
+          profit_potential: opp.profit_potential,
+          signal: opp.signal,
+          timeframe: 'SHORT_TERM_SCALP',
+          rationale: opp.rationale,
+          take_profit: opp.take_profit,
+          stop_loss: opp.stop_loss,
+          status: 'DETECTED',
+          scanned_at: opp.scanned_at
+        });
+      } catch {}
+    }
+
+    // If automated bot is active, execute short-term scalp on the highest conviction opportunity
+    if (PAPER_ACCOUNT.bot.enabled) {
+      await executeOpportunisticScalps(scannedList);
+    }
+  } catch (err) {
+    console.warn('Market opportunities scanner notice:', err.message);
+  } finally {
+    isScanningMarkets = false;
+  }
+
+  return scannedList;
+}
+
+/**
+ * Autonomous executor for opportunistic short-term scalping across scanned markets.
+ */
+export async function executeOpportunisticScalps(opportunities) {
+  try {
+    const summary = getAccountSummary();
+    if (summary.free_margin < 8) return; // Need at least $8 free margin
+
+    // Maximum concurrent positions (1 core trade + up to 3 altcoin scalps = 4 max)
+    if (PAPER_ACCOUNT.positions.length >= 4) return;
+
+    // Filter opportunities with high profit potential (>= 75%) and active BUY/SELL signal
+    const highPotentialOpps = opportunities.filter(o => o.profit_potential >= 75 && (o.signal === 'BUY' || o.signal === 'SELL'));
+    if (highPotentialOpps.length === 0) return;
+
+    for (const opp of highPotentialOpps) {
+      // Don't open duplicate position on a symbol that is already open
+      const alreadyOpen = PAPER_ACCOUNT.positions.some(p => p.symbol === opp.symbol);
+      if (alreadyOpen) continue;
+
+      // Safe sizing: allocate 15% - 22% of available free margin per scalp (min $8, max $20)
+      const currentFree = getAccountSummary().free_margin;
+      if (currentFree < 8) break;
+
+      const marginToUse = Math.min(20, Math.max(8, currentFree * 0.20));
+      const leverage = 12; // High-precision scalp leverage
+      const notional = marginToUse * leverage;
+      let rawSize = notional / opp.price;
+
+      // Adjust size according to asset decimal constraints
+      let cleanSize = opp.minSize >= 1 ? Math.max(opp.minSize, Math.round(rawSize)) : +rawSize.toFixed(4);
+      if (cleanSize < opp.minSize) cleanSize = opp.minSize;
+
+      const side = opp.signal === 'BUY' ? 'LONG' : 'SHORT';
+
+      try {
+        const newPos = openPaperPosition({
+          symbol: opp.symbol,
+          side,
+          type: 'MARKET',
+          size: cleanSize,
+          leverage,
+          stop_loss: opp.stop_loss,
+          take_profit: opp.take_profit
+        });
+
+        // Tag as short-term scalp
+        newPos.is_scalp = true;
+        newPos.scalp_rationale = opp.rationale;
+        newPos.target_roi_pct = 2.4;
+
+        addBotLog(`⚡ شکار فرصت سود کوتاه‌مدت (اسکالپ): ورود به پوزیشن ${side} روی ${opp.symbol} با شانس سود ${opp.profit_potential}% (مارجین ~$${marginToUse.toFixed(1)}، اهرم ${leverage}x، حد سود: ${opp.take_profit}) - ${opp.rationale}`);
+
+        // Update DB opportunity status
         try {
-          const sl = +(currentPrice * 1.015).toFixed(2);
-          const tp = +(currentPrice * 0.965).toFixed(2);
-          openPaperPosition({
-            symbol,
-            side: 'SHORT',
-            type: 'MARKET',
-            size: assetSize,
-            leverage: PAPER_ACCOUNT.bot.leverage,
-            stop_loss: sl,
-            take_profit: tp
+          updateMarketOpportunityStatus(opp.id, 'EXECUTED', newPos.id);
+        } catch {}
+
+        // Feed to online reinforcement learning agent
+        try {
+          agentLearner.learnFromOnlineObservation({
+            symbol: opp.symbol,
+            price: opp.price,
+            compositeScore: opp.profit_potential,
+            signal: opp.signal,
+            source: 'MULTI_MARKET_SCALP_SCANNER'
           });
-          addBotLog(`🤖 ورود خودکار ربات: فروش (SHORT) ${assetSize} ${symbol} به قیمت $${currentPrice.toLocaleString()} - ${reason}`);
-        } catch (e) {
-          addBotLog(`خطای ربات در ثبت سفارش فروش: ${e.message}`);
-        }
+        } catch {}
+
+        // Stop after opening one scalp per cycle to preserve diversification
+        break;
+      } catch (tradeErr) {
+        // Continue loop if sizing or margin on this coin failed
       }
     }
+  } catch (err) {
+    console.warn('Execute opportunistic scalp notice:', err.message);
   }
+}
+
+/**
+ * Manual or 1-Click trigger to execute an opportunistic short-term scalp on any coin.
+ */
+export function executeQuickScalpTrade(symbol, side = 'LONG') {
+  const ticker = MARKET_TICKERS.get(symbol);
+  if (!ticker) throw new Error(`نماد ${symbol} در مارکت یافت نشد`);
+
+  const summary = getAccountSummary();
+  if (summary.free_margin < 8) throw new Error(`مارجین آزاد کافی نیست (حداقل $8 مورد نیاز است)`);
+
+  const currentPrice = ticker.price;
+  const symConfig = SUPPORTED_SYMBOLS.find(s => s.id === symbol) || { tickDecimals: 2, minSize: 0.01 };
+  const marginToUse = Math.min(25, Math.max(8, summary.free_margin * 0.25));
+  const leverage = 12;
+  const notional = marginToUse * leverage;
+  let rawSize = notional / currentPrice;
+  let cleanSize = symConfig.minSize >= 1 ? Math.max(symConfig.minSize, Math.round(rawSize)) : +rawSize.toFixed(4);
+  if (cleanSize < symConfig.minSize) cleanSize = symConfig.minSize;
+
+  const slPct = 0.012;
+  const tpPct = 0.024;
+  const tp = side === 'LONG' ? +(currentPrice * (1 + tpPct)).toFixed(symConfig.tickDecimals) : +(currentPrice * (1 - tpPct)).toFixed(symConfig.tickDecimals);
+  const sl = side === 'LONG' ? +(currentPrice * (1 - slPct)).toFixed(symConfig.tickDecimals) : +(currentPrice * (1 + slPct)).toFixed(symConfig.tickDecimals);
+
+  const pos = openPaperPosition({
+    symbol,
+    side,
+    type: 'MARKET',
+    size: cleanSize,
+    leverage,
+    stop_loss: sl,
+    take_profit: tp
+  });
+
+  pos.is_scalp = true;
+  pos.target_roi_pct = 2.4;
+
+  addBotLog(`⚡ اجرای دستی اسکالپ فوری روی ${symbol} (${side}): مارجین $${marginToUse.toFixed(1)}، اهرم ${leverage}x، حد سود: ${tp}`);
+  return pos;
 }
 
 function addBotLog(msg) {
@@ -822,6 +1268,7 @@ paperRouter.get(['/bundle', '/terminal-bundle', '/state'], (req, res) => {
       positions: PAPER_ACCOUNT.positions,
       closed_trades: PAPER_ACCOUNT.trades.slice(0, 50),
       orderbook: ob,
+      opportunities: RECENT_MARKET_OPPORTUNITIES.slice(0, 30),
       agent: {
         status: PAPER_ACCOUNT.bot.enabled ? 'active' : 'idle',
         enabled: PAPER_ACCOUNT.bot.enabled,
@@ -836,6 +1283,55 @@ paperRouter.get(['/bundle', '/terminal-bundle', '/state'], (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET all detected market opportunities with profit potential ranking
+paperRouter.get('/opportunities', async (req, res) => {
+  try {
+    const opps = await scanAllMarketsForOpportunities();
+    res.json({
+      success: true,
+      count: opps.length,
+      scanned_at: new Date().toISOString(),
+      opportunities: opps
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST trigger immediate on-demand market scan
+paperRouter.post('/opportunities/scan', async (req, res) => {
+  try {
+    lastMarketScanTime = 0; // force scan
+    const opps = await scanAllMarketsForOpportunities();
+    res.json({
+      success: true,
+      message: `اسکن کامل ${opps.length} نماد بازار کریپتو و تومان با موفقیت انجام شد.`,
+      count: opps.length,
+      opportunities: opps
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST execute quick 1-click scalp on a detected market opportunity
+paperRouter.post('/opportunities/scalp', (req, res) => {
+  try {
+    const { symbol, side } = req.body;
+    if (!symbol) {
+      return res.status(400).json({ success: false, error: 'پارامتر symbol الزامی است' });
+    }
+    const position = executeQuickScalpTrade(symbol, side || 'LONG');
+    res.json({
+      success: true,
+      message: `معامله فوری اسکالپ برای نماد ${symbol} (${side || 'LONG'}) با موفقیت ثبت و فعال شد.`,
+      position
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 
@@ -950,12 +1446,13 @@ paperRouter.post(['/close-all', '/positions/close-all'], (req, res) => {
   }
 });
 
-// POST reset paper account to $10,000
-paperRouter.post('/reset', (req, res) => {
-  const summary = resetPaperAccount();
+// POST reset paper account to $100 with high margin
+paperRouter.post(['/account/reset', '/reset'], (req, res) => {
+  const initial = Number(req.body?.initial_balance) || 100.00;
+  const summary = resetPaperAccount(initial);
   res.json({
     success: true,
-    message: 'حساب آزمایشی با موفقیت به موجودی اولیه ۱۰,۰۰۰ دلار بازنشانی شد',
+    message: `حساب آزمایشی با موفقیت به موجودی اولیه ${initial} دلار با اهرم بالا (15x) بازنشانی شد`,
     account: summary
   });
 });
@@ -968,10 +1465,10 @@ paperRouter.post(['/bot-toggle', '/agent/toggle', '/bot/toggle'], (req, res) => 
   }
   if (strategy) PAPER_ACCOUNT.bot.strategy = strategy;
   if (symbol) PAPER_ACCOUNT.bot.symbol = symbol;
-  if (leverage) PAPER_ACCOUNT.bot.leverage = parseInt(leverage) || 5;
-  if (risk_pct) PAPER_ACCOUNT.bot.risk_pct_per_trade = parseFloat(risk_pct) || 8;
+  if (leverage) PAPER_ACCOUNT.bot.leverage = parseInt(leverage) || 15;
+  if (risk_pct) PAPER_ACCOUNT.bot.risk_pct_per_trade = parseFloat(risk_pct) || 35;
 
-  addBotLog(`تنظیمات ایجنت معامله‌گر به‌روزرسانی شد: وضعیت=${PAPER_ACCOUNT.bot.enabled ? 'روشن' : 'خاموش'}, استراتژی=${PAPER_ACCOUNT.bot.strategy}`);
+  addBotLog(`تنظیمات ایجنت معامله‌گر به‌روزرسانی شد: وضعیت=${PAPER_ACCOUNT.bot.enabled ? 'روشن' : 'خاموش'}, استراتژی=${PAPER_ACCOUNT.bot.strategy}, اهرم=${PAPER_ACCOUNT.bot.leverage}x`);
 
   res.json({
     success: true,
@@ -998,10 +1495,10 @@ paperRouter.get(['/agent/status', '/bot/status'], (req, res) => {
     success: true,
     status: PAPER_ACCOUNT.bot.enabled ? 'active' : 'idle',
     enabled: PAPER_ACCOUNT.bot.enabled,
-    strategy: PAPER_ACCOUNT.bot.strategy || 'EMA_CROSS',
+    strategy: PAPER_ACCOUNT.bot.strategy || '60_FEATURES_CONSENSUS',
     symbol: PAPER_ACCOUNT.bot.symbol || 'BTC/USDT',
-    leverage: PAPER_ACCOUNT.bot.leverage || 5,
-    risk_pct_per_trade: PAPER_ACCOUNT.bot.risk_pct_per_trade || 8,
+    leverage: PAPER_ACCOUNT.bot.leverage || 15,
+    risk_pct_per_trade: PAPER_ACCOUNT.bot.risk_pct_per_trade || 35,
     last_evaluated: PAPER_ACCOUNT.bot.last_evaluated,
     last_signal: PAPER_ACCOUNT.bot.last_signal,
     thought_logs: logs
@@ -1035,10 +1532,12 @@ paperRouter.post(['/agent/step', '/bot/step', '/agent/trigger'], async (req, res
       try {
         const side = action === 'BUY' ? 'LONG' : (action === 'SELL' ? 'SHORT' : 'LONG');
         const summary = getAccountSummary();
-        const tradeUsd = Math.max(100, summary.free_margin * (PAPER_ACCOUNT.bot.risk_pct_per_trade / 100));
-        const assetSize = +(tradeUsd / currentPrice).toFixed(4);
+        const leverage = Math.max(1, Math.min(20, PAPER_ACCOUNT.bot.leverage || 15));
+        const marginAllocated = Math.min(summary.free_margin * 0.85, Math.max(15, summary.free_margin * (PAPER_ACCOUNT.bot.risk_pct_per_trade / 100)));
+        const notionalValue = marginAllocated * leverage;
+        const assetSize = +(notionalValue / currentPrice).toFixed(4);
 
-        if (assetSize > 0 && summary.free_margin > 150) {
+        if (assetSize > 0 && summary.free_margin >= 15) {
           const sl = side === 'LONG' ? +(currentPrice * 0.985).toFixed(2) : +(currentPrice * 1.015).toFixed(2);
           const tp = side === 'LONG' ? +(currentPrice * 1.035).toFixed(2) : +(currentPrice * 0.965).toFixed(2);
           executedOrder = openPaperPosition({
@@ -1046,12 +1545,12 @@ paperRouter.post(['/agent/step', '/bot/step', '/agent/trigger'], async (req, res
             side,
             type: 'MARKET',
             size: assetSize,
-            leverage: PAPER_ACCOUNT.bot.leverage,
+            leverage,
             price: currentPrice,
             stop_loss: sl,
             take_profit: tp
           });
-          addBotLog(`🤖 ورود خودکار بر اساس اجماع ۶۰ ویژگی: ${side} ${assetSize} ${symbol} به قیمت $${currentPrice.toLocaleString()}`);
+          addBotLog(`🤖 ورود خودکار بر اساس اجماع ۶۰ ویژگی با مارجین بالا: ${side} ${assetSize} ${symbol} (اهرم ${leverage}x) به قیمت $${currentPrice.toLocaleString()}`);
         }
       } catch (tradeErr) {
         addBotLog(`هشدار ایجنت هنگام ثبت پوزیشن: ${tradeErr.message}`);

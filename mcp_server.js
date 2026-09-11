@@ -3,9 +3,10 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDatabaseStats, getClosedTrades, getOrders, getCapabilityExecutions, getTrainingEpochs } from './trading_db_manager.js';
+import { getDatabaseStats, getClosedTrades, getOrders, getCapabilityExecutions, getTrainingEpochs, loadOpenPositionsFromDb, getOnlineLearningObservations, getRecentMarketOpportunities } from './trading_db_manager.js';
 import { evaluateMarketWith60Features } from './sixty_features_quant_engine.js';
 import { agentLearner } from './self_improving_agent.js';
+import { PAPER_ACCOUNT, getAccountSummary, openPaperPosition, executeClosePosition, scanAllMarketsForOpportunities, executeQuickScalpTrade, RECENT_MARKET_OPPORTUNITIES } from './paper_exchange_engine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,9 +16,9 @@ export const mcpRouter = express.Router();
 // MCP Server Metadata
 export const MCP_SERVER_INFO = {
   name: 'crypto-60features-trading-agent-mcp',
-  version: '2.4.0',
+  version: '2.5.0',
   protocolVersion: '2024-11-05',
-  description: 'Model Context Protocol (MCP) Server for BTC/IRT and Crypto Algorithmic Trading with 60 Domain Capabilities, SQLite Persistence, and Self-Improving Agent Loop',
+  description: 'Model Context Protocol (MCP) Server for BTC/IRT and Crypto Algorithmic Trading with 60 Domain Capabilities, SQLite Persistence, High-Leverage Risk Execution, and Self-Improving Agent Loop',
   capabilities: {
     tools: { listChanged: false },
     resources: { subscribe: false, listChanged: false },
@@ -39,6 +40,29 @@ export const MCP_TOOLS = [
     }
   },
   {
+    name: 'get_live_paper_account_state',
+    description: 'Retrieves current live paper trading account balance, free margin, total equity, open positions with live unrealized PnL, win rate, and bot status.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'manage_high_leverage_trade',
+    description: 'Executes or closes high leverage paper trades (e.g. 15x leverage) with dynamic stop-loss, take-profit, and automatic risk bounds verification.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['OPEN_LONG', 'OPEN_SHORT', 'CLOSE_POSITION'], description: 'Trading action to perform' },
+        symbol: { type: 'string', default: 'BTC/USDT' },
+        size: { type: 'number', description: 'Position size (e.g. 0.005 BTC)' },
+        leverage: { type: 'number', default: 15 },
+        position_id: { type: 'string', description: 'Required when action is CLOSE_POSITION' }
+      },
+      required: ['action']
+    }
+  },
+  {
     name: 'get_database_trades',
     description: 'Queries closed trades, orders, and execution records directly from the persistent SQLite database (data/trading.db).',
     inputSchema: {
@@ -57,6 +81,20 @@ export const MCP_TOOLS = [
       properties: {
         limit: { type: 'number', description: 'Maximum number of records to return', default: 60 },
         capability_id: { type: 'string', description: 'Optional filter by capability ID (e.g. crypto_algo_trading, circuit_breaker)' }
+      }
+    }
+  },
+  {
+    name: 'record_online_learning_feedback',
+    description: 'Provides external feedback or price observations directly into the agent’s reinforcement learning cycle, updating the 60 feature weights incrementally.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', default: 'BTC/USDT' },
+        price: { type: 'number' },
+        compositeScore: { type: 'number' },
+        signal: { type: 'string', enum: ['BUY', 'SELL', 'HOLD'] },
+        source: { type: 'string', default: 'EXTERNAL_LLM_FEEDBACK' }
       }
     }
   },
@@ -90,11 +128,39 @@ export const MCP_TOOLS = [
     }
   },
   {
+    name: 'get_system_health_and_capabilities',
+    description: 'Provides complete diagnostic report on database integrity, active open positions, all 60 capabilities weights, and evolutionary agent generation.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
     name: 'export_mcp_configuration',
     description: 'Generates the Claude Desktop / Cursor / external MCP configuration JSON for connecting to this server.',
     inputSchema: {
       type: 'object',
       properties: {}
+    }
+  },
+  {
+    name: 'scan_all_crypto_markets',
+    description: 'Scans all 30+ supported cryptocurrency and Toman markets in real time, calculating RSI, volume surge (RVOL), EMA trends, profit opportunity score, and proposing short-term scalping setups with TP/SL.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'execute_opportunistic_scalp',
+    description: 'Executes a short-term opportunistic scalp trade on any crypto market (e.g. SOL/USDT, DOGE/USDT, PEPE/USDT, SUI/USDT, BTC/IRT) with calculated profit targets and stop losses.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: 'Symbol to trade (e.g. SOL/USDT, PEPE/USDT)' },
+        side: { type: 'string', enum: ['LONG', 'SHORT'], default: 'LONG' }
+      },
+      required: ['symbol']
     }
   }
 ];
@@ -102,9 +168,21 @@ export const MCP_TOOLS = [
 // Resources registry
 export const MCP_RESOURCES = [
   {
+    uri: 'mcp://trading/market/opportunities',
+    name: 'Detected Market Opportunities',
+    description: 'Real-time feed of multi-market scalping opportunities, profit potential scores, and TP/SL bounds',
+    mimeType: 'application/json'
+  },
+  {
     uri: 'mcp://trading/database/trades',
     name: 'Persistent SQLite Trades',
     description: 'Real-time feed of recorded trades from data/trading.db',
+    mimeType: 'application/json'
+  },
+  {
+    uri: 'mcp://trading/account/positions',
+    name: 'Active Open Positions',
+    description: 'Live active open positions with real-time unrealized PnL, entry price, liquidation price, and leverage',
     mimeType: 'application/json'
   },
   {
@@ -117,6 +195,12 @@ export const MCP_RESOURCES = [
     uri: 'mcp://trading/agent/evolution',
     name: 'Agent & LLM Lineage Data',
     description: 'Epoch history, reward curves, and feature weight progression',
+    mimeType: 'application/json'
+  },
+  {
+    uri: 'mcp://trading/agent/observations',
+    name: 'Continuous Online Learning Stream',
+    description: 'Feed of micro-learning observations recorded by the self-improving agent',
     mimeType: 'application/json'
   },
   {
@@ -135,6 +219,14 @@ export const MCP_PROMPTS = [
     arguments: [
       { name: 'symbol', description: 'Market symbol', required: true },
       { name: 'horizon', description: 'Trading horizon (e.g. 1h, 4h, 1d)', required: false }
+    ]
+  },
+  {
+    name: 'high_leverage_risk_assessment',
+    description: 'Evaluates capital protection, liquidation distance, and margin utilization before taking high-leverage positions.',
+    arguments: [
+      { name: 'symbol', description: 'Market symbol (e.g. BTC/USDT)', required: true },
+      { name: 'leverage', description: 'Proposed leverage multiplier (e.g. 15)', required: false }
     ]
   },
   {
@@ -159,6 +251,97 @@ export async function handleToolCall(name, args = {}) {
           {
             type: 'text',
             text: JSON.stringify(result, null, 2)
+          }
+        ]
+      };
+    }
+
+    case 'get_live_paper_account_state': {
+      const accountSummary = getAccountSummary();
+      const openPositions = PAPER_ACCOUNT.positions;
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              account: accountSummary,
+              positions: openPositions,
+              positions_count: openPositions.length,
+              bot_status: PAPER_ACCOUNT.bot
+            }, null, 2)
+          }
+        ]
+      };
+    }
+
+    case 'manage_high_leverage_trade': {
+      const { action, symbol = 'BTC/USDT', size, leverage = 15, position_id } = args;
+      if (action === 'CLOSE_POSITION') {
+        if (!position_id) throw new Error('position_id is required for CLOSE_POSITION');
+        const closed = executeClosePosition(position_id, 'MCP_DIRECT_CLOSE');
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ success: true, closed_trade: closed }, null, 2)
+            }
+          ]
+        };
+      }
+
+      const side = action === 'OPEN_LONG' ? 'LONG' : 'SHORT';
+      const cleanSize = Number(size) || 0.005;
+      const cleanLeverage = Math.max(1, Math.min(20, Number(leverage) || 15));
+      const order = openPaperPosition({
+        symbol,
+        side,
+        type: 'MARKET',
+        size: cleanSize,
+        leverage: cleanLeverage
+      });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ success: true, opened_position: order, account: getAccountSummary() }, null, 2)
+          }
+        ]
+      };
+    }
+
+    case 'record_online_learning_feedback': {
+      const { symbol = 'BTC/USDT', price = 0, compositeScore = 0, signal = 'HOLD', source = 'EXTERNAL_MCP_FEEDBACK' } = args;
+      const learnRes = agentLearner.learnFromOnlineObservation({
+        symbol,
+        price: Number(price) || 0,
+        compositeScore: Number(compositeScore) || 0,
+        signal,
+        source
+      });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ success: true, learning_result: learnRes, agent_status: agentLearner.getStatus() }, null, 2)
+          }
+        ]
+      };
+    }
+
+    case 'get_system_health_and_capabilities': {
+      const dbStats = getDatabaseStats();
+      const agentStatus = agentLearner.getStatus();
+      const accountSummary = getAccountSummary();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              database: dbStats,
+              agent: agentStatus,
+              trading_account: accountSummary,
+              active_positions_count: PAPER_ACCOUNT.positions.length
+            }, null, 2)
           }
         ]
       };
@@ -227,6 +410,41 @@ export async function handleToolCall(name, args = {}) {
       };
     }
 
+    case 'scan_all_crypto_markets': {
+      const opps = await scanAllMarketsForOpportunities();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              status: 'success',
+              count: opps.length,
+              scanned_at: new Date().toISOString(),
+              top_opportunities: opps.slice(0, 15)
+            }, null, 2)
+          }
+        ]
+      };
+    }
+
+    case 'execute_opportunistic_scalp': {
+      const { symbol, side = 'LONG' } = args;
+      if (!symbol) throw new Error('symbol parameter is required');
+      const position = executeQuickScalpTrade(symbol, side);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              status: 'success',
+              message: `Short-term scalp trade opened successfully for ${symbol} (${side})`,
+              position
+            }, null, 2)
+          }
+        ]
+      };
+    }
+
     default:
       throw new Error(`Unknown MCP tool: ${name}`);
   }
@@ -235,6 +453,19 @@ export async function handleToolCall(name, args = {}) {
 // Resource read handler
 export async function handleResourceRead(uri) {
   switch (uri) {
+    case 'mcp://trading/market/opportunities': {
+      const opps = await scanAllMarketsForOpportunities();
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'application/json',
+            text: JSON.stringify(opps, null, 2)
+          }
+        ]
+      };
+    }
+
     case 'mcp://trading/database/trades': {
       const trades = getClosedTrades(50);
       return {
@@ -243,6 +474,19 @@ export async function handleResourceRead(uri) {
             uri,
             mimeType: 'application/json',
             text: JSON.stringify(trades, null, 2)
+          }
+        ]
+      };
+    }
+
+    case 'mcp://trading/account/positions': {
+      const positions = PAPER_ACCOUNT.positions.length > 0 ? PAPER_ACCOUNT.positions : loadOpenPositionsFromDb();
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'application/json',
+            text: JSON.stringify(positions, null, 2)
           }
         ]
       };
@@ -274,15 +518,29 @@ export async function handleResourceRead(uri) {
       };
     }
 
-    case 'mcp://trading/system/status': {
-      const stats = getDatabaseStats();
-      const agentStatus = agentLearner.getStatus();
+    case 'mcp://trading/agent/observations': {
+      const observations = getOnlineLearningObservations(50);
       return {
         contents: [
           {
             uri,
             mimeType: 'application/json',
-            text: JSON.stringify({ db_stats: stats, agent_status: agentStatus }, null, 2)
+            text: JSON.stringify(observations, null, 2)
+          }
+        ]
+      };
+    }
+
+    case 'mcp://trading/system/status': {
+      const stats = getDatabaseStats();
+      const agentStatus = agentLearner.getStatus();
+      const accountSummary = getAccountSummary();
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'application/json',
+            text: JSON.stringify({ db_stats: stats, agent_status: agentStatus, account: accountSummary }, null, 2)
           }
         ]
       };

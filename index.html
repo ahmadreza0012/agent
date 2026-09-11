@@ -1286,6 +1286,10 @@
                         <span>📊 پوزیشن‌های باز زنده</span>
                         <span id="badge-open-positions" style="background: #3b82f6; color: #fff; padding: 1px 6px; border-radius: 10px; font-size: 0.7rem;">0</span>
                     </button>
+                    <button class="bottom-tab-btn" onclick="switchBottomTab('opportunities')" id="tab-btn-opportunities">
+                        <span>🎯 رصد تمام بازارها و فرصت‌های اسکالپ (سود کوتاه‌مدت)</span>
+                        <span id="badge-opportunities-count" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: bold;">0</span>
+                    </button>
                     <button class="bottom-tab-btn" onclick="switchBottomTab('history')" id="tab-btn-history">
                         <span>📋 تاریخچه معاملات ایجنت</span>
                         <span id="badge-history-count" style="background: #334155; color: #94a3b8; padding: 1px 6px; border-radius: 10px; font-size: 0.7rem;">0</span>
@@ -1322,6 +1326,58 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Tab 4: Multi-Market Opportunities Scanner & Scalping -->
+                    <div id="tab-content-opportunities" style="display: none;">
+                        <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid #1e293b; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 1.4rem;">⚡</span>
+                                <div>
+                                    <div style="font-weight: 700; color: #f8fafc; font-size: 0.95rem;">
+                                        پایش زنده تمام بازارهای کریپتو و تومان برای شکار معاملات سود کوتاه‌مدت (اسکالپ)
+                                    </div>
+                                    <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">
+                                        رصد بلادرنگ ۳۰+ نماد با تحلیل اشباع RSI، شتاب حجم نقدینگی، شکست الگوها و اهداف خروج سریع با نسبت ۱:۲.۰
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span id="scanner-auto-status" style="display: flex; align-items: center; gap: 5px; font-size: 0.76rem; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #34d399; padding: 4px 10px; border-radius: 6px;">
+                                    <span style="display: inline-block; width: 7px; height: 7px; background: #10b981; border-radius: 50%;"></span>
+                                    اسکن خودکار فعال (هر ۵ ثانیه)
+                                </span>
+                                <button onclick="triggerImmediateMarketScan()" style="background: #2563eb; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <span>🔄</span> اسکن فوری بازارها
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style="overflow-x: auto;">
+                            <table class="paper-table">
+                                <thead>
+                                    <tr>
+                                        <th>نماد و دسته‌بندی</th>
+                                        <th>قیمت لحظه‌ای</th>
+                                        <th>تغییر ۲۴h</th>
+                                        <th>شاخص RSI</th>
+                                        <th>نسبت حجم (RVOL)</th>
+                                        <th>سیگنال اسکالپ</th>
+                                        <th>شانس سودآوری</th>
+                                        <th>حد سود / ضرر پیشنهادی</th>
+                                        <th>تحلیل و دلیل ورود</th>
+                                        <th>عملیات معامله</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="opportunities-tbody">
+                                    <tr>
+                                        <td colspan="10" style="text-align: center; color: #64748b; padding: 22px;">
+                                            در حال رصد تمام بازارهای کریپتو و محاسبه ضرایب سودآوری کوتاه‌مدت...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
                     <!-- Tab 2: History -->
@@ -3098,9 +3154,15 @@
             const targetBtn = document.getElementById(`tab-btn-${tab}`);
             if (targetBtn) targetBtn.classList.add('active');
 
-            document.getElementById('tab-content-positions').style.display = (tab === 'positions') ? 'block' : 'none';
-            document.getElementById('tab-content-history').style.display = (tab === 'history') ? 'block' : 'none';
-            document.getElementById('tab-content-agent-logs').style.display = (tab === 'agent-logs') ? 'block' : 'none';
+            const tabPositions = document.getElementById('tab-content-positions');
+            const tabOpps = document.getElementById('tab-content-opportunities');
+            const tabHistory = document.getElementById('tab-content-history');
+            const tabLogs = document.getElementById('tab-content-agent-logs');
+
+            if (tabPositions) tabPositions.style.display = (tab === 'positions') ? 'block' : 'none';
+            if (tabOpps) tabOpps.style.display = (tab === 'opportunities') ? 'block' : 'none';
+            if (tabHistory) tabHistory.style.display = (tab === 'history') ? 'block' : 'none';
+            if (tabLogs) tabLogs.style.display = (tab === 'agent-logs') ? 'block' : 'none';
         }
 
         let isFetchingExchange = false;
@@ -3124,6 +3186,7 @@
                             updateAccountDisplay(bundle);
                             if (bundle.orderbook) renderOrderBook(bundle.orderbook);
                             if (bundle.agent) updateAgentHUD(bundle.agent);
+                            if (bundle.opportunities) renderMarketOpportunities(bundle.opportunities);
                             return;
                         }
                     }
@@ -3132,11 +3195,12 @@
                 }
 
                 // Fallback: fetch endpoints via Promise.allSettled with timeout
-                const [candlesRes, acctRes, obRes, agentRes] = await Promise.allSettled([
+                const [candlesRes, acctRes, obRes, agentRes, oppsRes] = await Promise.allSettled([
                     fetch(`${API_BASE}/v1/paper/candles?symbol=${encodeURIComponent(activeExchangeSymbol)}&limit=65`, { signal: AbortSignal.timeout(5000) }),
                     fetch(`${API_BASE}/v1/paper/account`, { signal: AbortSignal.timeout(5000) }),
                     fetch(`${API_BASE}/v1/paper/orderbook?symbol=${encodeURIComponent(activeExchangeSymbol)}`, { signal: AbortSignal.timeout(5000) }),
-                    fetch(`${API_BASE}/v1/paper/agent/status`, { signal: AbortSignal.timeout(5000) })
+                    fetch(`${API_BASE}/v1/paper/agent/status`, { signal: AbortSignal.timeout(5000) }),
+                    fetch(`${API_BASE}/v1/paper/opportunities`, { signal: AbortSignal.timeout(5000) })
                 ]);
 
                 if (candlesRes.status === 'fulfilled' && candlesRes.value.ok) {
@@ -3159,6 +3223,11 @@
                 if (agentRes.status === 'fulfilled' && agentRes.value.ok) {
                     const agentData = await agentRes.value.json();
                     updateAgentHUD(agentData);
+                }
+
+                if (oppsRes.status === 'fulfilled' && oppsRes.value.ok) {
+                    const oppsData = await oppsRes.value.json();
+                    if (oppsData.opportunities) renderMarketOpportunities(oppsData.opportunities);
                 }
             } catch (err) {
                 // Graceful handler for transient network interruptions without uncaught console errors
@@ -3402,6 +3471,158 @@
                         </div>
                     `;
                 }).join('');
+            }
+        }
+
+        function renderMarketOpportunities(opportunities) {
+            const oppsBadge = document.getElementById('badge-opportunities-count');
+            const oppsTbody = document.getElementById('opportunities-tbody');
+            if (!opportunities) return;
+
+            const actionableCount = opportunities.filter(o => o.signal === 'BUY' || o.signal === 'SELL').length;
+            if (oppsBadge) {
+                oppsBadge.textContent = actionableCount > 0 ? `${actionableCount} فرصت` : `${opportunities.length} جفت`;
+            }
+
+            if (!oppsTbody) return;
+
+            if (opportunities.length === 0) {
+                oppsTbody.innerHTML = `
+                    <tr>
+                        <td colspan="10" style="text-align: center; color: #64748b; padding: 22px;">
+                            در حال حاضر فرصت با ریسک به ریوارد بالا یافت نشد. موتور پایش هر ۵ ثانیه تمام مارکت‌ها را اسکن می‌کند.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            oppsTbody.innerHTML = opportunities.map(opp => {
+                const isBuy = opp.signal === 'BUY';
+                const isSell = opp.signal === 'SELL';
+                const signalColor = isBuy ? '#10b981' : (isSell ? '#ef4444' : '#64748b');
+                const signalBg = isBuy ? 'rgba(16, 185, 129, 0.15)' : (isSell ? 'rgba(239, 68, 68, 0.15)' : 'rgba(100, 116, 139, 0.1)');
+                const signalText = isBuy ? '🟢 خرید صعودی (LONG)' : (isSell ? '🔴 اصلاح نزولی (SHORT)' : '⚪ نظاره‌گر');
+
+                const changeVal = Number(opp.change24h !== undefined ? opp.change24h : (opp.change_24h || 0));
+                const changeColor = changeVal >= 0 ? '#34d399' : '#f87171';
+                const changeSign = changeVal >= 0 ? '+' : '';
+
+                const score = Math.round(opp.profit_potential || opp.profit_potential_score || 50);
+                let scoreBarColor = '#3b82f6';
+                if (score >= 75) scoreBarColor = '#10b981';
+                else if (score >= 60) scoreBarColor = '#06b6d4';
+                else if (score < 40) scoreBarColor = '#f59e0b';
+
+                let rsiColor = '#94a3b8';
+                if (opp.rsi <= 35) rsiColor = '#34d399';
+                else if (opp.rsi >= 65) rsiColor = '#f87171';
+
+                const rvolVal = Number(opp.rvol || 1).toFixed(2);
+                const rvolColor = opp.rvol >= 1.3 ? '#38bdf8' : '#94a3b8';
+
+                let catBadge = '';
+                if (opp.category === 'meme' || opp.category === 'Meme') catBadge = '<span style="background: rgba(236, 72, 153, 0.2); color: #f472b6; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; margin-right: 4px;">Meme</span>';
+                else if (opp.category === 'ai' || opp.category === 'AI') catBadge = '<span style="background: rgba(168, 85, 247, 0.2); color: #c084fc; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; margin-right: 4px;">AI</span>';
+                else if (opp.category === 'toman' || opp.category === 'Toman') catBadge = '<span style="background: rgba(234, 179, 8, 0.2); color: #facc15; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; margin-right: 4px;">تومان</span>';
+                else if (opp.category === 'layer1' || opp.category === 'layer2' || opp.category === 'L1/L2') catBadge = '<span style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; margin-right: 4px;">L1/L2</span>';
+                else catBadge = '<span style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; margin-right: 4px;">Major</span>';
+
+                const sideAction = isSell ? 'SHORT' : 'LONG';
+                const actionBtn = (isBuy || isSell)
+                    ? `<button onclick="quickScalpTrade('${opp.symbol}', '${sideAction}')" style="background: ${signalColor}; color: #fff; border: none; padding: 4px 10px; border-radius: 5px; font-size: 0.72rem; font-weight: bold; cursor: pointer; white-space: nowrap; transition: transform 0.1s;" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'">
+                        ⚡ معامله ${sideAction}
+                       </button>`
+                    : `<span style="font-size: 0.72rem; color: #64748b;">در انتظار تأیید</span>`;
+
+                return `
+                    <tr style="${isBuy || isSell ? 'background: rgba(15, 23, 42, 0.4);' : ''}">
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                ${catBadge}
+                                <strong style="color: #f8fafc; font-family: monospace; cursor: pointer;" onclick="selectSymbol('${opp.symbol}')" title="مشاهده چارت ${opp.symbol}">
+                                    ${opp.symbol}
+                                </strong>
+                            </div>
+                        </td>
+                        <td style="font-family: monospace; color: #f1f5f9;">
+                            ${formatSymbolPrice(opp.symbol, opp.price)}
+                        </td>
+                        <td style="font-family: monospace; color: ${changeColor}; direction: ltr;">
+                            ${changeSign}${changeVal.toFixed(2)}%
+                        </td>
+                        <td style="font-family: monospace; color: ${rsiColor}; font-weight: 600;">
+                            ${Number(opp.rsi || 50).toFixed(1)}
+                        </td>
+                        <td style="font-family: monospace; color: ${rvolColor};">
+                            ${rvolVal}x
+                        </td>
+                        <td>
+                            <span style="background: ${signalBg}; color: ${signalColor}; padding: 2px 8px; border-radius: 4px; font-size: 0.74rem; font-weight: 600; white-space: nowrap;">
+                                ${signalText}
+                            </span>
+                        </td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 6px; min-width: 90px;">
+                                <div style="flex: 1; height: 6px; background: #1e293b; border-radius: 3px; overflow: hidden;">
+                                    <div style="width: ${score}%; height: 100%; background: ${scoreBarColor}; border-radius: 3px;"></div>
+                                </div>
+                                <span style="font-size: 0.72rem; font-family: monospace; color: ${scoreBarColor}; font-weight: 600;">${score}%</span>
+                            </div>
+                        </td>
+                        <td style="font-size: 0.72rem; font-family: monospace; white-space: nowrap;">
+                            <span style="color: #34d399;" title="حد سود (Take Profit)">TP: ${opp.take_profit ? formatSymbolPrice(opp.symbol, opp.take_profit) : `+${opp.expected_return_pct || 2.4}%`}</span>
+                            <span style="color: #64748b; margin: 0 2px;">|</span>
+                            <span style="color: #f87171;" title="حد ضرر (Stop Loss)">SL: ${opp.stop_loss ? formatSymbolPrice(opp.symbol, opp.stop_loss) : '-1.2%'}</span>
+                        </td>
+                        <td style="font-size: 0.72rem; color: #cbd5e1; max-width: 260px; line-height: 1.4;">
+                            ${opp.rationale || 'تحلیل الگوی شتاب و واگرایی'}
+                        </td>
+                        <td>
+                            ${actionBtn}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function quickScalpTrade(symbol, side) {
+            try {
+                showToast(`⏳ در حال ثبت معامله سریع اسکالپ برای ${symbol} (${side})...`, 'info');
+                const res = await fetch(`${API_BASE}/v1/paper/opportunities/scalp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol, side })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ ${data.message}`, 'success');
+                    switchBottomTab('positions');
+                    fetchExchangeData();
+                } else {
+                    showToast(`❌ خطا در معامله: ${data.error}`, 'error');
+                }
+            } catch (err) {
+                showToast(`❌ خطای ارتباط: ${err.message}`, 'error');
+            }
+        }
+
+        async function triggerImmediateMarketScan() {
+            try {
+                showToast('🔍 در حال اسکن فوری تمام بازارهای کریپتو و تومان...', 'info');
+                const res = await fetch(`${API_BASE}/v1/paper/opportunities/scan`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ ${data.message}`, 'success');
+                    if (data.opportunities) renderMarketOpportunities(data.opportunities);
+                } else {
+                    showToast(`❌ خطا: ${data.error}`, 'error');
+                }
+            } catch (err) {
+                showToast(`❌ خطای شبکه: ${err.message}`, 'error');
             }
         }
 

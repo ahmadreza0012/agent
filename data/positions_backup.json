@@ -1,0 +1,21 @@
+[
+  {
+    "id": "pos_1789112071833_zlwc",
+    "symbol": "BTC/USDT",
+    "side": "LONG",
+    "type": "MARKET",
+    "size": 0.0068,
+    "notional": 525.75,
+    "margin": 35.05,
+    "leverage": 15,
+    "entry_price": 77316.13,
+    "current_price": 78323.14,
+    "liquidation_price": 72780.25,
+    "stop_loss": 76148.77,
+    "take_profit": 80014.19,
+    "unrealized_pnl": 6.85,
+    "unrealized_pnl_pct": 19.54,
+    "fee_paid": 0.26,
+    "opened_at": "2026-09-11T07:34:31.833Z"
+  }
+]

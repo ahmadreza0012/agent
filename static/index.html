@@ -1068,7 +1068,7 @@
 
                     <div class="wallet-stat-card">
                         <div class="wallet-stat-title">دارایی کل حساب (Equity)</div>
-                        <div class="wallet-stat-value" id="wallet-equity">$10,000.00</div>
+                        <div class="wallet-stat-value" id="wallet-equity">$100.00</div>
                     </div>
                     <div class="wallet-stat-card">
                         <div class="wallet-stat-title">سود/زیان باز (PnL)</div>
@@ -1076,11 +1076,11 @@
                     </div>
                     <div class="wallet-stat-card">
                         <div class="wallet-stat-title">مارجین آزاد</div>
-                        <div class="wallet-stat-value" id="wallet-free-margin">$10,000.00</div>
+                        <div class="wallet-stat-value" id="wallet-free-margin">$100.00</div>
                     </div>
 
-                    <button class="btn" onclick="resetPaperAccount()" title="بازنشانی موجودی حساب به ۱۰,۰۰۰ دلار" style="background: #334155; color: #f1f5f9; padding: 6px 12px; font-size: 0.78rem; border-radius: 6px; border: 1px solid #475569; cursor: pointer;">
-                        🔄 بازنشانی ۱۰,۰۰۰$
+                    <button class="btn" onclick="resetPaperAccount()" title="بازنشانی موجودی حساب به ۱۰۰ دلار با اهرم بالا" style="background: #334155; color: #f1f5f9; padding: 6px 12px; font-size: 0.78rem; border-radius: 6px; border: 1px solid #475569; cursor: pointer;">
+                        🔄 بازنشانی ۱۰۰$ (اهرم بالا)
                     </button>
                     <button class="btn" onclick="closeAllPositions()" title="بستن تمام پوزیشن‌های باز با قیمت لحظه‌ای" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 6px 12px; font-size: 0.78rem; border-radius: 6px; cursor: pointer;">
                         🛑 بستن همه
@@ -1185,40 +1185,40 @@
                     <div class="agent-decision-card">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <div style="font-weight: bold; color: #60a5fa; font-size: 0.88rem; display: flex; align-items: center; gap: 6px;">
-                                <span>🤖 وضعیت ربات ایجنت</span>
+                                <span>🤖 وضعیت ربات معامله‌گر</span>
                             </div>
                             <span id="agent-bot-status-badge" style="font-size: 0.72rem; background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 2px 6px; border-radius: 4px; font-weight: bold;">
-                                فعال و در حال اسکن
+                                فعال و در حال معامله (۶۰ قابلیت)
                             </span>
                         </div>
                         <div style="font-size: 0.76rem; color: #94a3b8; line-height: 1.5; margin-bottom: 10px;">
-                            ایجنت با استراتژی دوگانه (EMA Cross + RSI Filter) به صورت لحظه‌ای بازار را بررسی و با رعایت حد ضرر و سود معامله می‌زند.
+                            ایجنت با اجماع ریاضی ۶۰ قابلیت بازار را لحظه‌ای ارزیابی نموده و معاملات پرمارجین با اهرم ۱۵x و سرمایه کل ۱۰۰ دلار ثبت می‌کند.
                         </div>
 
                         <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;">
                             <div style="display: flex; justify-content: space-between; font-size: 0.76rem;">
                                 <span style="color: #94a3b8;">استراتژی فعال:</span>
-                                <strong style="color: #cbd5e1;" id="agent-active-strategy">EMA Crossover + RSI</strong>
+                                <strong style="color: #38bdf8;" id="agent-active-strategy">اجماع ۶۰ قابلیت هوشمند</strong>
                             </div>
                             <div style="display: flex; justify-content: space-between; font-size: 0.76rem;">
-                                <span style="color: #94a3b8;">اهرم ایجنت:</span>
-                                <strong style="color: #cbd5e1;">5x</strong>
+                                <span style="color: #94a3b8;">اهرم ربات (High Margin):</span>
+                                <strong style="color: #f59e0b;">15x</strong>
                             </div>
                             <div style="display: flex; justify-content: space-between; font-size: 0.76rem;">
-                                <span style="color: #94a3b8;">ریسک در هر معامله:</span>
-                                <strong style="color: #cbd5e1;">۸٪ از مارجین آزاد</strong>
+                                <span style="color: #94a3b8;">تخصیص مارجین در معامله:</span>
+                                <strong style="color: #cbd5e1;">۳۵٪ از مارجین آزاد</strong>
                             </div>
                         </div>
 
                         <button class="btn" onclick="triggerAgentSignalNow()" id="btn-trigger-agent" style="width: 100%; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; font-size: 0.8rem; padding: 8px; border-radius: 6px; font-weight: bold; border: none; cursor: pointer;">
-                            ⚡ بررسی فوری سیگنال و معامله توسط ایجنت
+                            ⚡ اجرای فوری چرخه اجماع ۶۰ قابلیت و ورود به پوزیشن
                         </button>
                     </div>
 
                     <!-- Manual Observer Order Execution (for testing alongside agent) -->
                     <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 12px;">
                         <div style="font-weight: bold; font-size: 0.84rem; color: #e2e8f0; margin-bottom: 8px; display: flex; justify-content: space-between;">
-                            <span>ثبت معامله آزمایشی (ناظر)</span>
+                            <span>ثبت معامله دستی (ناظر)</span>
                             <span style="font-size: 0.7rem; color: #94a3b8;">پول مجازی</span>
                         </div>
 
@@ -1236,19 +1236,19 @@
                         <div style="margin-bottom: 10px;">
                             <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #94a3b8; margin-bottom: 3px;">
                                 <span>اهرم (Leverage):</span>
-                                <strong style="color: #38bdf8;" id="leverage-display">5x</strong>
+                                <strong style="color: #38bdf8;" id="leverage-display">15x</strong>
                             </div>
-                            <input type="range" id="order-leverage" min="1" max="20" value="5" oninput="updateLeverageDisplay(this.value)" style="width: 100%; cursor: pointer;">
+                            <input type="range" id="order-leverage" min="1" max="20" value="15" oninput="updateLeverageDisplay(this.value)" style="width: 100%; cursor: pointer;">
                         </div>
 
                         <!-- Order Size in Asset -->
                         <div style="margin-bottom: 10px;">
                             <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #94a3b8; margin-bottom: 3px;">
                                 <span>حجم معامله:</span>
-                                <span id="size-cost-est" style="direction: ltr; font-family: monospace;">~$391</span>
+                                <span id="size-cost-est" style="direction: ltr; font-family: monospace;">~$391 (مارجین ~$26)</span>
                             </div>
                             <div style="display: flex; gap: 6px;">
-                                <input type="number" id="order-size" step="0.001" value="0.025" oninput="recalcOrderCost()" style="flex: 1; background: #090d16; color: #fff; border: 1px solid #334155; border-radius: 6px; padding: 6px 10px; font-family: monospace; direction: ltr; font-size: 0.85rem;">
+                                <input type="number" id="order-size" step="0.0005" value="0.005" oninput="recalcOrderCost()" style="flex: 1; background: #090d16; color: #fff; border: 1px solid #334155; border-radius: 6px; padding: 6px 10px; font-family: monospace; direction: ltr; font-size: 0.85rem;">
                                 <span style="background: #1e293b; padding: 6px 10px; border-radius: 6px; font-size: 0.78rem; display: flex; align-items: center; color: #94a3b8;" id="order-size-symbol">BTC</span>
                             </div>
                             <!-- Quick % buttons -->
@@ -3232,8 +3232,8 @@
             const pnlElem = document.getElementById('wallet-unrealized-pnl');
             const freeMarginElem = document.getElementById('wallet-free-margin');
 
-            const totalEquity = w.total_equity ?? w.equity ?? 10000;
-            const freeMargin = w.free_margin ?? 10000;
+            const totalEquity = w.total_equity ?? w.equity ?? 100;
+            const freeMargin = w.free_margin ?? 100;
             const unrealPnl = w.unrealized_pnl ?? 0;
 
             if (equityElem) equityElem.textContent = `$${Number(totalEquity).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -3898,15 +3898,16 @@
         }
 
         async function resetPaperAccount() {
-            if (!confirm('آیا از بازنشانی دارایی مجازی حساب به ۱۰,۰۰۰ دلار اطمینان دارید؟ تمام پوزیشن‌ها بسته خواهند شد.')) return;
+            if (!confirm('آیا از بازنشانی دارایی حساب به ۱۰۰ دلار با اهرم بالا (High Margin) اطمینان دارید؟ تمام پوزیشن‌ها بسته خواهند شد.')) return;
             try {
                 const response = await fetch(`${API_BASE}/v1/paper/account/reset`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ initial_balance: 100 })
                 });
                 const res = await response.json();
                 if (res.success) {
-                    showToast('✅ موجودی حساب به ۱۰,۰۰۰ دلار بازنشانی شد!', 'success');
+                    showToast('✅ موجودی حساب به ۱۰۰ دلار با اهرم بالا (15x) بازنشانی شد!', 'success');
                     fetchExchangeData();
                 } else {
                     showToast(res.error || 'خطا', 'error');
