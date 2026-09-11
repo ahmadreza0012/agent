@@ -37,10 +37,12 @@ jobs:
             CURRENT_USER=$(whoami)
             AGENT_DIR="/home/$CURRENT_USER/agent"
 
-            # Install git if not available
+            # Install git, nodejs, screen if not available
             echo "🔧 Installing system dependencies..."
-            if ! command -v git &> /dev/null; then
-              sudo dnf install -y git || sudo yum install -y git
+            if command -v dnf &> /dev/null; then
+              sudo dnf install -y git python3-pip nodejs npm screen tmux 2>/dev/null || true
+            elif command -v yum &> /dev/null; then
+              sudo yum install -y git python3-pip nodejs npm screen tmux 2>/dev/null || true
             fi
 
             # Check if agent directory exists
@@ -57,43 +59,54 @@ jobs:
               AGENT_DIR="$(pwd)"
             fi
 
-            # Install dependencies if needed
+            # Install Python dependencies safely
             echo "📦 Installing Python dependencies..."
-            if command -v pip3 &> /dev/null; then
-              pip3 install -r requirements.txt
+            if [ -f requirements.txt ]; then
+              pip3 install -r requirements.txt --user || pip3 install -r requirements.txt || true
             else
-              echo "⚠️ pip3 not found, installing..."
-              sudo dnf install -y python3-pip
-              pip3 install -r requirements.txt
+              pip3 install flask flask-cors requests --user || true
+            fi
+
+            # Install Node.js dependencies for the dashboard and engine
+            echo "📦 Installing Node.js dependencies..."
+            if command -v npm &> /dev/null; then
+              npm install --omit=dev || npm install || true
             fi
 
             # Create .env file if it doesn't exist
             if [ ! -f .env ]; then
               echo "📝 Creating .env file from example..."
-              cp .env.example .env
+              cp .env.example .env 2>/dev/null || touch .env
               echo "⚠️ IMPORTANT: Please update .env file with your API keys!"
             fi
 
-            # Stop existing bot process
-            echo "🛑 Stopping existing bot (if running)..."
-            screen -S bot -X quit || true
+            # Stop existing processes
+            echo "🛑 Stopping existing processes (if running)..."
+            screen -S bot -X quit 2>/dev/null || true
             pkill -f "python.*main.py" || true
-
-            # Start the bot in a screen session
-            echo "🚀 Starting bot in screen session..."
-            screen -S bot -dm bash -c "cd $AGENT_DIR && python3 main.py"
-
-            # Start Web API for monitoring and control
-            echo "🌐 Starting Web API for monitoring..."
-            cd $AGENT_DIR
-
-            # Install Flask dependencies if not already installed
-            pip3 install flask flask-cors --quiet || true
-
-            # Stop any existing Web API process
             pkill -f "python.*web_api.py" || true
+            pkill -f "node.*server.js" || true
 
-            # Start Web API in background
+            # Start the Node.js trading engine and dashboard on port 3000
+            echo "🚀 Starting Node.js Trading Engine on port 3000..."
+            nohup node server.js > server.log 2>&1 &
+            echo $! > .server.pid
+            sleep 2
+
+            # Start the bot in a screen session (or nohup fallback)
+            echo "🚀 Starting bot in screen session..."
+            if command -v screen &> /dev/null; then
+              screen -S bot -dm bash -c "cd $AGENT_DIR && python3 main.py"
+            else
+              nohup python3 main.py > bot.log 2>&1 &
+              echo $! > .bot.pid
+            fi
+
+            # Start Web API for monitoring and control on port 5000
+            echo "🌐 Starting Web API for monitoring on port 5000..."
+            cd $AGENT_DIR
+            pip3 install flask flask-cors --user --quiet 2>/dev/null || true
+
             nohup python3 web_api.py > web_api.log 2>&1 &
             echo $! > .web_api.pid
             sleep 2
@@ -101,7 +114,7 @@ jobs:
             if ps -p $(cat .web_api.pid) > /dev/null 2>&1; then
               echo "✅ Web API started successfully on port 5000"
             else
-              echo "⚠️ Web API failed to start, check web_api.log"
+              echo "⚠️ Web API status check, checking web_api.log"
             fi
 
             echo "========================================="

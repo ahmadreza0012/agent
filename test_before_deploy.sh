@@ -2,17 +2,27 @@
 # 🚀 اسکریپت تست محلی وب‌سرور قبل از دیپلوی
 # این اسکریپت را اجرا کنید تا مطمئن شوید app.py درست کار می‌کند
 
+# Find Python command
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+else
+    echo "❌ Python is not installed"
+    exit 1
+fi
+
 echo "🔍 در حال تست app.py..."
 echo ""
 
 # تست ۱: ایمپورت
 echo "✅ تست ۱: بررسی ایمپورت"
-python -c "from app import app; print('   app.py با موفقیت ایمپورت شد')" || exit 1
+$PYTHON_CMD -c "from app import app; print('   app.py با موفقیت ایمپورت شد')" || exit 1
 echo ""
 
 # تست ۲: بررسی endpointها
 echo "✅ تست ۲: بررسی endpointهای ثبت شده"
-python -c "
+$PYTHON_CMD -c "
 from app import app
 rules = [str(rule) for rule in app.url_map.iter_rules()]
 expected = ['/', '/health', '/status', '/run', '/wake', '/metrics']
@@ -27,7 +37,7 @@ echo ""
 
 # تست ۳: اجرای سرور برای ۵ ثانیه
 echo "✅ تست ۳: اجرای موقت سرور (۵ ثانیه)"
-timeout 5 python -c "
+timeout 5 $PYTHON_CMD -c "
 import threading
 import time
 from app import app
