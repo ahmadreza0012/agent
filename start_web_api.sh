@@ -12,11 +12,16 @@ echo "🚀 راه‌اندازی داشبورد روی پورت 5000..."
 echo "========================================="
 
 # 1. متوقف کردن پردازش‌های قبلی
-echo "🛑 در حال بستن سرویس‌های قبلی روی پورت 5000..."
+echo "🛑 در حال بستن سرویس‌های قبلی روی پورت 5000 و 80..."
 pkill -f "python.*web_api.py" 2>/dev/null || true
 pkill -f "node.*server.js" 2>/dev/null || true
 fuser -k 5000/tcp 2>/dev/null || true
 sleep 1
+
+# فعال‌سازی ریدایرکت پورت 80 به 5000 با iptables در صورت دسترسی sudo
+if command -v sudo &> /dev/null && command -v iptables &> /dev/null; then
+    sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 5000 2>/dev/null || true
+fi
 
 STARTED=0
 
