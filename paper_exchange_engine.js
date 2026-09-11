@@ -23,47 +23,47 @@ export const paperRouter = express.Router();
 // Supported Market Symbols Across Global Majors, Meme/Scalp, AI, Layer 1/2, and Iranian Toman Pairs
 export const SUPPORTED_SYMBOLS = [
   // Majors
-  { id: 'BTC/USDT', binanceSymbol: 'BTCUSDT', name: 'Bitcoin', category: 'Majors', basePrice: 78300, tickDecimals: 2, minSize: 0.0001 },
-  { id: 'ETH/USDT', binanceSymbol: 'ETHUSDT', name: 'Ethereum', category: 'Majors', basePrice: 2460, tickDecimals: 2, minSize: 0.001 },
-  { id: 'SOL/USDT', binanceSymbol: 'SOLUSDT', name: 'Solana', category: 'Majors', basePrice: 142.50, tickDecimals: 2, minSize: 0.05 },
-  { id: 'BNB/USDT', binanceSymbol: 'BNBUSDT', name: 'BNB Chain', category: 'Majors', basePrice: 590.00, tickDecimals: 2, minSize: 0.01 },
-  { id: 'XRP/USDT', binanceSymbol: 'XRPUSDT', name: 'Ripple', category: 'Majors', basePrice: 0.58, tickDecimals: 4, minSize: 10.0 },
-  { id: 'ADA/USDT', binanceSymbol: 'ADAUSDT', name: 'Cardano', category: 'Majors', basePrice: 0.36, tickDecimals: 4, minSize: 10.0 },
-  { id: 'AVAX/USDT', binanceSymbol: 'AVAXUSDT', name: 'Avalanche', category: 'Majors', basePrice: 28.50, tickDecimals: 2, minSize: 0.2 },
-  { id: 'LINK/USDT', binanceSymbol: 'LINKUSDT', name: 'Chainlink', category: 'Majors', basePrice: 11.80, tickDecimals: 2, minSize: 0.5 },
-  { id: 'DOT/USDT', binanceSymbol: 'DOTUSDT', name: 'Polkadot', category: 'Majors', basePrice: 4.30, tickDecimals: 2, minSize: 1.0 },
-  { id: 'LTC/USDT', binanceSymbol: 'LTCUSDT', name: 'Litecoin', category: 'Majors', basePrice: 68.00, tickDecimals: 2, minSize: 0.1 },
+  { id: 'BTC/USDT', binanceSymbol: 'BTCUSDT', name: 'Bitcoin', category: 'Majors', basePrice: 77149.27, tickDecimals: 2, minSize: 0.0001 },
+  { id: 'ETH/USDT', binanceSymbol: 'ETHUSDT', name: 'Ethereum', category: 'Majors', basePrice: 2544.38, tickDecimals: 2, minSize: 0.001 },
+  { id: 'SOL/USDT', binanceSymbol: 'SOLUSDT', name: 'Solana', category: 'Majors', basePrice: 101.30, tickDecimals: 2, minSize: 0.05 },
+  { id: 'BNB/USDT', binanceSymbol: 'BNBUSDT', name: 'BNB Chain', category: 'Majors', basePrice: 724.70, tickDecimals: 2, minSize: 0.01 },
+  { id: 'XRP/USDT', binanceSymbol: 'XRPUSDT', name: 'Ripple', category: 'Majors', basePrice: 1.3594, tickDecimals: 4, minSize: 10.0 },
+  { id: 'ADA/USDT', binanceSymbol: 'ADAUSDT', name: 'Cardano', category: 'Majors', basePrice: 0.3514, tickDecimals: 4, minSize: 10.0 },
+  { id: 'AVAX/USDT', binanceSymbol: 'AVAXUSDT', name: 'Avalanche', category: 'Majors', basePrice: 28.57, tickDecimals: 2, minSize: 0.2 },
+  { id: 'LINK/USDT', binanceSymbol: 'LINKUSDT', name: 'Chainlink', category: 'Majors', basePrice: 11.67, tickDecimals: 2, minSize: 0.5 },
+  { id: 'DOT/USDT', binanceSymbol: 'DOTUSDT', name: 'Polkadot', category: 'Majors', basePrice: 4.24, tickDecimals: 2, minSize: 1.0 },
+  { id: 'LTC/USDT', binanceSymbol: 'LTCUSDT', name: 'Litecoin', category: 'Majors', basePrice: 66.81, tickDecimals: 2, minSize: 0.1 },
 
   // High-Beta & Meme Scalping
   { id: 'DOGE/USDT', binanceSymbol: 'DOGEUSDT', name: 'Dogecoin', category: 'Meme/Scalp', basePrice: 0.11, tickDecimals: 5, minSize: 20.0 },
   { id: 'SHIB/USDT', binanceSymbol: 'SHIBUSDT', name: 'Shiba Inu', category: 'Meme/Scalp', basePrice: 0.000017, tickDecimals: 8, minSize: 100000 },
-  { id: 'PEPE/USDT', binanceSymbol: 'PEPEUSDT', name: 'Pepe', category: 'Meme/Scalp', basePrice: 0.0000095, tickDecimals: 8, minSize: 100000 },
-  { id: 'WIF/USDT', binanceSymbol: 'WIFUSDT', name: 'dogwifhat', category: 'Meme/Scalp', basePrice: 2.10, tickDecimals: 3, minSize: 1.0 },
+  { id: 'PEPE/USDT', binanceSymbol: 'PEPEUSDT', name: 'Pepe', category: 'Meme/Scalp', basePrice: 0.0000093, tickDecimals: 8, minSize: 100000 },
+  { id: 'WIF/USDT', binanceSymbol: 'WIFUSDT', name: 'dogwifhat', category: 'Meme/Scalp', basePrice: 2.12, tickDecimals: 3, minSize: 1.0 },
   { id: 'BONK/USDT', binanceSymbol: 'BONKUSDT', name: 'Bonk', category: 'Meme/Scalp', basePrice: 0.000021, tickDecimals: 8, minSize: 100000 },
-  { id: 'FLOKI/USDT', binanceSymbol: 'FLOKIUSDT', name: 'Floki', category: 'Meme/Scalp', basePrice: 0.000145, tickDecimals: 6, minSize: 10000 },
+  { id: 'FLOKI/USDT', binanceSymbol: 'FLOKIUSDT', name: 'Floki', category: 'Meme/Scalp', basePrice: 0.000146, tickDecimals: 6, minSize: 10000 },
 
   // AI & Next-Gen Compute
-  { id: 'RENDER/USDT', binanceSymbol: 'RENDERUSDT', name: 'Render', category: 'AI & Compute', basePrice: 5.60, tickDecimals: 2, minSize: 1.0 },
-  { id: 'FET/USDT', binanceSymbol: 'FETUSDT', name: 'Artificial Superintelligence', category: 'AI & Compute', basePrice: 1.35, tickDecimals: 3, minSize: 5.0 },
-  { id: 'TAO/USDT', binanceSymbol: 'TAOUSDT', name: 'Bittensor', category: 'AI & Compute', basePrice: 480.0, tickDecimals: 1, minSize: 0.02 },
-  { id: 'INJ/USDT', binanceSymbol: 'INJUSDT', name: 'Injective', category: 'DeFi & AI', basePrice: 19.50, tickDecimals: 2, minSize: 0.5 },
+  { id: 'RENDER/USDT', binanceSymbol: 'RENDERUSDT', name: 'Render', category: 'AI & Compute', basePrice: 5.49, tickDecimals: 2, minSize: 1.0 },
+  { id: 'FET/USDT', binanceSymbol: 'FETUSDT', name: 'Artificial Superintelligence', category: 'AI & Compute', basePrice: 1.34, tickDecimals: 3, minSize: 5.0 },
+  { id: 'TAO/USDT', binanceSymbol: 'TAOUSDT', name: 'Bittensor', category: 'AI & Compute', basePrice: 478.1, tickDecimals: 1, minSize: 0.02 },
+  { id: 'INJ/USDT', binanceSymbol: 'INJUSDT', name: 'Injective', category: 'DeFi & AI', basePrice: 19.28, tickDecimals: 2, minSize: 0.5 },
 
   // Layer 1 & Layer 2 High Momentum
-  { id: 'SUI/USDT', binanceSymbol: 'SUIUSDT', name: 'Sui Network', category: 'Layer 1', basePrice: 1.85, tickDecimals: 3, minSize: 2.0 },
-  { id: 'NEAR/USDT', binanceSymbol: 'NEARUSDT', name: 'Near Protocol', category: 'Layer 1', basePrice: 4.80, tickDecimals: 3, minSize: 1.0 },
-  { id: 'TON/USDT', binanceSymbol: 'TONUSDT', name: 'Toncoin', category: 'Layer 1', basePrice: 4.95, tickDecimals: 3, minSize: 1.0 },
-  { id: 'APT/USDT', binanceSymbol: 'APTUSDT', name: 'Aptos', category: 'Layer 1', basePrice: 8.40, tickDecimals: 2, minSize: 0.5 },
-  { id: 'ARB/USDT', binanceSymbol: 'ARBUSDT', name: 'Arbitrum', category: 'Layer 2', basePrice: 0.52, tickDecimals: 4, minSize: 10.0 },
-  { id: 'OP/USDT', binanceSymbol: 'OPUSDT', name: 'Optimism', category: 'Layer 2', basePrice: 1.45, tickDecimals: 3, minSize: 2.0 },
-  { id: 'TIA/USDT', binanceSymbol: 'TIAUSDT', name: 'Celestia', category: 'Modular L1', basePrice: 5.20, tickDecimals: 2, minSize: 1.0 },
-  { id: 'SEI/USDT', binanceSymbol: 'SEIUSDT', name: 'Sei Network', category: 'Layer 1', basePrice: 0.39, tickDecimals: 4, minSize: 10.0 },
-  { id: 'UNI/USDT', binanceSymbol: 'UNIUSDT', name: 'Uniswap', category: 'DeFi', basePrice: 7.20, tickDecimals: 2, minSize: 0.5 },
+  { id: 'SUI/USDT', binanceSymbol: 'SUIUSDT', name: 'Sui Network', category: 'Layer 1', basePrice: 1.829, tickDecimals: 3, minSize: 2.0 },
+  { id: 'NEAR/USDT', binanceSymbol: 'NEARUSDT', name: 'Near Protocol', category: 'Layer 1', basePrice: 4.765, tickDecimals: 3, minSize: 1.0 },
+  { id: 'TON/USDT', binanceSymbol: 'TONUSDT', name: 'Toncoin', category: 'Layer 1', basePrice: 4.864, tickDecimals: 3, minSize: 1.0 },
+  { id: 'APT/USDT', binanceSymbol: 'APTUSDT', name: 'Aptos', category: 'Layer 1', basePrice: 8.33, tickDecimals: 2, minSize: 0.5 },
+  { id: 'ARB/USDT', binanceSymbol: 'ARBUSDT', name: 'Arbitrum', category: 'Layer 2', basePrice: 0.5107, tickDecimals: 4, minSize: 10.0 },
+  { id: 'OP/USDT', binanceSymbol: 'OPUSDT', name: 'Optimism', category: 'Layer 2', basePrice: 1.432, tickDecimals: 3, minSize: 2.0 },
+  { id: 'TIA/USDT', binanceSymbol: 'TIAUSDT', name: 'Celestia', category: 'Modular L1', basePrice: 5.16, tickDecimals: 2, minSize: 1.0 },
+  { id: 'SEI/USDT', binanceSymbol: 'SEIUSDT', name: 'Sei Network', category: 'Layer 1', basePrice: 0.3836, tickDecimals: 4, minSize: 10.0 },
+  { id: 'UNI/USDT', binanceSymbol: 'UNIUSDT', name: 'Uniswap', category: 'DeFi', basePrice: 7.07, tickDecimals: 2, minSize: 0.5 },
 
   // Iranian Toman (IRT) Markets
-  { id: 'BTC/IRT', binanceSymbol: 'BTCUSDT', name: 'بیت‌کوین / تومان', category: 'بازار تومانی', basePrice: 7550000000, tickDecimals: 0, minSize: 0.0001, isToman: true },
-  { id: 'ETH/IRT', binanceSymbol: 'ETHUSDT', name: 'اتریوم / تومان', category: 'بازار تومانی', basePrice: 237000000, tickDecimals: 0, minSize: 0.001, isToman: true },
-  { id: 'SOL/IRT', binanceSymbol: 'SOLUSDT', name: 'سولانا / تومان', category: 'بازار تومانی', basePrice: 13750000, tickDecimals: 0, minSize: 0.05, isToman: true },
-  { id: 'TON/IRT', binanceSymbol: 'TONUSDT', name: 'تون‌کوین / تومان', category: 'بازار تومانی', basePrice: 477000, tickDecimals: 0, minSize: 1.0, isToman: true },
+  { id: 'BTC/IRT', binanceSymbol: 'BTCUSDT', name: 'بیت‌کوین / تومان', category: 'بازار تومانی', basePrice: 7450000000, tickDecimals: 0, minSize: 0.0001, isToman: true },
+  { id: 'ETH/IRT', binanceSymbol: 'ETHUSDT', name: 'اتریوم / تومان', category: 'بازار تومانی', basePrice: 245000000, tickDecimals: 0, minSize: 0.001, isToman: true },
+  { id: 'SOL/IRT', binanceSymbol: 'SOLUSDT', name: 'سولانا / تومان', category: 'بازار تومانی', basePrice: 9750000, tickDecimals: 0, minSize: 0.05, isToman: true },
+  { id: 'TON/IRT', binanceSymbol: 'TONUSDT', name: 'تون‌کوین / تومان', category: 'بازار تومانی', basePrice: 469000, tickDecimals: 0, minSize: 1.0, isToman: true },
   { id: 'USDT/IRT', binanceSymbol: null, name: 'تتر / تومان', category: 'بازار تومانی', basePrice: 96500, tickDecimals: 0, minSize: 5.0, isToman: true }
 ];
 
