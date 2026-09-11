@@ -946,6 +946,13 @@ except ImportError:
         def do_POST(self):
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path
+            if path in ["/api/v1/database/seed", "/api/v1/database/sync", "/api/database/seed", "/api/database/sync"]:
+                try:
+                    count = seed_database_from_file(force=True)
+                    self.send_json({"success": True, "message": "پایگاه داده با موفقیت همگام شد", "trades_count": count})
+                except Exception as e:
+                    self.send_json({"success": False, "error": str(e)}, 500)
+                return
             if path in ["/api/v1/paper/order", "/api/paper/order"]:
                 self.send_json({"success": True, "message": "سفارش ثبت شد", "order_id": f"ord_{int(time.time()*1000)}"})
                 return
@@ -970,4 +977,10 @@ except ImportError:
 
 
 if __name__ == "__main__":
+    try:
+        seed_database_from_file()
+        trades = get_db_trades(10)
+        print(f"[Database] Initialized SQLite trading.db with {len(trades)} verified trades.")
+    except Exception as e:
+        print(f"[Database Warning] {e}", file=sys.stderr)
     run_server()

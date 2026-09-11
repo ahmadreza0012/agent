@@ -27,6 +27,7 @@ const HOST = '0.0.0.0';
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(__dirname));
 
 // Structure of 60 capabilities in 7 categories
 const CAPABILITY_STRUCTURE = {
