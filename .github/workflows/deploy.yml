@@ -87,11 +87,18 @@ jobs:
             pkill -f "python.*web_api.py" || true
             pkill -f "node.*server.js" || true
 
-            # Start the Node.js trading engine and dashboard on port 3000
-            echo "🚀 Starting Node.js Trading Engine on port 3000..."
-            nohup node server.js > server.log 2>&1 &
+            # Start the single unified dashboard on port 5000
+            echo "🚀 Starting Single Unified Trading Dashboard on port 5000..."
+            PORT=5000 nohup node server.js > server.log 2>&1 &
             echo $! > .server.pid
             sleep 2
+
+            if ps -p $(cat .server.pid) > /dev/null 2>&1; then
+              echo "✅ Unified Dashboard started successfully on port 5000"
+            else
+              echo "⚠️ Dashboard status check, checking server.log:"
+              cat server.log || true
+            fi
 
             # Start the bot in a screen session (or nohup fallback)
             echo "🚀 Starting bot in screen session..."
@@ -100,21 +107,6 @@ jobs:
             else
               nohup python3 main.py > bot.log 2>&1 &
               echo $! > .bot.pid
-            fi
-
-            # Start Web API for monitoring and control on port 5000
-            echo "🌐 Starting Web API for monitoring on port 5000..."
-            cd $AGENT_DIR
-            pip3 install flask flask-cors --user --quiet 2>/dev/null || true
-
-            nohup python3 web_api.py > web_api.log 2>&1 &
-            echo $! > .web_api.pid
-            sleep 2
-
-            if ps -p $(cat .web_api.pid) > /dev/null 2>&1; then
-              echo "✅ Web API started successfully on port 5000"
-            else
-              echo "⚠️ Web API status check, checking web_api.log"
             fi
 
             echo "========================================="

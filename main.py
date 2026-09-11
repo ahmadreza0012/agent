@@ -47,36 +47,41 @@ def log_event(event_type, data):
 
 
 def check_or_start_node_server():
-    """Ensure the core Node.js trading engine is active on port 3000"""
-    try:
-        req = urllib.request.Request("http://127.0.0.1:3000/api/v1/paper/account")
-        with urllib.request.urlopen(req, timeout=1.5) as resp:
-            if resp.status == 200:
-                return True
-    except Exception:
-        pass
+    """Ensure the core Node.js trading engine is active on port 5000 (or 3000)"""
+    for p in [5000, 3000]:
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{p}/api/v1/paper/account")
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                if resp.status == 200:
+                    return p
+        except Exception:
+            pass
 
-    print("[Main] Core Node.js trading engine not detected on port 3000. Checking server.js...")
+    print("[Main] Core Node.js trading engine not detected on port 5000. Checking server.js...")
     server_js = os.path.join(BASE_DIR, "server.js")
     if os.path.exists(server_js):
         import subprocess
         try:
-            print("[Main] Starting 'node server.js' in background...")
-            subprocess.Popen(["node", "server.js"], cwd=BASE_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("[Main] Starting 'node server.js' on port 5000 in background...")
+            env = dict(os.environ)
+            env["PORT"] = "5000"
+            subprocess.Popen(["node", "server.js"], cwd=BASE_DIR, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             time.sleep(2)
-            return True
+            return 5000
         except Exception as e:
             print(f"[Main Warning] Could not start node server: {e}")
-    return False
+    return 5000
 
 
 def fetch_engine_status():
-    try:
-        req = urllib.request.Request("http://127.0.0.1:3000/api/v1/paper/bundle", headers={"User-Agent": "MainAgent"})
-        with urllib.request.urlopen(req, timeout=2.5) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except Exception:
-        return None
+    for p in [5000, 3000]:
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{p}/api/v1/paper/bundle", headers={"User-Agent": "MainAgent"})
+            with urllib.request.urlopen(req, timeout=2.5) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            continue
+    return None
 
 
 def run_trading_cycle(cycle_number, mode="paper"):

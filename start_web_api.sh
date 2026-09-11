@@ -1,69 +1,66 @@
 #!/bin/bash
-# اسکریپت راه‌اندازی Web API ربات معاملاتی
-# Crypto Trading Bot Web API Startup Script
+# اسکریپت راه‌اندازی تک داشبورد معاملاتی روی پورت 5000
+# Crypto Trading Bot Unified Dashboard Startup Script (Port 5000)
 
 set -e
 
 echo "========================================="
-echo "🚀 راه‌اندازی Web API ربات معاملاتی"
+echo "🚀 راه‌اندازی داشبورد یکپارچه معاملاتی روی پورت 5000"
 echo "========================================="
 
-# مسیر پروژه
-PROJECT_DIR="/home/ec2-user/agent"
+# تعیین مسیر پروژه
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR"
 
-# 1. نصب پیش‌نیازها
-echo "📦 در حال نصب پیش‌نیازهای Python..."
-if command -v pip3 &> /dev/null; then
-    pip3 install flask flask-cors --quiet
-    echo "✅ Flask و Flask-CORS نصب شدند"
-else
-    echo "❌ pip3 یافت نشد. لطفاً ابتدا pip3 را نصب کنید."
-    exit 1
+# 1. نصب پیش‌نیازهای Node.js (در صورت نیاز)
+echo "📦 بررسی وابستگی‌های داشبورد..."
+if [ ! -d "node_modules" ]; then
+    if command -v npm &> /dev/null; then
+        npm install --omit=dev || npm install || true
+    fi
 fi
 
-# 2. توقف API قبلی (اگر در حال اجراست)
-echo "🛑 در حال بررسی و توقف Web API قبلی..."
+# 2. توقف پردازش‌های قبلی پورت 5000
+echo "🛑 در حال بررسی و توقف سرویس‌های قبلی..."
 pkill -f "python.*web_api.py" || true
-echo "✅ API قبلی متوقف شد (اگر وجود داشت)"
+pkill -f "node.*server.js" || true
+sleep 1
 
-# 3. اجرای Web API جدید در پس‌زمینه
-echo "🚀 در حال راه‌اندازی Web API جدید..."
-nohup python3 web_api.py > web_api.log 2>&1 &
-WEB_API_PID=$!
+# 3. اجرای تک داشبورد کامل روی پورت 5000 در پس‌زمینه
+echo "🚀 در حال راه‌اندازی داشبورد یکپارچه روی پورت 5000..."
+PORT=5000 nohup node server.js > server.log 2>&1 &
+SERVER_PID=$!
+echo $SERVER_PID > .server.pid
 
-# ذخیره PID
-echo $WEB_API_PID > .web_api.pid
-
-# انتظار برای اطمینان از اجرای موفق
-sleep 3
+# انتظار برای اجرای موفق
+sleep 2
 
 # بررسی وضعیت اجرا
-if ps -p $WEB_API_PID > /dev/null 2>&1; then
+if ps -p $SERVER_PID > /dev/null 2>&1; then
+    SERVER_IP=$(curl -s --max-time 2 https://api.ipify.org || echo "52.23.157.88")
     echo "========================================="
-    echo "✅ Web API با موفقیت راه‌اندازی شد!"
+    echo "✅ داشبورد یکپارچه با موفقیت روی پورت 5000 راه‌اندازی شد!"
     echo "========================================="
     echo ""
     echo "📊 اطلاعات:"
-    echo "   PID: $WEB_API_PID"
-    echo "   آدرس: http://52.23.157.88:5000"
-    echo "   لاگ: $PROJECT_DIR/web_api.log"
+    echo "   PID: $SERVER_PID"
+    echo "   آدرس داشبورد: http://$SERVER_IP:5000"
+    echo "   فایل لاگ: $PROJECT_DIR/server.log"
     echo ""
     echo "📝 دستورات مفید:"
-    echo "   مشاهده لاگ: tail -f web_api.log"
-    echo "   توقف API: pkill -f 'python.*web_api.py'"
-    echo "   بررسی وضعیت: ps aux | grep web_api"
+    echo "   مشاهده لاگ: tail -f server.log"
+    echo "   توقف داشبورد: pkill -f 'node.*server.js'"
+    echo "   بررسی وضعیت: ps aux | grep server.js"
     echo ""
 else
-    echo "❌ خطا: Web API اجرا نشد!"
+    echo "❌ خطا: داشبورد اجرا نشد!"
     echo "📝 لاگ خطا:"
-    cat web_api.log
+    cat server.log 2>/dev/null || true
     exit 1
 fi
 
 echo "========================================="
-echo "✨ برای دسترسی به پنل وب:"
-echo "   1. مطمئن شوید پورت 5000 در AWS Security Group باز است"
-echo "   2. مرورگر را باز کنید و به آدرس زیر بروید:"
-echo "      http://52.23.157.88:5000"
+echo "✨ دسترسی به پنل وب:"
+echo "   مرورگر خود را باز کنید و به آدرس زیر بروید:"
+echo "   http://$SERVER_IP:5000"
 echo "========================================="
