@@ -123,10 +123,60 @@ function initMarketData() {
 
 initMarketData();
 
-// Live price fetcher from Binance with CoinGecko fallback for ALL symbols
+// Live price fetcher with CoinGecko primary (cloud-friendly) and Binance fallback for ALL symbols
 async function fetchBinanceLivePrices() {
-  let fetchedFromBinance = false;
+  let fetchedSuccessfully = false;
+
+  // 1. Try CoinGecko first (reliable on all cloud servers / AWS EC2 without 403 blocks)
   try {
+    const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,binancecoin,ripple,cardano,avalanche-2,chainlink,polkadot,toncoin&vs_currencies=usd&include_24hr_change=true', {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (cgRes.ok) {
+      const cgData = await cgRes.json();
+      const mapping = {
+        'BTC/USDT': 'bitcoin',
+        'ETH/USDT': 'ethereum',
+        'SOL/USDT': 'solana',
+        'BNB/USDT': 'binancecoin',
+        'XRP/USDT': 'ripple',
+        'ADA/USDT': 'cardano',
+        'AVAX/USDT': 'avalanche-2',
+        'LINK/USDT': 'chainlink',
+        'DOT/USDT': 'polkadot',
+        'TON/USDT': 'toncoin'
+      };
+
+      for (const s of SUPPORTED_SYMBOLS) {
+        const cgKey = mapping[s.id];
+        if (cgKey && cgData[cgKey]) {
+          const lastPrice = Number(cgData[cgKey].usd);
+          const change24h = Number(cgData[cgKey].usd_24h_change) || 0;
+          if (!isNaN(lastPrice) && lastPrice > 0) {
+            const prev = MARKET_TICKERS.get(s.id);
+            MARKET_TICKERS.set(s.id, {
+              ...prev,
+              price: lastPrice,
+              bid: +(lastPrice * 0.9999).toFixed(s.tickDecimals),
+              ask: +(lastPrice * 1.0001).toFixed(s.tickDecimals),
+              change24h: +change24h.toFixed(2),
+              high24h: +(lastPrice * 1.02).toFixed(s.tickDecimals),
+              low24h: +(lastPrice * 0.98).toFixed(s.tickDecimals),
+              last_updated: new Date().toISOString()
+            });
+            updateLatestCandle(s.id, lastPrice, s.tickDecimals);
+            fetchedSuccessfully = true;
+          }
+        }
+      }
+    }
+  } catch (cgErr) {
+    console.warn('[Price Fetcher] CoinGecko primary warning:', cgErr.message);
+  }
+
+  // 2. Fallback to Binance if CoinGecko failed
+  if (!fetchedSuccessfully) {
     try {
       const binanceSymbols = SUPPORTED_SYMBOLS.filter(s => s.binanceSymbol && !s.isToman).map(s => s.binanceSymbol);
       const symbolsParam = JSON.stringify(binanceSymbols);
@@ -159,10 +209,8 @@ async function fetchBinanceLivePrices() {
                   volume24h,
                   last_updated: new Date().toISOString()
                 });
-
-                // Update candle history
                 updateLatestCandle(s.id, lastPrice, s.tickDecimals);
-                fetchedFromBinance = true;
+                fetchedSuccessfully = true;
               }
             }
           }
@@ -171,54 +219,10 @@ async function fetchBinanceLivePrices() {
     } catch (binanceErr) {
       console.warn('[Price Fetcher] Binance API warning:', binanceErr.message);
     }
+  }
 
-  // Fallback to CoinGecko if Binance failed or was blocked
-  if (!fetchedFromBinance) {
-    try {
-      const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,binancecoin,ripple,cardano,avalanche-2,chainlink,polkadot,toncoin&vs_currencies=usd&include_24hr_change=true', {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        signal: AbortSignal.timeout(5000)
-      });
-      if (cgRes.ok) {
-        const cgData = await cgRes.json();
-        const mapping = {
-          'BTC/USDT': 'bitcoin',
-          'ETH/USDT': 'ethereum',
-          'SOL/USDT': 'solana',
-          'BNB/USDT': 'binancecoin',
-          'XRP/USDT': 'ripple',
-          'ADA/USDT': 'cardano',
-          'AVAX/USDT': 'avalanche-2',
-          'LINK/USDT': 'chainlink',
-          'DOT/USDT': 'polkadot',
-          'TON/USDT': 'toncoin'
-        };
-
-        for (const s of SUPPORTED_SYMBOLS) {
-          const cgKey = mapping[s.id];
-          if (cgKey && cgData[cgKey]) {
-            const lastPrice = Number(cgData[cgKey].usd);
-            const change24h = Number(cgData[cgKey].usd_24h_change) || 0;
-            if (!isNaN(lastPrice) && lastPrice > 0) {
-              const prev = MARKET_TICKERS.get(s.id);
-              MARKET_TICKERS.set(s.id, {
-                ...prev,
-                price: lastPrice,
-                bid: +(lastPrice * 0.9999).toFixed(s.tickDecimals),
-                ask: +(lastPrice * 1.0001).toFixed(s.tickDecimals),
-                change24h: +change24h.toFixed(2),
-                high24h: +(lastPrice * 1.02).toFixed(s.tickDecimals),
-                low24h: +(lastPrice * 0.98).toFixed(s.tickDecimals),
-                last_updated: new Date().toISOString()
-              });
-              updateLatestCandle(s.id, lastPrice, s.tickDecimals);
-            }
-          }
-        }
-      }
-    } catch (cgErr) {
-      console.warn('[Price Fetcher] CoinGecko fallback warning:', cgErr.message);
-    }
+  if (!fetchedSuccessfully) {
+    simulateMicroTicks();
   }
 
     // Update Toman pairs based on live prices
@@ -294,10 +298,6 @@ async function fetchBinanceLivePrices() {
       });
       updateLatestCandle('TON/IRT', tonTomanPrice, 0);
     }
-  } catch (err) {
-    // Fallback to Brownian motion micro-ticks if external network is congested
-    simulateMicroTicks();
-  }
 }
 
 function updateLatestCandle(symbolId, price, decimals) {
