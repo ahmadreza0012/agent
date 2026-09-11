@@ -208,6 +208,33 @@ function initDatabaseTables(db) {
       created_at TIMESTAMP NOT NULL
     );
   `);
+
+  // Auto-seed from trades_seed.json if closed_trades is empty
+  try {
+    const row = db.prepare('SELECT count(*) as count FROM closed_trades').get();
+    if (!row || row.count === 0) {
+      const seedFile = path.join(__dirname, 'data', 'trades_seed.json');
+      if (fs.existsSync(seedFile)) {
+        const seedData = JSON.parse(fs.readFileSync(seedFile, 'utf-8'));
+        const insertTradeStmt = db.prepare(`
+          INSERT OR IGNORE INTO closed_trades (
+            id, order_id, symbol, side, size, leverage, entry_price, exit_price, gross_pnl, fee, net_pnl, roi_pct, close_reason, opened_at, closed_at, created_at, strategy, features_snapshot_json
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const t of (seedData.closed_trades || [])) {
+          insertTradeStmt.run(
+            t.id, t.order_id, t.symbol, t.side, t.size, t.leverage || 1,
+            t.entry_price, t.exit_price, t.gross_pnl || 0, t.fee || 0,
+            t.net_pnl || 0, t.roi_pct || 0, t.close_reason, t.opened_at,
+            t.closed_at, t.created_at, t.strategy, t.features_snapshot_json
+          );
+        }
+        console.log(`[Database Init] Seeded ${seedData.closed_trades?.length || 0} historical trades into SQLite.`);
+      }
+    }
+  } catch (seedErr) {
+    console.warn('[Database Seed Note]', seedErr.message);
+  }
 }
 
 // Record an order into the orders table
