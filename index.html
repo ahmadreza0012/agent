@@ -1605,8 +1605,13 @@
                                 🧠 دوره‌های آموزش (agent_training_epochs)
                             </button>
                         </div>
-                        <div style="font-size: 0.78rem; color: #94a3b8;">
-                            دیتابیس: <code style="color: #38bdf8;">data/trading.db</code> (SQLite 3 WAL)
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <button class="btn" onclick="syncDatabaseWithMasterUI()" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 5px 12px; font-size: 0.78rem; font-weight: bold; border-radius: 6px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                                🔄 همگام‌سازی مرجع دیتابیس
+                            </button>
+                            <div style="font-size: 0.78rem; color: #94a3b8;">
+                                دیتابیس: <code style="color: #38bdf8;">data/trading.db</code> (SQLite 3 WAL)
+                            </div>
                         </div>
                     </div>
 
@@ -4501,6 +4506,24 @@
                 }
             } catch (err) {
                 container.innerHTML = `<div style="color: #ef4444; padding: 20px;">خطا در واکشی داده: ${err.message}</div>`;
+            }
+        }
+
+        async function syncDatabaseWithMasterUI() {
+            showToast('🔄 در حال همگام‌سازی پایگاه داده با دیتابیس مرجع...', 'info', 2500);
+            try {
+                const res = await fetch('/api/v1/database/seed', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('✅ پایگاه‌داده با موفقیت با دیتابیس مرجع همگام شد.', 'success');
+                    loadDatabaseSubTab(currentDbSubTab);
+                    loadAgentEvolutionData(true);
+                    if (typeof fetchExchangeData === 'function') fetchExchangeData();
+                } else {
+                    showToast('⚠️ پاسخ همگام‌سازی: ' + (data.message || 'خطا'), 'warning');
+                }
+            } catch (e) {
+                showToast('خطا در ارتباط با سرور: ' + e.message, 'error');
             }
         }
 

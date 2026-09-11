@@ -12,7 +12,13 @@ import sys
 import json
 import time
 import sqlite3
+import gzip
+import base64
 from datetime import datetime, timezone
+try:
+    from embedded_seed import EMBEDDED_SEED_B64
+except ImportError:
+    EMBEDDED_SEED_B64 = None
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "data", "trading.db")
@@ -132,15 +138,29 @@ def get_db_orders(limit=50):
     return []
 
 
-def seed_database_from_file():
+def get_seed_data_dict():
     seed_file = os.path.join(BASE_DIR, "data", "trades_seed.json")
-    if not os.path.exists(seed_file):
+    if os.path.exists(seed_file):
+        try:
+            with open(seed_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    if EMBEDDED_SEED_B64:
+        try:
+            decompressed = gzip.decompress(base64.b64decode(EMBEDDED_SEED_B64)).decode("utf-8")
+            return json.loads(decompressed)
+        except Exception as e:
+            print(f"[Seed Unpack Error] {e}", file=sys.stderr)
+    return None
+
+
+def seed_database_from_file(force=False):
+    seed_data = get_seed_data_dict()
+    if not seed_data:
         return False
     try:
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        with open(seed_file, "r", encoding="utf-8") as f:
-            seed_data = json.load(f)
-
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
         
@@ -191,19 +211,20 @@ def seed_database_from_file():
         """)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS orders (
-                id TEXT PRIMARY KEY,
+                order_id TEXT PRIMARY KEY,
+                client_order_id TEXT,
                 symbol TEXT NOT NULL,
                 side TEXT NOT NULL,
-                type TEXT NOT NULL,
-                size REAL NOT NULL,
-                price REAL NOT NULL,
-                leverage INTEGER NOT NULL,
-                status TEXT NOT NULL,
-                stop_loss REAL,
-                take_profit REAL,
+                order_type TEXT DEFAULT 'MARKET',
+                price REAL DEFAULT 0,
+                amount REAL DEFAULT 0,
+                filled_amount REAL DEFAULT 0,
+                status TEXT DEFAULT 'FILLED',
+                fee REAL DEFAULT 0,
+                fee_currency TEXT DEFAULT 'USDT',
+                error_message TEXT,
                 created_at TIMESTAMP NOT NULL,
-                filled_at TIMESTAMP,
-                strategy TEXT
+                updated_at TIMESTAMP NOT NULL
             )
         """)
         cur.execute("""
@@ -219,10 +240,15 @@ def seed_database_from_file():
             )
         """)
 
+        if force:
+            cur.execute("DELETE FROM closed_trades")
+            cur.execute("DELETE FROM open_positions")
+            cur.execute("DELETE FROM orders")
+
         # Insert closed trades
         for t in seed_data.get("closed_trades", []):
             cur.execute("""
-                INSERT OR IGNORE INTO closed_trades 
+                INSERT OR REPLACE INTO closed_trades 
                 (id, order_id, symbol, side, size, leverage, entry_price, exit_price, gross_pnl, fee, net_pnl, roi_pct, close_reason, opened_at, closed_at, created_at, strategy, features_snapshot_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
@@ -236,7 +262,7 @@ def seed_database_from_file():
         # Insert open positions
         for p in seed_data.get("open_positions", []):
             cur.execute("""
-                INSERT OR IGNORE INTO open_positions
+                INSERT OR REPLACE INTO open_positions
                 (id, symbol, side, type, size, notional, margin, leverage, entry_price, current_price, liquidation_price, stop_loss, take_profit, unrealized_pnl, roe_pct, fee, opened_at, last_updated)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
@@ -250,13 +276,24 @@ def seed_database_from_file():
         # Insert orders
         for o in seed_data.get("orders", []):
             cur.execute("""
-                INSERT OR IGNORE INTO orders
-                (id, symbol, side, type, size, price, leverage, status, stop_loss, take_profit, created_at, filled_at, strategy)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO orders
+                (order_id, client_order_id, symbol, side, order_type, price, amount, filled_amount, status, fee, fee_currency, error_message, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                o.get("id"), o.get("symbol"), o.get("side"), o.get("type", "MARKET"), o.get("size"),
-                o.get("price", 0), o.get("leverage", 1), o.get("status", "FILLED"),
-                o.get("stop_loss"), o.get("take_profit"), o.get("created_at"), o.get("filled_at"), o.get("strategy")
+                o.get("order_id") or o.get("id"),
+                o.get("client_order_id") or f"cl_{o.get('order_id')}",
+                o.get("symbol"),
+                o.get("side"),
+                o.get("order_type") or o.get("type", "MARKET"),
+                o.get("price", 0),
+                o.get("amount") or o.get("size", 0),
+                o.get("filled_amount") or o.get("amount") or o.get("size", 0),
+                o.get("status", "FILLED"),
+                o.get("fee", 0),
+                o.get("fee_currency", "USDT"),
+                o.get("error_message"),
+                o.get("created_at"),
+                o.get("updated_at") or o.get("created_at")
             ))
 
         conn.commit()
@@ -285,8 +322,8 @@ def get_db_trades(limit=100):
         except Exception:
             pass
 
-    # If table is empty, attempt seed once
-    seed_database_from_file()
+    # If table is empty, attempt seed
+    seed_database_from_file(force=True)
     if os.path.exists(DB_PATH):
         try:
             conn = sqlite3.connect(DB_PATH)
@@ -301,24 +338,7 @@ def get_db_trades(limit=100):
         except Exception:
             pass
 
-    # Fallback to simulated closed trades
-    now = time.time()
-    return [
-        {
-            "id": f"trade_{i}",
-            "symbol": "BTC/IRT" if i % 2 == 0 else "SOL/USDT",
-            "side": "BUY",
-            "entry_price": 7520000000 if i % 2 == 0 else 138.5,
-            "exit_price": 7580000000 if i % 2 == 0 else 144.2,
-            "size": 0.05 if i % 2 == 0 else 2.5,
-            "net_pnl": 3000000 if i % 2 == 0 else 14.25,
-            "roi_pct": 0.79 if i % 2 == 0 else 4.11,
-            "close_reason": "TAKE_PROFIT",
-            "opened_at": datetime.fromtimestamp(now - i * 3600, timezone.utc).isoformat(),
-            "closed_at": datetime.fromtimestamp(now - (i * 3600 - 1800), timezone.utc).isoformat()
-        }
-        for i in range(1, 15)
-    ]
+    return []
 
 
 def get_db_stats():
@@ -544,9 +564,36 @@ try:
     @app.route("/api/v1/database/seed", methods=["POST", "GET"])
     @app.route("/api/database/seed", methods=["POST", "GET"])
     def db_seed():
-        success = seed_database_from_file()
+        success = seed_database_from_file(force=True)
         stats = get_db_stats()
         return jsonify({"success": success, "message": "پایگاه داده SQLite با موفقیت همگام‌سازی و بارگذاری شد.", "stats": stats}), 200
+
+    @app.route("/api/v1/database/export", methods=["GET"])
+    @app.route("/api/database/export", methods=["GET"])
+    def db_export():
+        trades = get_db_trades(500)
+        positions = get_db_positions()
+        orders = get_db_orders(500)
+        stats = get_db_stats()
+        return jsonify({
+            "success": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "closed_trades": trades,
+            "open_positions": positions,
+            "orders": orders,
+            "stats": stats
+        }), 200
+
+    @app.route("/api/v1/database/sync", methods=["POST", "GET"])
+    @app.route("/api/database/sync", methods=["POST", "GET"])
+    def db_sync():
+        seed_database_from_file(force=True)
+        stats = get_db_stats()
+        return jsonify({
+            "success": True,
+            "message": "پایگاه داده SQLite با موفقیت همگام‌سازی شد.",
+            "stats": stats
+        }), 200
 
     # Evolution endpoints
     @app.route("/api/v1/evolution/history", methods=["GET"])
@@ -788,8 +835,32 @@ except ImportError:
                 return
 
             if path in ["/api/v1/database/seed", "/api/database/seed"]:
-                success = seed_database_from_file()
+                success = seed_database_from_file(force=True)
                 self.send_json({"success": success, "message": "پایگاه داده SQLite با موفقیت همگام‌سازی و بارگذاری شد.", "stats": get_db_stats()})
+                return
+
+            if path in ["/api/v1/database/export", "/api/database/export"]:
+                trades = get_db_trades(500)
+                positions = get_db_positions()
+                orders = get_db_orders(500)
+                stats = get_db_stats()
+                self.send_json({
+                    "success": True,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "closed_trades": trades,
+                    "open_positions": positions,
+                    "orders": orders,
+                    "stats": stats
+                })
+                return
+
+            if path in ["/api/v1/database/sync", "/api/database/sync"]:
+                seed_database_from_file(force=True)
+                self.send_json({
+                    "success": True,
+                    "message": "پایگاه داده SQLite با موفقیت همگام‌سازی شد.",
+                    "stats": get_db_stats()
+                })
                 return
 
             # Paper Market / Tickers
