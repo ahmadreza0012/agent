@@ -4156,7 +4156,7 @@
         function startPaperExchangePolling() {
             if (paperPollTimer) clearInterval(paperPollTimer);
             fetchExchangeData();
-            paperPollTimer = setInterval(fetchExchangeData, 2000);
+            paperPollTimer = setInterval(fetchExchangeData, 1000);
         }
 
         async function updateHeaderMiniTickers() {

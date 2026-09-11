@@ -210,28 +210,29 @@ function initDatabaseTables(db) {
     );
   `);
 
-  // Auto-seed from trades_seed.json if closed_trades is empty
+  // Auto-seed and sync from trades_seed.json on startup
   try {
-    const row = db.prepare('SELECT count(*) as count FROM closed_trades').get();
-    if (!row || row.count === 0) {
-      const seedFile = path.join(__dirname, 'data', 'trades_seed.json');
-      if (fs.existsSync(seedFile)) {
-        const seedData = JSON.parse(fs.readFileSync(seedFile, 'utf-8'));
-        const insertTradeStmt = db.prepare(`
-          INSERT OR IGNORE INTO closed_trades (
-            id, order_id, symbol, side, size, leverage, entry_price, exit_price, gross_pnl, fee, net_pnl, roi_pct, close_reason, opened_at, closed_at, created_at, strategy, features_snapshot_json
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        for (const t of (seedData.closed_trades || [])) {
+    const seedFile = path.join(__dirname, 'data', 'trades_seed.json');
+    if (fs.existsSync(seedFile)) {
+      const seedData = JSON.parse(fs.readFileSync(seedFile, 'utf-8'));
+      const insertTradeStmt = db.prepare(`
+        INSERT OR IGNORE INTO closed_trades (
+          id, order_id, symbol, side, size, leverage, entry_price, exit_price, gross_pnl, fee, net_pnl, roi_pct, close_reason, opened_at, closed_at, created_at, strategy, features_snapshot_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      let insertedCount = 0;
+      for (const t of (seedData.closed_trades || [])) {
+        try {
           insertTradeStmt.run(
-            t.id, t.order_id, t.symbol, t.side, t.size, t.leverage || 1,
+            t.id || ('t_' + Math.random()), t.order_id || '', t.symbol, t.side, t.size, t.leverage || 1,
             t.entry_price, t.exit_price, t.gross_pnl || 0, t.fee || 0,
-            t.net_pnl || 0, t.roi_pct || 0, t.close_reason, t.opened_at,
-            t.closed_at, t.created_at, t.strategy, t.features_snapshot_json
+            t.net_pnl || 0, t.roi_pct || 0, t.close_reason || 'TAKE_PROFIT', t.opened_at,
+            t.closed_at, t.created_at || t.closed_at, t.strategy || 'AGENT_60_FEATURES', t.features_snapshot_json || null
           );
-        }
-        console.log(`[Database Init] Seeded ${seedData.closed_trades?.length || 0} historical trades into SQLite.`);
+          insertedCount++;
+        } catch {}
       }
+      console.log(`[Database Init] Synced ${insertedCount} historical trades into SQLite from trades_seed.json.`);
     }
   } catch (seedErr) {
     console.warn('[Database Seed Note]', seedErr.message);
