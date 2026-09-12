@@ -23,19 +23,19 @@ export const paperRouter = express.Router();
 // Supported Market Symbols Across Global Majors, Meme/Scalp, AI, Layer 1/2, and Iranian Toman Pairs
 export const SUPPORTED_SYMBOLS = [
   // Majors
-  { id: 'BTC/USDT', binanceSymbol: 'BTCUSDT', name: 'Bitcoin', category: 'Majors', basePrice: 77149.27, tickDecimals: 2, minSize: 0.0001 },
-  { id: 'ETH/USDT', binanceSymbol: 'ETHUSDT', name: 'Ethereum', category: 'Majors', basePrice: 2544.38, tickDecimals: 2, minSize: 0.001 },
-  { id: 'SOL/USDT', binanceSymbol: 'SOLUSDT', name: 'Solana', category: 'Majors', basePrice: 101.30, tickDecimals: 2, minSize: 0.05 },
-  { id: 'BNB/USDT', binanceSymbol: 'BNBUSDT', name: 'BNB Chain', category: 'Majors', basePrice: 724.70, tickDecimals: 2, minSize: 0.01 },
-  { id: 'XRP/USDT', binanceSymbol: 'XRPUSDT', name: 'Ripple', category: 'Majors', basePrice: 1.3594, tickDecimals: 4, minSize: 10.0 },
-  { id: 'ADA/USDT', binanceSymbol: 'ADAUSDT', name: 'Cardano', category: 'Majors', basePrice: 0.3514, tickDecimals: 4, minSize: 10.0 },
+  { id: 'BTC/USDT', binanceSymbol: 'BTCUSDT', name: 'Bitcoin', category: 'Majors', basePrice: 77280.00, tickDecimals: 2, minSize: 0.0001 },
+  { id: 'ETH/USDT', binanceSymbol: 'ETHUSDT', name: 'Ethereum', category: 'Majors', basePrice: 2538.00, tickDecimals: 2, minSize: 0.001 },
+  { id: 'SOL/USDT', binanceSymbol: 'SOLUSDT', name: 'Solana', category: 'Majors', basePrice: 101.80, tickDecimals: 2, minSize: 0.05 },
+  { id: 'BNB/USDT', binanceSymbol: 'BNBUSDT', name: 'BNB Chain', category: 'Majors', basePrice: 735.00, tickDecimals: 2, minSize: 0.01 },
+  { id: 'XRP/USDT', binanceSymbol: 'XRPUSDT', name: 'Ripple', category: 'Majors', basePrice: 1.36, tickDecimals: 4, minSize: 10.0 },
+  { id: 'ADA/USDT', binanceSymbol: 'ADAUSDT', name: 'Cardano', category: 'Majors', basePrice: 0.35, tickDecimals: 4, minSize: 10.0 },
   { id: 'AVAX/USDT', binanceSymbol: 'AVAXUSDT', name: 'Avalanche', category: 'Majors', basePrice: 28.57, tickDecimals: 2, minSize: 0.2 },
   { id: 'LINK/USDT', binanceSymbol: 'LINKUSDT', name: 'Chainlink', category: 'Majors', basePrice: 11.67, tickDecimals: 2, minSize: 0.5 },
   { id: 'DOT/USDT', binanceSymbol: 'DOTUSDT', name: 'Polkadot', category: 'Majors', basePrice: 4.24, tickDecimals: 2, minSize: 1.0 },
   { id: 'LTC/USDT', binanceSymbol: 'LTCUSDT', name: 'Litecoin', category: 'Majors', basePrice: 66.81, tickDecimals: 2, minSize: 0.1 },
 
   // High-Beta & Meme Scalping
-  { id: 'DOGE/USDT', binanceSymbol: 'DOGEUSDT', name: 'Dogecoin', category: 'Meme/Scalp', basePrice: 0.11, tickDecimals: 5, minSize: 20.0 },
+  { id: 'DOGE/USDT', binanceSymbol: 'DOGEUSDT', name: 'Dogecoin', category: 'Meme/Scalp', basePrice: 0.085, tickDecimals: 5, minSize: 20.0 },
   { id: 'SHIB/USDT', binanceSymbol: 'SHIBUSDT', name: 'Shiba Inu', category: 'Meme/Scalp', basePrice: 0.000017, tickDecimals: 8, minSize: 100000 },
   { id: 'PEPE/USDT', binanceSymbol: 'PEPEUSDT', name: 'Pepe', category: 'Meme/Scalp', basePrice: 0.0000093, tickDecimals: 8, minSize: 100000 },
   { id: 'WIF/USDT', binanceSymbol: 'WIFUSDT', name: 'dogwifhat', category: 'Meme/Scalp', basePrice: 2.12, tickDecimals: 3, minSize: 1.0 },
@@ -51,7 +51,7 @@ export const SUPPORTED_SYMBOLS = [
   // Layer 1 & Layer 2 High Momentum
   { id: 'SUI/USDT', binanceSymbol: 'SUIUSDT', name: 'Sui Network', category: 'Layer 1', basePrice: 1.829, tickDecimals: 3, minSize: 2.0 },
   { id: 'NEAR/USDT', binanceSymbol: 'NEARUSDT', name: 'Near Protocol', category: 'Layer 1', basePrice: 4.765, tickDecimals: 3, minSize: 1.0 },
-  { id: 'TON/USDT', binanceSymbol: 'TONUSDT', name: 'Toncoin', category: 'Layer 1', basePrice: 4.864, tickDecimals: 3, minSize: 1.0 },
+  { id: 'TON/USDT', binanceSymbol: 'TONUSDT', name: 'Toncoin', category: 'Layer 1', basePrice: 1.60, tickDecimals: 3, minSize: 1.0 },
   { id: 'APT/USDT', binanceSymbol: 'APTUSDT', name: 'Aptos', category: 'Layer 1', basePrice: 8.33, tickDecimals: 2, minSize: 0.5 },
   { id: 'ARB/USDT', binanceSymbol: 'ARBUSDT', name: 'Arbitrum', category: 'Layer 2', basePrice: 0.5107, tickDecimals: 4, minSize: 10.0 },
   { id: 'OP/USDT', binanceSymbol: 'OPUSDT', name: 'Optimism', category: 'Layer 2', basePrice: 1.432, tickDecimals: 3, minSize: 2.0 },
@@ -62,7 +62,7 @@ export const SUPPORTED_SYMBOLS = [
   // Iranian Toman (IRT) Markets
   { id: 'BTC/IRT', binanceSymbol: 'BTCUSDT', name: 'بیت‌کوین / تومان', category: 'بازار تومانی', basePrice: 7450000000, tickDecimals: 0, minSize: 0.0001, isToman: true },
   { id: 'ETH/IRT', binanceSymbol: 'ETHUSDT', name: 'اتریوم / تومان', category: 'بازار تومانی', basePrice: 245000000, tickDecimals: 0, minSize: 0.001, isToman: true },
-  { id: 'SOL/IRT', binanceSymbol: 'SOLUSDT', name: 'سولانا / تومان', category: 'بازار تومانی', basePrice: 9750000, tickDecimals: 0, minSize: 0.05, isToman: true },
+  { id: 'SOL/IRT', binanceSymbol: 'SOLUSDT', name: 'سولانا / تومان', category: 'بازار تومانی', basePrice: 9800000, tickDecimals: 0, minSize: 0.05, isToman: true },
   { id: 'TON/IRT', binanceSymbol: 'TONUSDT', name: 'تون‌کوین / تومان', category: 'بازار تومانی', basePrice: 469000, tickDecimals: 0, minSize: 1.0, isToman: true },
   { id: 'USDT/IRT', binanceSymbol: null, name: 'تتر / تومان', category: 'بازار تومانی', basePrice: 96500, tickDecimals: 0, minSize: 5.0, isToman: true }
 ];
@@ -124,6 +124,9 @@ function initMarketData() {
 initMarketData();
 
 // Robust multi-exchange live price fetcher with KuCoin, Binance, Binance.US, and CoinGecko fallbacks
+// Robust multi-exchange live price fetcher with KuCoin, Binance, Binance.US, and CoinGecko fallbacks
+// Robust multi-exchange live price fetcher with KuCoin, Binance, Binance.US, and CoinGecko fallbacks
+// Robust multi-exchange live price fetcher with KuCoin, Binance, Binance.US, and CoinGecko fallbacks
 async function fetchBinanceLivePrices() {
   let fetchedSuccessfully = false;
 
@@ -135,7 +138,7 @@ async function fetchBinanceLivePrices() {
     });
     if (kuRes.ok) {
       const kuJson = await kuRes.json();
-      if (kuJson?.data?.ticker && Array.isArray(kuJson.data.ticker)) {
+      if (kuJson && kuJson.data && Array.isArray(kuJson.data.ticker)) {
         const kuMap = new Map(kuJson.data.ticker.map(t => [t.symbol, t]));
         for (const s of SUPPORTED_SYMBOLS) {
           if (s.isToman || !s.binanceSymbol) continue;
@@ -151,7 +154,7 @@ async function fetchBinanceLivePrices() {
             if (!isNaN(lastPrice) && lastPrice > 0) {
               s.basePrice = lastPrice;
               const prev = MARKET_TICKERS.get(s.id);
-              const change24h = !isNaN(changeRate) ? +(changeRate * 100).toFixed(2) : (prev?.change24h || 0);
+              const change24h = !isNaN(changeRate) ? +(changeRate * 100).toFixed(2) : (prev ? prev.change24h : 0);
               MARKET_TICKERS.set(s.id, {
                 ...prev,
                 price: lastPrice,
@@ -160,7 +163,7 @@ async function fetchBinanceLivePrices() {
                 change24h,
                 high24h: !isNaN(high24h) && high24h > 0 ? high24h : +(lastPrice * 1.02).toFixed(s.tickDecimals),
                 low24h: !isNaN(low24h) && low24h > 0 ? low24h : +(lastPrice * 0.98).toFixed(s.tickDecimals),
-                volume24h: !isNaN(volume24h) && volume24h > 0 ? +volume24h.toFixed(2) : (prev?.volume24h || 1000),
+                volume24h: !isNaN(volume24h) && volume24h > 0 ? +volume24h.toFixed(2) : (prev ? prev.volume24h : 1000),
                 last_updated: new Date().toISOString()
               });
               updateLatestCandle(s.id, lastPrice, s.tickDecimals);
@@ -170,15 +173,13 @@ async function fetchBinanceLivePrices() {
         }
       }
     }
-  } catch (kuErr) {
-    // Silently continue to next provider
-  }
+  } catch (kuErr) {}
 
   // 2. Try Binance Global for symbols not found or if KuCoin failed
   try {
     const binanceSymbols = SUPPORTED_SYMBOLS.filter(s => s.binanceSymbol && !s.isToman).map(s => s.binanceSymbol);
     const symbolsParam = JSON.stringify(binanceSymbols);
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbolsParam)}`, {
+    const res = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbols=' + encodeURIComponent(symbolsParam), {
       headers: { 'User-Agent': 'Mozilla/5.0' },
       signal: AbortSignal.timeout(4000)
     });
@@ -202,10 +203,10 @@ async function fetchBinanceLivePrices() {
                 price: lastPrice,
                 bid: +(lastPrice * 0.9999).toFixed(s.tickDecimals),
                 ask: +(lastPrice * 1.0001).toFixed(s.tickDecimals),
-                change24h: !isNaN(change24h) ? +change24h.toFixed(2) : (prev?.change24h || 0),
+                change24h: !isNaN(change24h) ? +change24h.toFixed(2) : (prev ? prev.change24h : 0),
                 high24h: !isNaN(high24h) && high24h > 0 ? high24h : +(lastPrice * 1.02).toFixed(s.tickDecimals),
                 low24h: !isNaN(low24h) && low24h > 0 ? low24h : +(lastPrice * 0.98).toFixed(s.tickDecimals),
-                volume24h: !isNaN(volume24h) && volume24h > 0 ? +volume24h.toFixed(2) : (prev?.volume24h || 1000),
+                volume24h: !isNaN(volume24h) && volume24h > 0 ? +volume24h.toFixed(2) : (prev ? prev.volume24h : 1000),
                 last_updated: new Date().toISOString()
               });
               updateLatestCandle(s.id, lastPrice, s.tickDecimals);
@@ -215,15 +216,13 @@ async function fetchBinanceLivePrices() {
         }
       }
     }
-  } catch (binanceErr) {
-    // Continue to next provider
-  }
+  } catch (binanceErr) {}
 
-  // 3. Fallback to Binance.US (works on AWS US-East-1 instances)
+  // 3. Fallback to Binance.US
   if (!fetchedSuccessfully) {
     try {
       const usSymbols = JSON.stringify(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LINKUSDT', 'LTCUSDT']);
-      const usRes = await fetch(`https://api.binance.us/api/v3/ticker/24hr?symbols=${encodeURIComponent(usSymbols)}`, {
+      const usRes = await fetch('https://api.binance.us/api/v3/ticker/24hr?symbols=' + encodeURIComponent(usSymbols), {
         headers: { 'User-Agent': 'Mozilla/5.0' },
         signal: AbortSignal.timeout(4000)
       });
@@ -257,12 +256,10 @@ async function fetchBinanceLivePrices() {
           }
         }
       }
-    } catch (usErr) {
-      // Continue
-    }
+    } catch (usErr) {}
   }
 
-  // 4. Fallback to CoinGecko if still needed
+  // 4. Fallback to CoinGecko
   if (!fetchedSuccessfully) {
     try {
       const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,binancecoin,ripple,cardano,avalanche-2,chainlink,polkadot,toncoin&vs_currencies=usd&include_24hr_change=true', {
@@ -308,89 +305,82 @@ async function fetchBinanceLivePrices() {
           }
         }
       }
-    } catch (cgErr) {
-      // Ignore
-    }
+    } catch (cgErr) {}
   }
 
-  // 5. If completely offline, run balanced mean-reverting micro-ticks
-  if (!fetchedSuccessfully) {
-    simulateMicroTicks();
+  // 5. Update Toman pairs based on live USDT prices
+  const btcTicker = MARKET_TICKERS.get('BTC/USDT');
+  const ethTicker = MARKET_TICKERS.get('ETH/USDT');
+  const solTicker = MARKET_TICKERS.get('SOL/USDT');
+  const tonTicker = MARKET_TICKERS.get('TON/USDT');
+
+  if (btcTicker) {
+    const btcTomanPrice = Math.round(btcTicker.price * USDT_TO_TOMAN_RATE);
+    const prevIrt = MARKET_TICKERS.get('BTC/IRT');
+    MARKET_TICKERS.set('BTC/IRT', {
+      ...prevIrt,
+      price: btcTomanPrice,
+      bid: Math.round(btcTomanPrice * 0.999),
+      ask: Math.round(btcTomanPrice * 1.001),
+      change24h: btcTicker.change24h,
+      high24h: Math.round(btcTicker.high24h * USDT_TO_TOMAN_RATE),
+      low24h: Math.round(btcTicker.low24h * USDT_TO_TOMAN_RATE),
+      volume24h: +(btcTicker.volume24h * 0.15).toFixed(2),
+      last_updated: new Date().toISOString()
+    });
+    updateLatestCandle('BTC/IRT', btcTomanPrice, 0);
   }
 
-    // Update Toman pairs based on live prices
-    const btcTicker = MARKET_TICKERS.get('BTC/USDT');
-    const ethTicker = MARKET_TICKERS.get('ETH/USDT');
-    const solTicker = MARKET_TICKERS.get('SOL/USDT');
-    const tonTicker = MARKET_TICKERS.get('TON/USDT');
+  if (ethTicker) {
+    const ethTomanPrice = Math.round(ethTicker.price * USDT_TO_TOMAN_RATE);
+    const prev = MARKET_TICKERS.get('ETH/IRT');
+    MARKET_TICKERS.set('ETH/IRT', {
+      ...prev,
+      price: ethTomanPrice,
+      bid: Math.round(ethTomanPrice * 0.999),
+      ask: Math.round(ethTomanPrice * 1.001),
+      change24h: ethTicker.change24h,
+      high24h: Math.round(ethTicker.high24h * USDT_TO_TOMAN_RATE),
+      low24h: Math.round(ethTicker.low24h * USDT_TO_TOMAN_RATE),
+      volume24h: +(ethTicker.volume24h * 0.15).toFixed(2),
+      last_updated: new Date().toISOString()
+    });
+    updateLatestCandle('ETH/IRT', ethTomanPrice, 0);
+  }
 
-    if (btcTicker) {
-      const btcTomanPrice = Math.round(btcTicker.price * USDT_TO_TOMAN_RATE);
-      const prevIrt = MARKET_TICKERS.get('BTC/IRT');
-      MARKET_TICKERS.set('BTC/IRT', {
-        ...prevIrt,
-        price: btcTomanPrice,
-        bid: Math.round(btcTomanPrice * 0.999),
-        ask: Math.round(btcTomanPrice * 1.001),
-        change24h: btcTicker.change24h,
-        high24h: Math.round(btcTicker.high24h * USDT_TO_TOMAN_RATE),
-        low24h: Math.round(btcTicker.low24h * USDT_TO_TOMAN_RATE),
-        volume24h: +(btcTicker.volume24h * 0.15).toFixed(2),
-        last_updated: new Date().toISOString()
-      });
-      updateLatestCandle('BTC/IRT', btcTomanPrice, 0);
-    }
+  if (solTicker) {
+    const solTomanPrice = Math.round(solTicker.price * USDT_TO_TOMAN_RATE);
+    const prev = MARKET_TICKERS.get('SOL/IRT');
+    MARKET_TICKERS.set('SOL/IRT', {
+      ...prev,
+      price: solTomanPrice,
+      bid: Math.round(solTomanPrice * 0.999),
+      ask: Math.round(solTomanPrice * 1.001),
+      change24h: solTicker.change24h,
+      high24h: Math.round(solTicker.high24h * USDT_TO_TOMAN_RATE),
+      low24h: Math.round(solTicker.low24h * USDT_TO_TOMAN_RATE),
+      volume24h: +(solTicker.volume24h * 0.15).toFixed(2),
+      last_updated: new Date().toISOString()
+    });
+    updateLatestCandle('SOL/IRT', solTomanPrice, 0);
+  }
 
-    if (ethTicker) {
-      const ethTomanPrice = Math.round(ethTicker.price * USDT_TO_TOMAN_RATE);
-      const prev = MARKET_TICKERS.get('ETH/IRT');
-      MARKET_TICKERS.set('ETH/IRT', {
-        ...prev,
-        price: ethTomanPrice,
-        bid: Math.round(ethTomanPrice * 0.999),
-        ask: Math.round(ethTomanPrice * 1.001),
-        change24h: ethTicker.change24h,
-        high24h: Math.round(ethTicker.high24h * USDT_TO_TOMAN_RATE),
-        low24h: Math.round(ethTicker.low24h * USDT_TO_TOMAN_RATE),
-        volume24h: +(ethTicker.volume24h * 0.15).toFixed(2),
-        last_updated: new Date().toISOString()
-      });
-      updateLatestCandle('ETH/IRT', ethTomanPrice, 0);
-    }
-
-    if (solTicker) {
-      const solTomanPrice = Math.round(solTicker.price * USDT_TO_TOMAN_RATE);
-      const prev = MARKET_TICKERS.get('SOL/IRT');
-      MARKET_TICKERS.set('SOL/IRT', {
-        ...prev,
-        price: solTomanPrice,
-        bid: Math.round(solTomanPrice * 0.999),
-        ask: Math.round(solTomanPrice * 1.001),
-        change24h: solTicker.change24h,
-        high24h: Math.round(solTicker.high24h * USDT_TO_TOMAN_RATE),
-        low24h: Math.round(solTicker.low24h * USDT_TO_TOMAN_RATE),
-        volume24h: +(solTicker.volume24h * 0.15).toFixed(2),
-        last_updated: new Date().toISOString()
-      });
-      updateLatestCandle('SOL/IRT', solTomanPrice, 0);
-    }
-
-    if (tonTicker) {
-      const tonTomanPrice = Math.round(tonTicker.price * USDT_TO_TOMAN_RATE);
-      const prev = MARKET_TICKERS.get('TON/IRT');
-      MARKET_TICKERS.set('TON/IRT', {
-        ...prev,
-        price: tonTomanPrice,
-        bid: Math.round(tonTomanPrice * 0.999),
-        ask: Math.round(tonTomanPrice * 1.001),
-        change24h: tonTicker.change24h,
-        high24h: Math.round(tonTicker.high24h * USDT_TO_TOMAN_RATE),
-        low24h: Math.round(tonTicker.low24h * USDT_TO_TOMAN_RATE),
-        volume24h: +(tonTicker.volume24h * 0.15).toFixed(2),
-        last_updated: new Date().toISOString()
-      });
-      updateLatestCandle('TON/IRT', tonTomanPrice, 0);
-    }
+  if (tonTicker) {
+    const tonTomanPrice = Math.round(tonTicker.price * USDT_TO_TOMAN_RATE);
+    const prev = MARKET_TICKERS.get('TON/IRT');
+    MARKET_TICKERS.set('TON/IRT', {
+      ...prev,
+      price: tonTomanPrice,
+      bid: Math.round(tonTomanPrice * 0.999),
+      ask: Math.round(tonTomanPrice * 1.001),
+      change24h: tonTicker.change24h,
+      high24h: Math.round(tonTicker.high24h * USDT_TO_TOMAN_RATE),
+      low24h: Math.round(tonTicker.low24h * USDT_TO_TOMAN_RATE),
+      volume24h: +(tonTicker.volume24h * 0.15).toFixed(2),
+      last_updated: new Date().toISOString()
+    });
+    updateLatestCandle('TON/IRT', tonTomanPrice, 0);
+  }
 }
 
 function updateLatestCandle(symbolId, price, decimals) {
@@ -399,7 +389,6 @@ function updateLatestCandle(symbolId, price, decimals) {
   const last = list[list.length - 1];
   const now = Date.now();
 
-  // If current minute has passed, create new candle
   if (now - last.time >= 60000) {
     list.push({
       time: Math.floor(now / 60000) * 60000,
@@ -422,10 +411,8 @@ function simulateMicroTicks() {
   for (const s of SUPPORTED_SYMBOLS) {
     const t = MARKET_TICKERS.get(s.id);
     if (!t) continue;
-    // Mean-reverting micro fluctuations with ZERO directional drift
     const anchor = s.basePrice || t.price;
     const deviation = (t.price - anchor) / anchor;
-    // Pull back towards anchor if deviating
     const pull = -deviation * 0.08;
     const deltaPct = ((Math.random() - 0.5) * 0.0002) + pull;
     const newPrice = +(t.price * (1 + deltaPct)).toFixed(s.tickDecimals);
@@ -456,8 +443,8 @@ setInterval(() => {
   updatePositionsPnL();
 }, 1000);
 
-// ==========================================
-// VIRTUAL / PAPER TRADING ACCOUNT
+
+
 // ==========================================
 
 export const PAPER_ACCOUNT = {

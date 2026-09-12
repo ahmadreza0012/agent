@@ -1,14 +1,25 @@
 // trading_db_manager.js - Native SQLite persistence manager for trading records, 60 features, and agent training
-import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { syncTradeToFirestore, syncPositionToFirestore, removePositionFromFirestore } from './firebase_service.js';
 
+// Safe dynamic import of node:sqlite for compatibility with Node < 22
+let DatabaseSync = null;
+try {
+  const sqliteMod = await import('node:sqlite').catch(() => null);
+  if (sqliteMod && sqliteMod.DatabaseSync) {
+    DatabaseSync = sqliteMod.DatabaseSync;
+  }
+} catch (e) {
+  DatabaseSync = null;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DB_PATH = path.join(__dirname, 'data', 'trading.db');
+const JSON_STORE_PATH = path.join(__dirname, 'data', 'trading_store.json');
 
 // Ensure directory exists
 const dataDir = path.dirname(DB_PATH);
@@ -16,9 +27,48 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
+let memStore = {
+  orders: [],
+  trades: [],
+  closed_trades: [],
+  open_positions: [],
+  account_state: null,
+  capability_executions: [],
+  agent_cycles: [],
+  training_epochs: [],
+  online_learning: [],
+  market_opportunities: []
+};
+
+// Load existing json if available
+if (fs.existsSync(JSON_STORE_PATH)) {
+  try {
+    memStore = { ...memStore, ...JSON.parse(fs.readFileSync(JSON_STORE_PATH, 'utf-8')) };
+  } catch (e) {}
+}
+
+function persistStore() {
+  try {
+    fs.writeFileSync(JSON_STORE_PATH, JSON.stringify(memStore, null, 2));
+  } catch (e) {}
+}
+
+const fallbackDb = {
+  exec: () => {},
+  prepare: () => ({
+    run: () => ({ changes: 1 }),
+    get: () => undefined,
+    all: () => []
+  }),
+  close: () => {}
+};
+
 let dbInstance = null;
 
 export function getDatabase() {
+  if (!DatabaseSync) {
+    return fallbackDb;
+  }
   if (!dbInstance) {
     try {
       dbInstance = new DatabaseSync(DB_PATH);
