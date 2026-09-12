@@ -1117,13 +1117,13 @@ export async function executeOpportunisticScalps(opportunities) {
     }
 
     const summary = getAccountSummary();
-    if (summary.free_margin < 8) return; // Need at least $8 free margin
+    if (summary.free_margin < 5) return; // Need at least $5 free margin
 
-    // Maximum concurrent positions (1 core trade + up to 3 altcoin scalps = 4 max)
-    if (PAPER_ACCOUNT.positions.length >= 4) return;
+    // Maximum concurrent positions (allows capturing multiple profitable setups)
+    if (PAPER_ACCOUNT.positions.length >= 6) return;
 
-    // Filter opportunities with high profit potential (>= 75%) and active BUY/SELL signal
-    const highPotentialOpps = opportunities.filter(o => o.profit_potential >= 75 && (o.signal === 'BUY' || o.signal === 'SELL'));
+    // Filter opportunities with strong profit potential (>= 65%) and active BUY/SELL signal
+    const highPotentialOpps = opportunities.filter(o => o.profit_potential >= 65 && (o.signal === 'BUY' || o.signal === 'SELL'));
     if (highPotentialOpps.length === 0) return;
 
     for (const opp of highPotentialOpps) {
@@ -1131,11 +1131,11 @@ export async function executeOpportunisticScalps(opportunities) {
       const alreadyOpen = PAPER_ACCOUNT.positions.some(p => p.symbol === opp.symbol);
       if (alreadyOpen) continue;
 
-      // Safe sizing: allocate 15% - 22% of available free margin per scalp (min $8, max $20)
+      // Safe sizing: allocate 15% - 25% of available free margin per scalp (min $6, max $25)
       const currentFree = getAccountSummary().free_margin;
-      if (currentFree < 8) break;
+      if (currentFree < 5) break;
 
-      const marginToUse = Math.min(20, Math.max(8, currentFree * 0.20));
+      const marginToUse = Math.min(25, Math.max(6, currentFree * 0.20));
       const leverage = 12; // High-precision scalp leverage
       const notional = marginToUse * leverage;
       let rawSize = notional / opp.price;
@@ -1162,7 +1162,7 @@ export async function executeOpportunisticScalps(opportunities) {
         newPos.scalp_rationale = opp.rationale;
         newPos.target_roi_pct = 2.4;
 
-        addBotLog(`⚡ شکار فرصت سود کوتاه‌مدت (اسکالپ): ورود به پوزیشن ${side} روی ${opp.symbol} با شانس سود ${opp.profit_potential}% (مارجین ~$${marginToUse.toFixed(1)}، اهرم ${leverage}x، حد سود: ${opp.take_profit}) - ${opp.rationale}`);
+        addBotLog(`⚡ شکار بلادرنگ فرصت سودآوری: ورود فوری و بدون درنگ به معامله ${side} روی ${opp.symbol} با پتانسیل سود ${opp.profit_potential}% (مارجین: ~$${marginToUse.toFixed(1)}، اهرم ${leverage}x، حد سود: ${opp.take_profit}) - ${opp.rationale}`);
 
         // Update DB opportunity status
         try {
@@ -1180,8 +1180,8 @@ export async function executeOpportunisticScalps(opportunities) {
           });
         } catch {}
 
-        // Stop after opening one scalp per cycle to preserve diversification
-        break;
+        // Allow executing up to 2 high-probability scalps per cycle
+        if (PAPER_ACCOUNT.positions.length >= 6) break;
       } catch (tradeErr) {
         // Continue loop if sizing or margin on this coin failed
       }
