@@ -123,17 +123,64 @@ function initMarketData() {
 
 initMarketData();
 
-// Live price fetcher with Binance primary (real-time exchange) and CoinGecko fallback for ALL symbols
+// Robust multi-exchange live price fetcher with KuCoin, Binance, Binance.US, and CoinGecko fallbacks
 async function fetchBinanceLivePrices() {
   let fetchedSuccessfully = false;
 
-  // 1. Try Binance first (real-time high precision prices for all symbols)
+  // 1. Try KuCoin allTickers first (globally accessible, unblocked on AWS EC2, covers 980+ pairs in one call)
+  try {
+    const kuRes = await fetch('https://api.kucoin.com/api/v1/market/allTickers', {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(4500)
+    });
+    if (kuRes.ok) {
+      const kuJson = await kuRes.json();
+      if (kuJson?.data?.ticker && Array.isArray(kuJson.data.ticker)) {
+        const kuMap = new Map(kuJson.data.ticker.map(t => [t.symbol, t]));
+        for (const s of SUPPORTED_SYMBOLS) {
+          if (s.isToman || !s.binanceSymbol) continue;
+          const kuSymbol = s.binanceSymbol.replace('USDT', '-USDT');
+          const item = kuMap.get(kuSymbol);
+          if (item) {
+            const lastPrice = parseFloat(item.last);
+            const high24h = parseFloat(item.high);
+            const low24h = parseFloat(item.low);
+            const changeRate = parseFloat(item.changeRate);
+            const volume24h = parseFloat(item.vol);
+
+            if (!isNaN(lastPrice) && lastPrice > 0) {
+              s.basePrice = lastPrice;
+              const prev = MARKET_TICKERS.get(s.id);
+              const change24h = !isNaN(changeRate) ? +(changeRate * 100).toFixed(2) : (prev?.change24h || 0);
+              MARKET_TICKERS.set(s.id, {
+                ...prev,
+                price: lastPrice,
+                bid: +(lastPrice * 0.9999).toFixed(s.tickDecimals),
+                ask: +(lastPrice * 1.0001).toFixed(s.tickDecimals),
+                change24h,
+                high24h: !isNaN(high24h) && high24h > 0 ? high24h : +(lastPrice * 1.02).toFixed(s.tickDecimals),
+                low24h: !isNaN(low24h) && low24h > 0 ? low24h : +(lastPrice * 0.98).toFixed(s.tickDecimals),
+                volume24h: !isNaN(volume24h) && volume24h > 0 ? +volume24h.toFixed(2) : (prev?.volume24h || 1000),
+                last_updated: new Date().toISOString()
+              });
+              updateLatestCandle(s.id, lastPrice, s.tickDecimals);
+              fetchedSuccessfully = true;
+            }
+          }
+        }
+      }
+    }
+  } catch (kuErr) {
+    // Silently continue to next provider
+  }
+
+  // 2. Try Binance Global for symbols not found or if KuCoin failed
   try {
     const binanceSymbols = SUPPORTED_SYMBOLS.filter(s => s.binanceSymbol && !s.isToman).map(s => s.binanceSymbol);
     const symbolsParam = JSON.stringify(binanceSymbols);
     const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbolsParam)}`, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(4000)
     });
     if (res.ok) {
       const data = await res.json();
@@ -148,16 +195,17 @@ async function fetchBinanceLivePrices() {
             const volume24h = parseFloat(item.volume);
 
             if (!isNaN(lastPrice) && lastPrice > 0) {
+              s.basePrice = lastPrice;
               const prev = MARKET_TICKERS.get(s.id);
               MARKET_TICKERS.set(s.id, {
                 ...prev,
                 price: lastPrice,
                 bid: +(lastPrice * 0.9999).toFixed(s.tickDecimals),
                 ask: +(lastPrice * 1.0001).toFixed(s.tickDecimals),
-                change24h,
-                high24h,
-                low24h,
-                volume24h,
+                change24h: !isNaN(change24h) ? +change24h.toFixed(2) : (prev?.change24h || 0),
+                high24h: !isNaN(high24h) && high24h > 0 ? high24h : +(lastPrice * 1.02).toFixed(s.tickDecimals),
+                low24h: !isNaN(low24h) && low24h > 0 ? low24h : +(lastPrice * 0.98).toFixed(s.tickDecimals),
+                volume24h: !isNaN(volume24h) && volume24h > 0 ? +volume24h.toFixed(2) : (prev?.volume24h || 1000),
                 last_updated: new Date().toISOString()
               });
               updateLatestCandle(s.id, lastPrice, s.tickDecimals);
@@ -168,15 +216,58 @@ async function fetchBinanceLivePrices() {
       }
     }
   } catch (binanceErr) {
-    console.warn('[Price Fetcher] Binance API warning:', binanceErr.message);
+    // Continue to next provider
   }
 
-  // 2. Fallback to CoinGecko if Binance failed
+  // 3. Fallback to Binance.US (works on AWS US-East-1 instances)
+  if (!fetchedSuccessfully) {
+    try {
+      const usSymbols = JSON.stringify(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LINKUSDT', 'LTCUSDT']);
+      const usRes = await fetch(`https://api.binance.us/api/v3/ticker/24hr?symbols=${encodeURIComponent(usSymbols)}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(4000)
+      });
+      if (usRes.ok) {
+        const usData = await usRes.json();
+        if (Array.isArray(usData)) {
+          for (const item of usData) {
+            const matched = SUPPORTED_SYMBOLS.filter(s => s.binanceSymbol === item.symbol && !s.isToman);
+            for (const s of matched) {
+              const lastPrice = parseFloat(item.lastPrice);
+              const change24h = parseFloat(item.priceChangePercent);
+              const high24h = parseFloat(item.highPrice);
+              const low24h = parseFloat(item.lowPrice);
+              if (!isNaN(lastPrice) && lastPrice > 0) {
+                s.basePrice = lastPrice;
+                const prev = MARKET_TICKERS.get(s.id);
+                MARKET_TICKERS.set(s.id, {
+                  ...prev,
+                  price: lastPrice,
+                  bid: +(lastPrice * 0.9999).toFixed(s.tickDecimals),
+                  ask: +(lastPrice * 1.0001).toFixed(s.tickDecimals),
+                  change24h: !isNaN(change24h) ? +change24h.toFixed(2) : 0,
+                  high24h: !isNaN(high24h) ? high24h : +(lastPrice * 1.02).toFixed(s.tickDecimals),
+                  low24h: !isNaN(low24h) ? low24h : +(lastPrice * 0.98).toFixed(s.tickDecimals),
+                  last_updated: new Date().toISOString()
+                });
+                updateLatestCandle(s.id, lastPrice, s.tickDecimals);
+                fetchedSuccessfully = true;
+              }
+            }
+          }
+        }
+      }
+    } catch (usErr) {
+      // Continue
+    }
+  }
+
+  // 4. Fallback to CoinGecko if still needed
   if (!fetchedSuccessfully) {
     try {
       const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,binancecoin,ripple,cardano,avalanche-2,chainlink,polkadot,toncoin&vs_currencies=usd&include_24hr_change=true', {
         headers: { 'User-Agent': 'Mozilla/5.0' },
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(4000)
       });
       if (cgRes.ok) {
         const cgData = await cgRes.json();
@@ -199,6 +290,7 @@ async function fetchBinanceLivePrices() {
             const lastPrice = Number(cgData[cgKey].usd);
             const change24h = Number(cgData[cgKey].usd_24h_change) || 0;
             if (!isNaN(lastPrice) && lastPrice > 0) {
+              s.basePrice = lastPrice;
               const prev = MARKET_TICKERS.get(s.id);
               MARKET_TICKERS.set(s.id, {
                 ...prev,
@@ -217,10 +309,11 @@ async function fetchBinanceLivePrices() {
         }
       }
     } catch (cgErr) {
-      console.warn('[Price Fetcher] CoinGecko fallback warning:', cgErr.message);
+      // Ignore
     }
   }
 
+  // 5. If completely offline, run balanced mean-reverting micro-ticks
   if (!fetchedSuccessfully) {
     simulateMicroTicks();
   }
@@ -329,7 +422,12 @@ function simulateMicroTicks() {
   for (const s of SUPPORTED_SYMBOLS) {
     const t = MARKET_TICKERS.get(s.id);
     if (!t) continue;
-    const deltaPct = (Math.random() - 0.495) * 0.0006;
+    // Mean-reverting micro fluctuations with ZERO directional drift
+    const anchor = s.basePrice || t.price;
+    const deviation = (t.price - anchor) / anchor;
+    // Pull back towards anchor if deviating
+    const pull = -deviation * 0.08;
+    const deltaPct = ((Math.random() - 0.5) * 0.0002) + pull;
     const newPrice = +(t.price * (1 + deltaPct)).toFixed(s.tickDecimals);
     t.price = newPrice;
     t.bid = +(newPrice * 0.9999).toFixed(s.tickDecimals);
