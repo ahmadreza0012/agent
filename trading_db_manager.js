@@ -47,6 +47,26 @@ if (fs.existsSync(JSON_STORE_PATH)) {
   } catch (e) {}
 }
 
+// Fallback seed from trades_seed.json if empty
+const SEED_FILE_PATH = path.join(__dirname, 'data', 'trades_seed.json');
+if ((!memStore.closed_trades || memStore.closed_trades.length === 0) && fs.existsSync(SEED_FILE_PATH)) {
+  try {
+    const seed = JSON.parse(fs.readFileSync(SEED_FILE_PATH, 'utf-8'));
+    if (seed.closed_trades && seed.closed_trades.length > 0) {
+      memStore.closed_trades = seed.closed_trades;
+    }
+    if (seed.open_positions && seed.open_positions.length > 0) {
+      memStore.open_positions = seed.open_positions;
+    }
+    if (seed.orders && seed.orders.length > 0) {
+      memStore.orders = seed.orders;
+    }
+    if (seed.account && !memStore.account_state) {
+      memStore.account_state = seed.account;
+    }
+  } catch (e) {}
+}
+
 function persistStore() {
   try {
     fs.writeFileSync(JSON_STORE_PATH, JSON.stringify(memStore, null, 2));
@@ -55,10 +75,100 @@ function persistStore() {
 
 const fallbackDb = {
   exec: () => {},
-  prepare: () => ({
-    run: () => ({ changes: 1 }),
-    get: () => undefined,
-    all: () => []
+  prepare: (sql) => ({
+    run: (...args) => {
+      try {
+        const sqlLower = (sql || '').toLowerCase();
+        if (sqlLower.includes('into closed_trades')) {
+          const tradeObj = (args[0] && typeof args[0] === 'object') ? args[0] : {
+            id: args[0] || ('ct_' + Date.now()),
+            order_id: args[1] || args[0],
+            symbol: args[2] || 'BTC/USDT',
+            side: args[3] || 'LONG',
+            size: args[4] || 0,
+            leverage: args[5] || 1,
+            entry_price: args[6] || 0,
+            exit_price: args[7] || 0,
+            gross_pnl: args[8] || 0,
+            fee: args[9] || 0,
+            net_pnl: args[10] || 0,
+            roi_pct: args[11] || 0,
+            close_reason: args[12] || 'MANUAL',
+            opened_at: args[13] || new Date().toISOString(),
+            closed_at: args[14] || new Date().toISOString(),
+            created_at: args[15] || new Date().toISOString(),
+            strategy: args[16] || 'AGENT_60_FEATURES'
+          };
+          memStore.closed_trades.unshift(tradeObj);
+        }
+        if (sqlLower.includes('into open_positions')) {
+          const posObj = (args[0] && typeof args[0] === 'object') ? args[0] : {
+            id: args[0] || ('pos_' + Date.now()),
+            symbol: args[1],
+            side: args[2],
+            type: args[3] || 'MARKET',
+            size: args[4],
+            notional: args[5],
+            margin: args[6],
+            leverage: args[7],
+            entry_price: args[8],
+            current_price: args[9],
+            liquidation_price: args[10],
+            stop_loss: args[11],
+            take_profit: args[12],
+            unrealized_pnl: args[13],
+            roe_pct: args[14],
+            fee: args[15],
+            opened_at: args[16],
+            last_updated: args[17]
+          };
+          const idx = memStore.open_positions.findIndex(p => p.id === posObj.id);
+          if (idx >= 0) memStore.open_positions[idx] = posObj;
+          else memStore.open_positions.push(posObj);
+        }
+        if (sqlLower.includes('delete from open_positions')) {
+          memStore.open_positions = [];
+        }
+        persistStore();
+      } catch (e) {}
+      return { changes: 1 };
+    },
+    get: (...args) => {
+      const sqlLower = (sql || '').toLowerCase();
+      if (sqlLower.includes('count(*) as cnt from')) {
+        const match = sqlLower.match(/from\s+([a-z0-9_]+)/);
+        const tbl = match ? match[1] : '';
+        const list = memStore[tbl];
+        return { cnt: Array.isArray(list) ? list.length : 0 };
+      }
+      if (sqlLower.includes('from account_state')) {
+        return memStore.account_state || { id: 'primary', balance: 10000, equity: 10000, total_pnl: 0 };
+      }
+      return undefined;
+    },
+    all: (...args) => {
+      const sqlLower = (sql || '').toLowerCase();
+      const limit = typeof args[0] === 'number' ? args[0] : 100;
+      if (sqlLower.includes('from closed_trades')) {
+        return (memStore.closed_trades || []).slice(0, limit);
+      }
+      if (sqlLower.includes('from open_positions')) {
+        return memStore.open_positions || [];
+      }
+      if (sqlLower.includes('from orders')) {
+        return (memStore.orders || []).slice(0, limit);
+      }
+      if (sqlLower.includes('from capability_executions')) {
+        return (memStore.capability_executions || []).slice(0, limit);
+      }
+      if (sqlLower.includes('from agent_training_epochs')) {
+        return (memStore.training_epochs || []).slice(0, limit);
+      }
+      if (sqlLower.includes('from agent_cycles')) {
+        return (memStore.agent_cycles || []).slice(0, limit);
+      }
+      return [];
+    }
   }),
   close: () => {}
 };

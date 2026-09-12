@@ -4,8 +4,9 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
+import { WebSocketServer } from 'ws';
 import { executeCapabilityDomain, CAPABILITY_HANDLERS } from './capability_engine.js';
-import { paperRouter } from './paper_exchange_engine.js';
+import { paperRouter, buildTerminalBundle } from './paper_exchange_engine.js';
 import { mcpRouter } from './mcp_server.js';
 import {
   getDatabaseStats,
@@ -1395,11 +1396,82 @@ app.use('/api', (req, res) => {
   res.status(501).json({ error: 'Endpoint not yet migrated' });
 });
 
+// Realtime WebSocket Server for zero-delay trading updates
+const wss = new WebSocketServer({ noServer: true });
+
+wss.on('connection', (ws) => {
+  ws.isAlive = true;
+  ws.activeSymbol = 'BTC/USDT';
+
+  ws.on('pong', () => { ws.isAlive = true; });
+
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message);
+      if (data.type === 'SET_SYMBOL' && data.symbol) {
+        ws.activeSymbol = data.symbol;
+        const bundle = buildTerminalBundle(ws.activeSymbol);
+        ws.send(JSON.stringify({ type: 'TERMINAL_BUNDLE', data: bundle }));
+      }
+      if (data.type === 'PING') {
+        ws.send(JSON.stringify({ type: 'PONG', timestamp: Date.now() }));
+      }
+    } catch (e) {}
+  });
+
+  // Send immediate initial bundle
+  try {
+    const bundle = buildTerminalBundle(ws.activeSymbol);
+    ws.send(JSON.stringify({ type: 'TERMINAL_BUNDLE', data: bundle }));
+  } catch (e) {}
+});
+
+// Ping keepalive every 15s
+setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (!ws.isAlive) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 15000);
+
+// Broadcast zero-delay terminal bundle every 300ms
+setInterval(() => {
+  if (wss.clients.size === 0) return;
+  const bundlesBySymbol = {};
+  wss.clients.forEach((client) => {
+    if (client.readyState === 1) { // WebSocket.OPEN
+      const sym = client.activeSymbol || 'BTC/USDT';
+      if (!bundlesBySymbol[sym]) {
+        bundlesBySymbol[sym] = buildTerminalBundle(sym);
+      }
+      client.send(JSON.stringify({ type: 'TERMINAL_BUNDLE', data: bundlesBySymbol[sym] }));
+    }
+  });
+}, 300);
+
+function setupWsUpgrade(server) {
+  if (!server) return;
+  server.on('upgrade', (request, socket, head) => {
+    try {
+      const pathname = new URL(request.url, `http://${request.headers.host || 'localhost'}`).pathname;
+      if (pathname === '/ws' || pathname === '/ws/' || pathname === '/socket.io/') {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          wss.emit('connection', ws, request);
+        });
+      }
+    } catch (e) {
+      socket.destroy();
+    }
+  });
+}
+
 // Start single unified dashboard on Port 5000 (User's primary dashboard port)
 try {
   const server5000 = app.listen(5000, HOST, () => {
     console.log(`🚀 Crypto Trading Bot Unified Dashboard listening at http://${HOST}:5000`);
   });
+  setupWsUpgrade(server5000);
   server5000.on('error', (err) => {
     if (err.code !== 'EADDRINUSE') {
       console.error('Dashboard error on port 5000:', err.message);
@@ -1417,6 +1489,7 @@ try {
   const server80 = app.listen(80, HOST, () => {
     console.log(`🌐 Port 80 redirector active -> http://${HOST}:5000`);
   });
+  setupWsUpgrade(server80);
   server80.on('error', () => {
     // Non-root or port in use, safely ignored
   });
@@ -1427,6 +1500,7 @@ try {
   const server3000 = app.listen(3000, HOST, () => {
     console.log(`🌐 AI Studio preview listener active at http://${HOST}:3000`);
   });
+  setupWsUpgrade(server3000);
   server3000.on('error', (err) => {
     if (err.code !== 'EADDRINUSE') {
       console.log(`Preview port 3000 status: ${err.message}`);

@@ -1383,46 +1383,53 @@ export function getCandlesAndIndicators(symbol = 'BTC/USDT', limit = 65) {
   };
 }
 
+// Build unified terminal bundle object
+export function buildTerminalBundle(symbol = 'BTC/USDT', limit = 65) {
+  const candlesData = getCandlesAndIndicators(symbol, limit);
+  updatePositionsPnL();
+  const accountSummary = getAccountSummary();
+  const ob = generateOrderBook(symbol);
+  const agentLogs = (PAPER_ACCOUNT.bot.logs || []).map(l => {
+    let action = 'SCAN';
+    if (l.message.includes('خرید') || l.message.includes('LONG')) action = 'BUY';
+    else if (l.message.includes('فروش') || l.message.includes('SHORT')) action = 'SELL';
+    else if (l.message.includes('سیگنال')) action = 'SIGNAL';
+    return { timestamp: l.timestamp, action, message: l.message, reason: l.message };
+  });
+
+  return {
+    success: true,
+    symbol,
+    timestamp: Date.now(),
+    candles: candlesData.candles,
+    indicators: candlesData.indicators,
+    trades: candlesData.trades,
+    account: accountSummary,
+    positions: PAPER_ACCOUNT.positions || [],
+    closed_trades: (PAPER_ACCOUNT.trades && PAPER_ACCOUNT.trades.length > 0) ? PAPER_ACCOUNT.trades.slice(0, 50) : [],
+    orderbook: ob,
+    opportunities: RECENT_MARKET_OPPORTUNITIES.slice(0, 30),
+    agent: {
+      status: PAPER_ACCOUNT.bot.enabled ? 'active' : 'idle',
+      enabled: PAPER_ACCOUNT.bot.enabled,
+      strategy: PAPER_ACCOUNT.bot.strategy || '60_FEATURES_CONSENSUS',
+      symbol: PAPER_ACCOUNT.bot.symbol || 'BTC/USDT',
+      leverage: PAPER_ACCOUNT.bot.leverage || 5,
+      risk_pct_per_trade: PAPER_ACCOUNT.bot.risk_pct_per_trade || 8,
+      last_evaluated: PAPER_ACCOUNT.bot.last_evaluated,
+      last_signal: PAPER_ACCOUNT.bot.last_signal,
+      thought_logs: agentLogs
+    }
+  };
+}
+
 // GET unified terminal bundle (all exchange state in a single fast atomic request)
 paperRouter.get(['/bundle', '/terminal-bundle', '/state'], (req, res) => {
   try {
     const symbol = req.query.symbol || 'BTC/USDT';
     const limit = parseInt(req.query.limit) || 65;
-    const candlesData = getCandlesAndIndicators(symbol, limit);
-    updatePositionsPnL();
-    const accountSummary = getAccountSummary();
-    const ob = generateOrderBook(symbol);
-    const agentLogs = (PAPER_ACCOUNT.bot.logs || []).map(l => {
-      let action = 'SCAN';
-      if (l.message.includes('خرید') || l.message.includes('LONG')) action = 'BUY';
-      else if (l.message.includes('فروش') || l.message.includes('SHORT')) action = 'SELL';
-      else if (l.message.includes('سیگنال')) action = 'SIGNAL';
-      return { timestamp: l.timestamp, action, message: l.message };
-    });
-
-    res.json({
-      success: true,
-      symbol,
-      candles: candlesData.candles,
-      indicators: candlesData.indicators,
-      trades: candlesData.trades,
-      account: accountSummary,
-      positions: PAPER_ACCOUNT.positions,
-      closed_trades: PAPER_ACCOUNT.trades.slice(0, 50),
-      orderbook: ob,
-      opportunities: RECENT_MARKET_OPPORTUNITIES.slice(0, 30),
-      agent: {
-        status: PAPER_ACCOUNT.bot.enabled ? 'active' : 'idle',
-        enabled: PAPER_ACCOUNT.bot.enabled,
-        strategy: PAPER_ACCOUNT.bot.strategy || '60_FEATURES_CONSENSUS',
-        symbol: PAPER_ACCOUNT.bot.symbol || 'BTC/USDT',
-        leverage: PAPER_ACCOUNT.bot.leverage || 5,
-        risk_pct_per_trade: PAPER_ACCOUNT.bot.risk_pct_per_trade || 8,
-        last_evaluated: PAPER_ACCOUNT.bot.last_evaluated,
-        last_signal: PAPER_ACCOUNT.bot.last_signal,
-        thought_logs: agentLogs
-      }
-    });
+    const bundle = buildTerminalBundle(symbol, limit);
+    res.json(bundle);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
