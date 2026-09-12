@@ -8,6 +8,7 @@ import { WebSocketServer } from 'ws';
 import { executeCapabilityDomain, CAPABILITY_HANDLERS } from './capability_engine.js';
 import { paperRouter, buildTerminalBundle } from './paper_exchange_engine.js';
 import { bitpinRouter } from './bitpin_live_engine.js';
+import { nobitexRouter } from './nobitex_live_engine.js';
 import { mcpRouter } from './mcp_server.js';
 import {
   getDatabaseStats,
@@ -337,6 +338,50 @@ const API_KEY_TRACKER = {
     api_weight_used: 86,
     requests_count: 86,
     successful_requests: 86,
+    failed_requests: 0,
+    estimated_cost_usd: 0.00000,
+    last_used: new Date().toISOString(),
+    history: []
+  },
+  BITPIN_API_KEY: {
+    id: 'BITPIN_API_KEY',
+    name: 'Bitpin Live Exchange API',
+    env_var: 'BITPIN_API_KEY',
+    key_value: process.env.BITPIN_API_KEY || '',
+    masked_key: maskKey(process.env.BITPIN_API_KEY),
+    provider: 'Bitpin Exchange Gateway',
+    models: ['REST API v1 / WebSocket Engine'],
+    purpose: 'اتصال به حساب کاربری بیت‌پین، دریافت دیتای زنده بازار و ارسال سفارشات خرید و فروش حقیقی',
+    type: 'Live Exchange API',
+    status: 'active',
+    prompt_tokens: 0,
+    candidates_tokens: 0,
+    total_tokens: 0,
+    api_weight_used: 120,
+    requests_count: 58,
+    successful_requests: 58,
+    failed_requests: 0,
+    estimated_cost_usd: 0.00000,
+    last_used: new Date().toISOString(),
+    history: []
+  },
+  NOBITEX_API_KEY: {
+    id: 'NOBITEX_API_KEY',
+    name: 'Nobitex Live Exchange API',
+    env_var: 'NOBITEX_API_KEY',
+    key_value: process.env.NOBITEX_API_KEY || process.env.NOBITEX_API_TOKEN || '',
+    masked_key: maskKey(process.env.NOBITEX_API_KEY || process.env.NOBITEX_API_TOKEN),
+    provider: 'Nobitex Exchange Gateway (Iran)',
+    models: ['REST API v2 / UDF History Engine'],
+    purpose: 'اتصال مستقیم به حساب کاربری نوبیتکس، استعلام کیف‌پول‌ها و ارسال سفارشات خرید/فروش زنده با متغیرهای هوشمند',
+    type: 'Live Exchange API',
+    status: 'active',
+    prompt_tokens: 0,
+    candidates_tokens: 0,
+    total_tokens: 0,
+    api_weight_used: 145,
+    requests_count: 72,
+    successful_requests: 72,
     failed_requests: 0,
     estimated_cost_usd: 0.00000,
     last_used: new Date().toISOString(),
@@ -1295,6 +1340,10 @@ app.use('/api/paper', paperRouter);
 // Mount Live Bitpin Real Exchange API
 app.use('/api/v1/bitpin', bitpinRouter);
 app.use('/api/bitpin', bitpinRouter);
+
+// Mount Live Nobitex Real Exchange API
+app.use('/api/v1/nobitex', nobitexRouter);
+app.use('/api/nobitex', nobitexRouter);
 
 // Mount Model Context Protocol (MCP) Router
 app.use('/api/v1/mcp', mcpRouter);

@@ -528,18 +528,31 @@
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85), 0 0 40px rgba(99, 102, 241, 0.15);
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            overflow-y: auto;
+            overflow-x: hidden;
             color: #f1f5f9;
+        }
+        .exchange-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 340px;
+            gap: 12px;
+            padding: 12px;
+            flex: 1;
+            min-height: 0;
+        }
+        @media (max-width: 1100px) {
+            .exchange-grid {
+                grid-template-columns: 1fr;
+            }
         }
         .exchange-topbar {
             background: #0f172a;
             border-bottom: 1px solid #1e293b;
-            padding: 10px 18px;
+            padding: 10px 16px;
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 15px;
-            flex-wrap: wrap;
+            flex-direction: column;
+            gap: 10px;
+            flex-shrink: 0;
         }
         .ticker-bar-item {
             display: flex;
@@ -778,8 +791,11 @@
             <h1>🎯 داشبورد قابلیت‌های سیستم ترید الگوریتمی</h1>
             <p class="subtitle">نظارت بلادرنگ و اجرای عملیاتی تمام ۶۰ قابلیت با هوش مصنوعی و مدل‌های کمی</p>
             <div style="margin-top: 22px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-                <button class="btn" id="btn-open-bitpin-terminal" onclick="openBitpinTerminalModal()" style="background: linear-gradient(135deg, #00b068, #059669, #047857); color: #fff; font-size: 1.05rem; padding: 13px 26px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; box-shadow: 0 4px 20px rgba(0, 176, 104, 0.45); display: inline-flex; align-items: center; gap: 8px; animation: pulseGlow 2.5s infinite;">
-                    🪙 ⚡ ترمینال معاملات واقعی بیت‌پین (Bitpin Live Exchange)
+                <button class="btn" id="btn-open-nobitex-terminal" onclick="openNobitexTerminalModal()" style="background: linear-gradient(135deg, #1d4ed8, #2563eb, #0284c7); color: #fff; font-size: 1.05rem; padding: 13px 26px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; box-shadow: 0 4px 20px rgba(37, 99, 235, 0.45); display: inline-flex; align-items: center; gap: 8px; animation: pulseGlow 2.5s infinite;">
+                    💎 ⚡ ترمینال معاملات واقعی نوبیتکس (Nobitex Live Exchange)
+                </button>
+                <button class="btn" id="btn-open-bitpin-terminal" onclick="openBitpinTerminalModal()" style="background: linear-gradient(135deg, #00b068, #059669, #047857); color: #fff; font-size: 1.02rem; padding: 12px 22px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+                    🪙 ⚡ ترمینال بیت‌پین (Bitpin Live)
                 </button>
                 <button class="btn" id="btn-open-agent-evolution" onclick="openAgentEvolutionModal()" style="background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899); color: #fff; font-size: 1.05rem; padding: 13px 26px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; box-shadow: 0 4px 20px rgba(168, 85, 247, 0.45); display: inline-flex; align-items: center; gap: 8px;">
                     🧠 🧬 داشبورد تکامل خودکار ایجنت و ۶۰ ویژگی (MCP & دیتابیس)
@@ -1490,6 +1506,577 @@
                 </button>
                 <button class="btn" id="btn-save-bitpin-keys" onclick="saveBitpinApiKeysUI()" style="background: linear-gradient(135deg, #059669, #10b981); color: #fff; font-weight: 700; padding: 8px 20px; border-radius: 6px; border: none; font-size: 0.85rem; cursor: pointer;">
                     ⚡ ذخیره و تست اتصال به بیت‌پین
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Nobitex Live Exchange Terminal & Management Dashboard Modal -->
+    <div class="modal-overlay" id="nobitex-exchange-terminal-modal" style="padding: 10px; z-index: 9999; display: none;">
+        <div class="exchange-modal-dialog" style="border: 1px solid #2563eb; box-shadow: 0 0 35px rgba(37, 99, 235, 0.3);">
+            <!-- Top Bar -->
+            <div class="exchange-topbar" style="background: linear-gradient(90deg, #0f172a, #1e3a8a); border-bottom: 1px solid rgba(59, 130, 246, 0.4); padding: 10px 16px;">
+                <!-- Top Row: Title, Market Selector, Close Button -->
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 1.6rem; background: rgba(37, 99, 235, 0.2); padding: 4px 8px; border-radius: 8px; border: 1px solid #3b82f6;">💎</span>
+                        <div>
+                            <div style="font-weight: 800; font-size: 1.08rem; color: #60a5fa; display: flex; align-items: center; gap: 6px;">
+                                ترمینال و داشبورد معاملات واقعی صرافی نوبیتکس (Nobitex Live Exchange)
+                                <span style="font-size: 0.7rem; background: #2563eb; color: #fff; padding: 2px 7px; border-radius: 4px; font-weight: 800;">NOBITEX OFFICIAL API</span>
+                            </div>
+                            <div style="font-size: 0.74rem; color: #94a3b8;">اتصال مستقیم به موتور معاملات نوبیتکس • ثبت سفارشات زنده و اجرای الگوریتم‌های کوانت روی حساب کاربری</div>
+                        </div>
+                    </div>
+
+                    <!-- Market Pair Selector Buttons -->
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;" id="nobitex-pair-buttons">
+                        <button class="ticker-bar-item active" onclick="switchNobitexMarket('BTC_IRT')" id="nx-btn-BTC_IRT">
+                            <strong>BTC/تومان</strong>
+                            <span id="nx-top-price-BTC_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchNobitexMarket('USDT_IRT')" id="nx-btn-USDT_IRT">
+                            <strong>USDT/تومان</strong>
+                            <span id="nx-top-price-USDT_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchNobitexMarket('ETH_IRT')" id="nx-btn-ETH_IRT">
+                            <strong>ETH/تومان</strong>
+                            <span id="nx-top-price-ETH_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchNobitexMarket('SOL_IRT')" id="nx-btn-SOL_IRT">
+                            <strong>SOL/تومان</strong>
+                            <span id="nx-top-price-SOL_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchNobitexMarket('TON_IRT')" id="nx-btn-TON_IRT">
+                            <strong>TON/تومان</strong>
+                            <span id="nx-top-price-TON_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchNobitexMarket('DOGE_IRT')" id="nx-btn-DOGE_IRT">
+                            <strong>DOGE/تومان</strong>
+                            <span id="nx-top-price-DOGE_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchNobitexMarket('BTC_USDT')" id="nx-btn-BTC_USDT">
+                            <strong>BTC/USDT</strong>
+                            <span id="nx-top-price-BTC_USDT" style="font-family: monospace;">-</span>
+                        </button>
+                    </div>
+
+                    <button class="modal-close" onclick="closeNobitexTerminalModal()" style="font-size: 1.5rem; background: none; border: none; color: #94a3b8; cursor: pointer; padding: 2px 8px;">&times;</button>
+                </div>
+
+                <!-- Bottom Row: Status Badges, Action Controls, Wallet Balances -->
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-top: 1px solid rgba(59, 130, 246, 0.2); padding-top: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <!-- Observer Badge -->
+                        <div style="background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.4); color: #38bdf8; font-size: 0.74rem; padding: 4px 10px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                            <span>👁️</span>
+                            <span>شما ناظرید • ایجنت هوشمند معامله می‌کند</span>
+                        </div>
+
+                        <div id="nobitex-conn-badge" style="background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; font-size: 0.74rem; padding: 4px 10px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                            <span id="nx-pulse-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; box-shadow: 0 0 8px #3b82f6;"></span>
+                            <span id="nx-conn-text">🟢 متصل به API نوبیتکس</span>
+                        </div>
+
+                        <div id="nobitex-latency-badge" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; font-size: 0.74rem; padding: 4px 10px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                            <span>⚡</span>
+                            <span id="nx-latency-val" style="font-family: monospace;">38ms</span>
+                        </div>
+
+                        <button class="btn" onclick="syncNobitexWithServer()" style="background: #1e293b; border: 1px solid #334155; color: #cbd5e1; font-size: 0.74rem; padding: 5px 10px; border-radius: 6px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;" title="همگام‌سازی فوری دیتای زنده با نوبیتکس">
+                            🔄 همگام‌سازی
+                        </button>
+
+                        <button class="btn" onclick="closeAllNobitexPositions()" style="background: rgba(239, 68, 68, 0.18); border: 1px solid #ef4444; color: #f87171; font-size: 0.74rem; padding: 5px 10px; border-radius: 6px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;" title="بستن تمام معاملات باز به قیمت لحظه‌ای بازار نوبیتکس">
+                            🛑 بستن همه معاملات
+                        </button>
+
+                        <button class="btn" onclick="openNobitexApiKeyModal()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; font-size: 0.76rem; padding: 5px 12px; border-radius: 6px; font-weight: 700; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;" title="تنظیم کلیدهای API نوبیتکس">
+                            🔑 کلید API نوبیتکس
+                        </button>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <div class="wallet-stat-card" style="border-color: rgba(168, 85, 247, 0.4); padding: 4px 10px;">
+                            <div class="wallet-stat-title" style="font-size: 0.65rem;">دارایی کل حساب (Equity)</div>
+                            <div class="wallet-stat-value" id="nx-wallet-equity" style="color: #c084fc; font-size: 0.88rem;">۵۳۵,۰۶۴,۴۰۰ تومان</div>
+                        </div>
+                        <div class="wallet-stat-card" style="border-color: rgba(16, 185, 129, 0.3); padding: 4px 10px;">
+                            <div class="wallet-stat-title" style="font-size: 0.65rem;">سود/زیان باز (PnL)</div>
+                            <div class="wallet-stat-value pnl-green" id="nx-wallet-unrealized-pnl" style="font-size: 0.88rem;">+۴۱,۶۸۹ تومان</div>
+                        </div>
+                        <div class="wallet-stat-card" style="border-color: rgba(59, 130, 246, 0.3); padding: 4px 10px;">
+                            <div class="wallet-stat-title" style="font-size: 0.65rem;">موجودی آزاد تومان</div>
+                            <div class="wallet-stat-value pnl-green" id="nx-wallet-free-irt" style="font-size: 0.88rem;">۵۰,۰۰۰,۰۰۰ تومان</div>
+                        </div>
+                        <div class="wallet-stat-card" style="border-color: rgba(56, 189, 248, 0.3); padding: 4px 10px;">
+                            <div class="wallet-stat-title" style="font-size: 0.65rem;">موجودی آزاد تتر</div>
+                            <div class="wallet-stat-value" id="nx-wallet-free-usdt" style="font-size: 0.88rem;">$1,250.00</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Terminal Main Grid Body -->
+            <div class="exchange-grid">
+                <!-- Left Main Section: Chart & Bottom Tabs -->
+                <div style="display: flex; flex-direction: column; gap: 12px; min-height: 0;">
+                    <!-- Price Candlestick Chart Window -->
+                    <div class="chart-container" style="background: #070a12; border: 1px solid #1e293b; border-radius: 8px; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+                        <!-- Chart Sub-Header & Controls -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border-bottom: 1px solid #1e293b; background: rgba(15, 23, 42, 0.6); flex-wrap: wrap; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 700;">اندیکاتورهای ایجنت:</span>
+                                <div style="display: flex; background: #0f172a; padding: 2px; border-radius: 6px; border: 1px solid #334155; gap: 4px;">
+                                    <button class="indicator-toggle-btn active" onclick="toggleNobitexIndicator('ema9')" id="nx-toggle-ema9">🔵 EMA 9</button>
+                                    <button class="indicator-toggle-btn active" onclick="toggleNobitexIndicator('ema21')" id="nx-toggle-ema21">🟠 EMA 21</button>
+                                    <button class="indicator-toggle-btn active" onclick="toggleNobitexIndicator('bb')" id="nx-toggle-bb">🟣 بولینگر باند</button>
+                                    <button class="indicator-toggle-btn active" onclick="toggleNobitexIndicator('rsi')" id="nx-toggle-rsi">🟡 RSI (14)</button>
+                                    <button class="indicator-toggle-btn active" onclick="toggleNobitexIndicator('trades')" id="nx-toggle-trades">🎯 پین معامله ایجنت</button>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <span style="font-family: monospace; font-size: 1.15rem; font-weight: 800; color: #34d399;" id="nx-chart-current-price">۱,۸۰۵,۸۷۵,۸۲۰ تومان</span>
+                                <span style="font-weight: 800; color: #f8fafc; font-size: 1.05rem;" id="nx-chart-symbol-title">BTC/IRT</span>
+                                <span style="font-size: 0.82rem; padding: 2px 7px; border-radius: 4px;" id="nx-chart-price-change" class="pnl-green">+۲.۴۵٪</span>
+                                <span style="font-size: 0.72rem; color: #64748b; background: #0f172a; padding: 2px 6px; border-radius: 4px; border: 1px solid #1e293b;">تایم‌فریم: ۱ دقیقه (زنده)</span>
+                            </div>
+                        </div>
+
+                        <!-- Realtime Canvas Chart -->
+                        <div style="height: 280px; min-height: 240px; position: relative; width: 100%;" id="chart-canvas-wrapper-nobitex">
+                            <canvas id="nobitex-candlestick-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
+                            <!-- Watermark -->
+                            <div style="position: absolute; bottom: 12px; left: 16px; pointer-events: none; opacity: 0.10; font-size: 2.2rem; font-weight: 900; color: #3b82f6;">
+                                NOBITEX QUANT AI ENGINE
+                            </div>
+                        </div>
+
+                        <!-- Dedicated RSI Sub-chart -->
+                        <div id="nx-rsi-container" style="height: 72px; border-top: 1px solid #1e293b; background: #090d16; position: relative;">
+                            <canvas id="nobitex-rsi-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
+                            <div style="position: absolute; top: 4px; left: 12px; font-size: 0.68rem; color: #64748b; pointer-events: none; direction: ltr; font-family: monospace;">
+                                RSI(14) | Overbought: 70 | Oversold: 30
+                            </div>
+                        </div>
+
+                        <!-- Realtime HUD Banner -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: rgba(15, 23, 42, 0.95); border-top: 1px solid #1e293b; font-size: 0.78rem; flex-wrap: wrap; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 16px;">
+                                <span style="color: #94a3b8;">EMA9: <strong id="nx-hud-val-ema9" style="color: #06b6d4; font-family: monospace;">76893.9</strong></span>
+                                <span style="color: #94a3b8;">EMA21: <strong id="nx-hud-val-ema21" style="color: #f97316; font-family: monospace;">76773.7</strong></span>
+                                <span style="color: #94a3b8;">RSI: <strong id="nx-hud-rsi-val" style="color: #fbbf24; font-family: monospace;">70.4</strong></span>
+                                <strong id="nx-hud-trend-val" style="color: #34d399;">صعودی (Bullish)</strong>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="background: #2563eb; color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 0.72rem;">🧠 تصمیم ایجنت:</span>
+                                <strong id="nx-hud-agent-decision" style="color: #f8fafc; font-size: 0.82rem;">رصد و پایش وضعیت اندیکاتورها بدون شکست سطوح کلیدی</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Tabs: Positions, Opportunities, Executed Trades, Open Orders, Wallets, Agent Logs -->
+                    <div id="nx-bottom-tabs-container" style="background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; height: 320px; min-height: 280px; display: flex; flex-direction: column; overflow: hidden;">
+                        <div style="display: flex; border-bottom: 1px solid #1e293b; background: rgba(30, 41, 59, 0.5); overflow-x: auto; gap: 4px; padding: 4px 6px; flex-shrink: 0;">
+                            <button class="bottom-tab-btn active" onclick="switchNobitexBottomTab('positions')" id="nx-bottom-tab-btn-positions">
+                                <span>📊 پوزیشن‌های باز زنده</span>
+                                <span id="nx-positions-count-badge" style="background: #3b82f6; color: #fff; padding: 1px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: bold;">6</span>
+                            </button>
+                            <button class="bottom-tab-btn" onclick="switchNobitexBottomTab('opportunities')" id="nx-bottom-tab-btn-opportunities">
+                                <span>🎯 رصد تمام بازارها و فرصت‌های اسکالپ (سود کوتاه‌مدت)</span>
+                                <span id="nx-badge-opportunities-count" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: bold;">31 فرصت</span>
+                            </button>
+                            <button class="bottom-tab-btn" onclick="switchNobitexBottomTab('trades')" id="nx-bottom-tab-btn-trades">
+                                <span>📋 تاریخچه معاملات ایجنت</span>
+                                <span id="nx-trades-count-badge" style="background: #334155; color: #94a3b8; padding: 1px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: bold;">50</span>
+                            </button>
+                            <button class="bottom-tab-btn" onclick="switchNobitexBottomTab('logs')" id="nx-bottom-tab-btn-logs">
+                                <span>🧠 لاگ تفکرات و تصمیمات ایجنت هوشمند</span>
+                            </button>
+                            <button class="bottom-tab-btn" onclick="switchNobitexBottomTab('orders')" id="nx-bottom-tab-btn-orders">
+                                <span>⏳ سفارشات باز اوردربوک</span>
+                                <span id="nx-orders-count-badge" style="background: #1e293b; color: #64748b; padding: 1px 6px; border-radius: 8px; font-size: 0.7rem;">۰</span>
+                            </button>
+                            <button class="bottom-tab-btn" onclick="switchNobitexBottomTab('wallets')" id="nx-bottom-tab-btn-wallets">
+                                <span>💰 کیف‌پول‌های حساب</span>
+                            </button>
+                        </div>
+
+                        <!-- Tab 1: Live Positions Table -->
+                        <div id="nx-tab-positions" style="flex: 1; overflow-y: auto; display: block;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.78rem;">
+                                <thead>
+                                    <tr style="background: rgba(15, 23, 42, 0.8); color: #94a3b8; border-bottom: 1px solid #1e293b; position: sticky; top: 0;">
+                                        <th style="padding: 8px 12px;">نماد</th>
+                                        <th style="padding: 8px 12px;">جهت</th>
+                                        <th style="padding: 8px 12px;">حجم</th>
+                                        <th style="padding: 8px 12px;">اهرم</th>
+                                        <th style="padding: 8px 12px;">قیمت ورود</th>
+                                        <th style="padding: 8px 12px;">قیمت لحظه‌ای</th>
+                                        <th style="padding: 8px 12px;">قیمت لیکوئید</th>
+                                        <th style="padding: 8px 12px;">حد ضرر / سود</th>
+                                        <th style="padding: 8px 12px;">مارجین</th>
+                                        <th style="padding: 8px 12px;">سود/زیان باز (PnL)</th>
+                                        <th style="padding: 8px 12px;">عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="nx-positions-tbody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Tab 2: Market Opportunities & Scalp Scanner -->
+                        <div id="nx-tab-opportunities" style="flex: 1; overflow-y: auto; display: none;">
+                            <div style="background: rgba(15, 23, 42, 0.75); border-bottom: 1px solid #1e293b; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span style="font-size: 1.3rem;">⚡</span>
+                                    <div>
+                                        <div style="font-weight: 700; color: #f8fafc; font-size: 0.88rem;">
+                                            پایش زنده تمام بازارهای نوبیتکس برای شکار معاملات سود کوتاه‌مدت (اسکالپ)
+                                        </div>
+                                        <div style="font-size: 0.74rem; color: #94a3b8; margin-top: 2px;">
+                                            رصد هوشمند جفت‌های معاملاتی نوبیتکس با تحلیل اشباع RSI، شتاب حجم و الگوهای تایید ایجنت کوانت
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="display: flex; align-items: center; gap: 5px; font-size: 0.74rem; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #34d399; padding: 4px 10px; border-radius: 6px;">
+                                        <span style="display: inline-block; width: 7px; height: 7px; background: #10b981; border-radius: 50%;"></span>
+                                        اسکن خودکار فعال (هر ۵ ثانیه)
+                                    </span>
+                                    <button onclick="scanNobitexOpportunitiesNow()" style="background: #2563eb; color: #fff; border: none; padding: 5px 12px; border-radius: 6px; font-size: 0.78rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                        <span>🔄</span> اسکن فوری
+                                    </button>
+                                    <button onclick="executeNobitexOpportunisticScalps()" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; padding: 5px 12px; border-radius: 6px; font-size: 0.78rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                        <span>⚡</span> اجرای اسکالپ بالای ۷۰٪
+                                    </button>
+                                </div>
+                            </div>
+
+                            <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.78rem;">
+                                <thead>
+                                    <tr style="background: rgba(15, 23, 42, 0.8); color: #94a3b8; border-bottom: 1px solid #1e293b; position: sticky; top: 0;">
+                                        <th style="padding: 8px 12px;">نماد و بازار</th>
+                                        <th style="padding: 8px 12px;">قیمت لحظه‌ای</th>
+                                        <th style="padding: 8px 12px;">تغییر ۲۴h</th>
+                                        <th style="padding: 8px 12px;">شاخص RSI</th>
+                                        <th style="padding: 8px 12px;">ضریب حجم (RVOL)</th>
+                                        <th style="padding: 8px 12px;">سیگنال اسکالپ</th>
+                                        <th style="padding: 8px 12px;">شانس سودآوری</th>
+                                        <th style="padding: 8px 12px;">حد سود / ضرر پیشنهادی</th>
+                                        <th style="padding: 8px 12px;">تحلیل و دلیل ورود</th>
+                                        <th style="padding: 8px 12px;">عملیات معامله</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="nx-opportunities-tbody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Tab 3: Trades Table -->
+                        <div id="nx-tab-trades" style="flex: 1; overflow-y: auto; display: none;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.78rem;">
+                                <thead>
+                                    <tr style="background: rgba(15, 23, 42, 0.8); color: #94a3b8; border-bottom: 1px solid #1e293b; position: sticky; top: 0;">
+                                        <th style="padding: 8px 12px;">کد سفارش نوبیتکس</th>
+                                        <th style="padding: 8px 12px;">نماد</th>
+                                        <th style="padding: 8px 12px;">جهت</th>
+                                        <th style="padding: 8px 12px;">نوع</th>
+                                        <th style="padding: 8px 12px;">قیمت معامله</th>
+                                        <th style="padding: 8px 12px;">حجم</th>
+                                        <th style="padding: 8px 12px;">ارزش کل (تومان)</th>
+                                        <th style="padding: 8px 12px;">کارمزد</th>
+                                        <th style="padding: 8px 12px;">استراتژی</th>
+                                        <th style="padding: 8px 12px;">زمان</th>
+                                        <th style="padding: 8px 12px;">وضعیت</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="nx-executed-trades-tbody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Tab 4: Open Orders -->
+                        <div id="nx-tab-orders" style="flex: 1; overflow-y: auto; display: none;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.78rem;">
+                                <thead>
+                                    <tr style="background: rgba(15, 23, 42, 0.8); color: #94a3b8; border-bottom: 1px solid #1e293b;">
+                                        <th style="padding: 8px 12px;">کد سفارش</th>
+                                        <th style="padding: 8px 12px;">نماد</th>
+                                        <th style="padding: 8px 12px;">نوع</th>
+                                        <th style="padding: 8px 12px;">قیمت درخواست</th>
+                                        <th style="padding: 8px 12px;">حجم کل</th>
+                                        <th style="padding: 8px 12px;">درصد پرشده</th>
+                                        <th style="padding: 8px 12px;">زمان ثبت</th>
+                                        <th style="padding: 8px 12px;">عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="nx-open-orders-tbody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Tab 5: Wallets -->
+                        <div id="nx-tab-wallets" style="flex: 1; overflow-y: auto; display: none;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.78rem;">
+                                <thead>
+                                    <tr style="background: rgba(15, 23, 42, 0.8); color: #94a3b8; border-bottom: 1px solid #1e293b;">
+                                        <th style="padding: 8px 12px;">نام ارز</th>
+                                        <th style="padding: 8px 12px;">نماد</th>
+                                        <th style="padding: 8px 12px;">موجودی کل</th>
+                                        <th style="padding: 8px 12px;">مسدود شده</th>
+                                        <th style="padding: 8px 12px;">موجودی قابل معامله</th>
+                                        <th style="padding: 8px 12px;">ارزش تخمینی (تومان)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="nx-wallets-tbody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Tab 6: Logs -->
+                        <div id="nx-tab-logs" style="flex: 1; overflow-y: auto; display: none; padding: 10px; font-family: monospace; font-size: 0.76rem; color: #cbd5e1;" id="nx-agent-logs-list">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Sidebar: Agent Bot Status, Order Book & Order Execution Form -->
+                <div style="display: flex; flex-direction: column; gap: 10px; min-width: 330px; width: 340px;">
+                    <!-- Agent Bot Status Card -->
+                    <div class="agent-decision-card" style="background: rgba(15, 23, 42, 0.9); border: 1px solid #1e293b; border-radius: 8px; padding: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="font-weight: bold; color: #60a5fa; font-size: 0.88rem; display: flex; align-items: center; gap: 6px;">
+                                <span>🤖 وضعیت ربات ایجنت</span>
+                            </div>
+                            <span id="nx-agent-bot-status-badge" style="font-size: 0.72rem; background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+                                فعال و در حال اسکن
+                            </span>
+                        </div>
+                        <div style="font-size: 0.76rem; color: #94a3b8; line-height: 1.5; margin-bottom: 10px;">
+                            ایجنت با استراتژی دوگانه (EMA Cross + RSI Filter) به صورت لحظه‌ای بازار را بررسی و با رعایت حد ضرر و سود معامله می‌زند.
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.76rem;">
+                                <span style="color: #94a3b8;">استراتژی فعال:</span>
+                                <strong style="color: #cbd5e1;" id="nx-agent-active-strategy">EMA Crossover + RSI</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.76rem;">
+                                <span style="color: #94a3b8;">اهرم ایجنت:</span>
+                                <strong style="color: #38bdf8;" id="nx-agent-active-leverage">5x</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.76rem;">
+                                <span style="color: #94a3b8;">ریسک در هر معامله:</span>
+                                <strong style="color: #cbd5e1;">۸٪ از مارجین آزاد</strong>
+                            </div>
+                        </div>
+
+                        <button class="btn" onclick="triggerNobitexAgentNow()" id="nx-btn-trigger-agent" style="width: 100%; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; font-size: 0.8rem; padding: 8px; border-radius: 6px; font-weight: bold; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            ⚡ بررسی فوری سیگنال و معامله توسط ایجنت
+                        </button>
+                    </div>
+
+                    <!-- Order Book Card -->
+                    <div style="background: #070a12; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; height: 230px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="font-weight: 700; color: #f8fafc; font-size: 0.85rem;">دفتر سفارشات (Order Book)</div>
+                            <div style="font-size: 0.72rem; color: #64748b;">حجم</div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 4px 8px; font-size: 0.7rem; color: #64748b; border-bottom: 1px solid #1e293b;">
+                            <span>قیمت (تومان)</span>
+                            <span style="text-align: center;">حجم</span>
+                            <span style="text-align: left;">مجموع</span>
+                        </div>
+
+                        <!-- Asks (Red) -->
+                        <div id="nx-orderbook-asks" style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden;">
+                        </div>
+
+                        <!-- Mid Price Bar -->
+                        <div style="padding: 5px 8px; background: rgba(30, 41, 59, 0.8); text-align: center; font-weight: bold; font-family: monospace; font-size: 0.85rem; color: #38bdf8; border-top: 1px solid #334155; border-bottom: 1px solid #334155; margin: 2px 0; display: flex; justify-content: space-between; align-items: center;">
+                            <span id="nx-orderbook-mid-price" class="pnl-green">۱,۸۰۵,۸۷۵,۸۲۰ تومان</span>
+                            <span id="nx-orderbook-spread" style="font-size: 0.7rem; color: #94a3b8; direction: ltr;">Spread: 0.02%</span>
+                        </div>
+
+                        <!-- Bids (Green) -->
+                        <div id="nx-orderbook-bids" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                        </div>
+                    </div>
+
+                    <!-- Execution Form Card -->
+                    <div style="background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; flex: 1; display: flex; flex-direction: column;">
+                        <!-- Mode Switcher: Manual vs Agent Auto -->
+                        <div style="display: flex; background: #070a12; border-radius: 6px; padding: 2px; margin-bottom: 12px; border: 1px solid #1e293b;">
+                            <button class="order-tab-btn active" onclick="switchNobitexOrderPanelTab('manual')" id="nx-tab-btn-manual" style="flex: 1; padding: 6px; font-size: 0.78rem;">
+                                👤 معامله دستی
+                            </button>
+                            <button class="order-tab-btn" onclick="switchNobitexOrderPanelTab('agent')" id="nx-tab-btn-agent" style="flex: 1; padding: 6px; font-size: 0.78rem;">
+                                🤖 اتوماسیون ایجنت
+                            </button>
+                        </div>
+
+                        <!-- Manual Form -->
+                        <div id="nx-panel-manual" style="display: flex; flex-direction: column; gap: 10px; flex: 1;">
+                            <!-- Side Selector: Buy vs Sell -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                                <button class="btn" onclick="setNobitexOrderSide('buy')" id="nx-side-btn-buy" style="background: #10b981; color: #fff; padding: 8px; font-weight: bold; font-size: 0.85rem; border-radius: 6px; border: none; cursor: pointer;">
+                                    🟢 خرید (BUY)
+                                </button>
+                                <button class="btn" onclick="setNobitexOrderSide('sell')" id="nx-side-btn-sell" style="background: #334155; color: #94a3b8; padding: 8px; font-weight: bold; font-size: 0.85rem; border-radius: 6px; border: none; cursor: pointer;">
+                                    🔴 فروش (SELL)
+                                </button>
+                            </div>
+
+                            <!-- Order Type: Market vs Limit -->
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                                <button class="btn" onclick="setNobitexOrderType('market')" id="nx-type-btn-market" style="background: #1e293b; border: 1px solid #2563eb; color: #60a5fa; padding: 4px 10px; font-size: 0.75rem; border-radius: 4px; flex: 1; cursor: pointer;">
+                                    قیمت بازار (Market)
+                                </button>
+                                <button class="btn" onclick="setNobitexOrderType('limit')" id="nx-type-btn-limit" style="background: #0f172a; border: 1px solid #334155; color: #94a3b8; padding: 4px 10px; font-size: 0.75rem; border-radius: 4px; flex: 1; cursor: pointer;">
+                                    سفارش محدود (Limit)
+                                </button>
+                            </div>
+
+                            <!-- Limit Price Field (hidden for market) -->
+                            <div id="nx-limit-price-group" style="display: none;">
+                                <label style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 3px; display: block;">قیمت پیشنهادی (تومان):</label>
+                                <input type="number" id="nx-order-limit-price" placeholder="مثال: 1805000000" oninput="calculateNobitexOrderValues('price')" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+                            </div>
+
+                            <!-- Available Balance Display -->
+                            <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #94a3b8; background: #070a12; padding: 6px 10px; border-radius: 6px;">
+                                <span>موجودی در دسترس:</span>
+                                <strong id="nx-avail-balance-display" style="color: #38bdf8; font-family: monospace;">۵۰,۰۰۰,۰۰۰ تومان</strong>
+                            </div>
+
+                            <!-- Quick Percent Fill Buttons -->
+                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
+                                <button class="btn" onclick="setNobitexQuickPercent(10)" style="background: #1e293b; border: 1px solid #334155; color: #cbd5e1; font-size: 0.7rem; padding: 3px; border-radius: 4px; cursor: pointer;">۱۰٪</button>
+                                <button class="btn" onclick="setNobitexQuickPercent(25)" style="background: #1e293b; border: 1px solid #334155; color: #cbd5e1; font-size: 0.7rem; padding: 3px; border-radius: 4px; cursor: pointer;">۲۵٪</button>
+                                <button class="btn" onclick="setNobitexQuickPercent(50)" style="background: #1e293b; border: 1px solid #334155; color: #cbd5e1; font-size: 0.7rem; padding: 3px; border-radius: 4px; cursor: pointer;">۵۰٪</button>
+                                <button class="btn" onclick="setNobitexQuickPercent(100)" style="background: #1e293b; border: 1px solid #334155; color: #cbd5e1; font-size: 0.7rem; padding: 3px; border-radius: 4px; cursor: pointer;">۱۰۰٪</button>
+                            </div>
+
+                            <!-- Amount Crypto Input -->
+                            <div>
+                                <label style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 3px; display: block;">حجم رمزارز:</label>
+                                <div style="position: relative;">
+                                    <input type="number" step="any" id="nx-order-amount" placeholder="0.000" oninput="calculateNobitexOrderValues('amount')" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+                                    <span style="position: absolute; left: 10px; top: 7px; font-size: 0.75rem; color: #64748b;" id="nx-order-amount-symbol">BTC</span>
+                                </div>
+                            </div>
+
+                            <!-- Total IRT Input -->
+                            <div>
+                                <label style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 3px; display: block;">مبلغ کل معامله (تومان):</label>
+                                <input type="number" id="nx-order-total-irt" placeholder="مثال: 2000000" oninput="calculateNobitexOrderValues('total')" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+                            </div>
+
+                            <!-- SL & TP Optional -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                                <div>
+                                    <label style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 2px; display: block;">حد ضرر (SL):</label>
+                                    <input type="number" id="nx-order-sl" placeholder="اختیاری" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 5px; padding: 5px 8px; color: #f87171; font-family: monospace; font-size: 0.76rem;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 2px; display: block;">حد سود (TP):</label>
+                                    <input type="number" id="nx-order-tp" placeholder="اختیاری" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 5px; padding: 5px 8px; color: #34d399; font-family: monospace; font-size: 0.76rem;">
+                                </div>
+                            </div>
+
+                            <!-- Fee Info -->
+                            <div style="font-size: 0.7rem; color: #64748b; display: flex; justify-content: space-between;">
+                                <span>کارمزد تخمینی (۰.۳۵٪):</span>
+                                <span id="nx-order-fee-estimate" style="font-family: monospace;">-</span>
+                            </div>
+
+                            <!-- Submit Order Button -->
+                            <button class="btn" id="nx-btn-submit-order" onclick="executeNobitexManualOrder()" style="background: linear-gradient(135deg, #1d4ed8, #2563eb); color: #fff; font-weight: 800; padding: 11px; border-radius: 6px; border: none; font-size: 0.95rem; cursor: pointer; box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4); margin-top: auto;">
+                                🚀 <span id="nx-btn-submit-text">ثبت سفارش خرید در نوبیتکس</span>
+                            </button>
+                        </div>
+
+                        <!-- Agent Form -->
+                        <div id="nx-panel-agent" style="display: none; flex-direction: column; gap: 10px; flex: 1;">
+                            <div style="background: rgba(37, 99, 235, 0.1); border: 1px solid rgba(37, 99, 235, 0.3); border-radius: 6px; padding: 10px; font-size: 0.74rem; color: #93c5fd; line-height: 1.5;">
+                                🤖 <strong>ایجنت کوانت نوبیتکس:</strong> تحلیل بلادرنگ ۶۰ ویژگی بازار، رصد جریان نقدینگی و اجرای خودکار سیگنال‌های پرپتانسیل با مدیریت سرمایه و حد ضرر پویا.
+                            </div>
+
+                            <div style="display: flex; justify-content: space-between; align-items: center; background: #070a12; padding: 8px 10px; border-radius: 6px; border: 1px solid #1e293b;">
+                                <span style="font-size: 0.8rem; font-weight: bold; color: #f8fafc;">فعالسازی ترید خودکار ایجنت در نوبیتکس:</span>
+                                <label class="switch" style="position: relative; display: inline-block; width: 40px; height: 22px;">
+                                    <input type="checkbox" id="nx-auto-trading-switch" onchange="toggleNobitexAutoTrading(this.checked)">
+                                    <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .4s; border-radius: 22px;"></span>
+                                </label>
+                            </div>
+
+                            <!-- Trigger Agent Signal Now Button -->
+                            <button class="btn" id="nx-btn-trigger-agent-now" onclick="triggerNobitexAgentSignalNow()" style="background: linear-gradient(135deg, #059669, #10b981); color: #fff; font-weight: 800; padding: 10px; border-radius: 6px; border: none; font-size: 0.85rem; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                ⚡ بررسی فوری سیگنال و معامله توسط ایجنت در نوبیتکس
+                            </button>
+
+                            <div>
+                                <label style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 3px; display: block;">حداکثر حجم هر معامله (تومان):</label>
+                                <input type="number" id="nx-agent-max-trade" value="2000000" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                                <div>
+                                    <label style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 3px; display: block;">حد سود (Take Profit %):</label>
+                                    <input type="number" step="0.1" id="nx-agent-tp" value="3.2" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 3px; display: block;">حد ضرر (Stop Loss %):</label>
+                                    <input type="number" step="0.1" id="nx-agent-sl" value="1.5" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+                                </div>
+                            </div>
+
+                            <button class="btn" onclick="saveNobitexAgentSettingsUI()" style="background: #1e293b; border: 1px solid #3b82f6; color: #60a5fa; font-weight: bold; padding: 9px; border-radius: 6px; font-size: 0.82rem; cursor: pointer; margin-top: auto;">
+                                ⚙️ ذخیره تنظیمات ایجنت نوبیتکس
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Nobitex API Key Setup -->
+    <div class="modal-overlay" id="nobitex-api-modal" style="padding: 10px; z-index: 10001; display: none;">
+        <div style="background: #0f172a; border: 1px solid #2563eb; border-radius: 12px; max-width: 540px; width: 100%; padding: 22px; box-shadow: 0 0 40px rgba(37, 99, 235, 0.4);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #1e293b; padding-bottom: 10px;">
+                <h3 style="color: #60a5fa; margin: 0; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+                    🔑 تنظیم کلیدهای API نوبیتکس (nobitex.ir)
+                </h3>
+                <button onclick="closeNobitexApiKeyModal()" style="background: transparent; border: none; color: #94a3b8; font-size: 1.4rem; cursor: pointer;">&times;</button>
+            </div>
+
+            <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.6; margin-bottom: 15px;">
+                جهت ارسال مستقیم سفارشات و استعلام کیف‌پول به صرافی نوبیتکس، لطفاً **کلید API** و **Secret Key** ساخته‌شده در پنل کاربری نوبیتکس (<code style="color: #60a5fa;">nobitex.ir/client/api-key</code>) را وارد نمایید.
+            </p>
+
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #94a3b8; font-size: 0.78rem; margin-bottom: 5px; font-weight: 600;">کلید API (Nobitex API Key):</label>
+                <input type="text" id="input-nobitex-api-key" placeholder="مثال: E6p7swc0ux-ECXgNfCGmp3Gllu7qEYZw7MjcTFFpYBU=" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 9px 12px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; color: #94a3b8; font-size: 0.78rem; margin-bottom: 5px; font-weight: 600;">کلید سری (Nobitex Secret Key / API Token):</label>
+                <input type="password" id="input-nobitex-secret-key" placeholder="مثال: RMIgmjeRvFzAF6ueWHcnbH0WnW96Vo5ToLyYZ4SaUXs=" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 9px 12px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+            </div>
+
+            <div style="background: rgba(37, 99, 235, 0.1); border: 1px solid rgba(37, 99, 235, 0.3); border-radius: 6px; padding: 10px 12px; font-size: 0.74rem; color: #93c5fd; margin-bottom: 18px; line-height: 1.5;">
+                🔒 کلیدهای شما به صورت امن ذخیره شده و صرفاً برای استعلام موجودی و ارسال سفارشات در صرافی نوبیتکس استفاده می‌شوند.
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn" onclick="closeNobitexApiKeyModal()" style="background: #1e293b; color: #cbd5e1; padding: 8px 16px; border-radius: 6px; border: 1px solid #475569; font-size: 0.85rem; cursor: pointer;">
+                    انصراف
+                </button>
+                <button class="btn" id="btn-save-nobitex-keys" onclick="saveNobitexApiKeysUI()" style="background: linear-gradient(135deg, #1d4ed8, #2563eb); color: #fff; font-weight: 700; padding: 8px 20px; border-radius: 6px; border: none; font-size: 0.85rem; cursor: pointer;">
+                    ⚡ ذخیره و تست اتصال به نوبیتکس
                 </button>
             </div>
         </div>
@@ -6247,6 +6834,1319 @@
         window.addEventListener('resize', () => {
             if (document.getElementById('bitpin-exchange-terminal-modal')?.classList.contains('active')) {
                 resizeAndRenderBitpinChart();
+            }
+            if (document.getElementById('nobitex-exchange-terminal-modal')?.classList.contains('active')) {
+                resizeAndRenderNobitexChart();
+            }
+        });
+
+        /* ==========================================================================
+           NOBITEX LIVE EXCHANGE CONTROLLER (nobitex.ir Integration)
+           ========================================================================== */
+        let activeNobitexMarket = 'BTC_IRT';
+        let nobitexOrderSide = 'buy';
+        let nobitexOrderType = 'market';
+        let nobitexIndicators = { ema9: true, ema21: true, bb: true, rsi: true, trades: true };
+        let nobitexPollTimer = null;
+        let nobitexCandlesData = [];
+        let nobitexLastBundle = null;
+
+        function openNobitexTerminalModal() {
+            const modal = document.getElementById('nobitex-exchange-terminal-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+                switchNobitexMarket(activeNobitexMarket);
+                switchNobitexBottomTab('positions');
+                fetchNobitexBundle(true);
+                if (!nobitexPollTimer) {
+                    nobitexPollTimer = setInterval(() => fetchNobitexBundle(false), 3500);
+                }
+                setTimeout(resizeAndRenderNobitexChart, 50);
+                setTimeout(resizeAndRenderNobitexChart, 150);
+                setTimeout(resizeAndRenderNobitexChart, 350);
+            }
+        }
+
+        function closeNobitexTerminalModal() {
+            const modal = document.getElementById('nobitex-exchange-terminal-modal');
+            if (modal) {
+                modal.style.display = 'none';
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+                if (nobitexPollTimer) {
+                    clearInterval(nobitexPollTimer);
+                    nobitexPollTimer = null;
+                }
+            }
+        }
+
+        function openNobitexApiKeyModal() {
+            const modal = document.getElementById('nobitex-api-modal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeNobitexApiKeyModal() {
+            const modal = document.getElementById('nobitex-api-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function saveNobitexApiKeysUI() {
+            const apiKey = (document.getElementById('input-nobitex-api-key')?.value || '').trim();
+            const secretKey = (document.getElementById('input-nobitex-secret-key')?.value || '').trim();
+
+            if (!apiKey && !secretKey) {
+                showToast('لطفاً کلید API و Secret Key نوبیتکس را وارد فرمایید.', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btn-save-nobitex-keys');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ در حال تست اتصال...';
+            }
+
+            try {
+                const res = await fetch('/api/v1/nobitex/auth/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        api_key: apiKey,
+                        secret_key: secretKey,
+                        api_token: secretKey || apiKey
+                    })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showToast('🎉 کلیدهای API نوبیتکس با موفقیت تایید و ذخیره شد!', 'success');
+                    closeNobitexApiKeyModal();
+                    fetchNobitexBundle(true);
+                } else {
+                    showToast(`⚠️ خطا: ${data.message || 'کلیدها نامعتبر است'}`, 'error');
+                }
+            } catch (err) {
+                showToast(`❌ خطا در ارتباط: ${err.message}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '⚡ ذخیره و تست اتصال به نوبیتکس';
+                }
+            }
+        }
+
+        function switchNobitexMarket(marketCode) {
+            activeNobitexMarket = marketCode;
+            document.querySelectorAll('#nobitex-pair-buttons .ticker-bar-item').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById(`nx-btn-${marketCode}`);
+            if (activeBtn) activeBtn.classList.add('active');
+
+            const titleEl = document.getElementById('nx-chart-symbol-title');
+            const symbolEl = document.getElementById('nx-order-amount-symbol');
+            const titleMap = {
+                'BTC_IRT': 'BTC/تومان', 'BTC_USDT': 'BTC/USDT',
+                'USDT_IRT': 'USDT/تومان', 'ETH_IRT': 'ETH/تومان',
+                'SOL_IRT': 'SOL/تومان', 'TON_IRT': 'TON/تومان', 'DOGE_IRT': 'DOGE/تومان'
+            };
+            if (titleEl) titleEl.textContent = titleMap[marketCode] || marketCode;
+            if (symbolEl) symbolEl.textContent = marketCode.split('_')[0];
+
+            fetchNobitexBundle(true);
+        }
+
+        function switchNobitexOrderPanelTab(tab) {
+            document.querySelectorAll('.order-tab-btn').forEach(b => b.classList.remove('active'));
+            const manualBtn = document.getElementById('nx-tab-btn-manual');
+            const agentBtn = document.getElementById('nx-tab-btn-agent');
+            const manualPanel = document.getElementById('nx-panel-manual');
+            const agentPanel = document.getElementById('nx-panel-agent');
+
+            if (tab === 'manual') {
+                if (manualBtn) manualBtn.classList.add('active');
+                if (manualPanel) manualPanel.style.display = 'flex';
+                if (agentPanel) agentPanel.style.display = 'none';
+            } else {
+                if (agentBtn) agentBtn.classList.add('active');
+                if (agentPanel) agentPanel.style.display = 'flex';
+                if (manualPanel) manualPanel.style.display = 'none';
+            }
+        }
+
+        function setNobitexOrderSide(side) {
+            nobitexOrderSide = side;
+            const buyBtn = document.getElementById('nx-side-btn-buy');
+            const sellBtn = document.getElementById('nx-side-btn-sell');
+            const submitBtn = document.getElementById('nx-btn-submit-order');
+            const submitText = document.getElementById('nx-btn-submit-text');
+
+            if (side === 'buy') {
+                if (buyBtn) { buyBtn.style.background = '#10b981'; buyBtn.style.color = '#fff'; }
+                if (sellBtn) { sellBtn.style.background = '#334155'; sellBtn.style.color = '#94a3b8'; }
+                if (submitBtn) submitBtn.style.background = 'linear-gradient(135deg, #1d4ed8, #2563eb)';
+                if (submitText) submitText.textContent = 'ثبت سفارش خرید در نوبیتکس';
+            } else {
+                if (sellBtn) { sellBtn.style.background = '#ef4444'; sellBtn.style.color = '#fff'; }
+                if (buyBtn) { buyBtn.style.background = '#334155'; buyBtn.style.color = '#94a3b8'; }
+                if (submitBtn) submitBtn.style.background = 'linear-gradient(135deg, #dc2626, #ef4444)';
+                if (submitText) submitText.textContent = 'ثبت سفارش فروش در نوبیتکس';
+            }
+            calculateNobitexOrderValues();
+        }
+
+        function setNobitexOrderType(type) {
+            nobitexOrderType = type;
+            const marketBtn = document.getElementById('nx-type-btn-market');
+            const limitBtn = document.getElementById('nx-type-btn-limit');
+            const limitGroup = document.getElementById('nx-limit-price-group');
+
+            if (type === 'market') {
+                if (marketBtn) { marketBtn.style.background = '#1e293b'; marketBtn.style.borderColor = '#2563eb'; marketBtn.style.color = '#60a5fa'; }
+                if (limitBtn) { limitBtn.style.background = '#0f172a'; limitBtn.style.borderColor = '#334155'; limitBtn.style.color = '#94a3b8'; }
+                if (limitGroup) limitGroup.style.display = 'none';
+            } else {
+                if (limitBtn) { limitBtn.style.background = '#1e293b'; limitBtn.style.borderColor = '#2563eb'; limitBtn.style.color = '#60a5fa'; }
+                if (marketBtn) { marketBtn.style.background = '#0f172a'; marketBtn.style.borderColor = '#334155'; marketBtn.style.color = '#94a3b8'; }
+                if (limitGroup) limitGroup.style.display = 'block';
+            }
+            calculateNobitexOrderValues();
+        }
+
+        function switchNobitexBottomTab(tab) {
+            document.querySelectorAll('#nx-tab-positions, #nx-tab-opportunities, #nx-tab-trades, #nx-tab-orders, #nx-tab-wallets, #nx-tab-logs').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('#nx-bottom-tab-btn-positions, #nx-bottom-tab-btn-opportunities, #nx-bottom-tab-btn-trades, #nx-bottom-tab-btn-orders, #nx-bottom-tab-btn-wallets, #nx-bottom-tab-btn-logs').forEach(el => el.classList.remove('active'));
+
+            const targetTab = document.getElementById(`nx-tab-${tab}`);
+            const targetBtn = document.getElementById(`nx-bottom-tab-btn-${tab}`);
+
+            if (targetTab) targetTab.style.display = 'block';
+            if (targetBtn) targetBtn.classList.add('active');
+        }
+
+        function toggleNobitexIndicator(ind) {
+            nobitexIndicators[ind] = !nobitexIndicators[ind];
+            const btn = document.getElementById(`nx-toggle-${ind}`);
+            if (btn) {
+                if (nobitexIndicators[ind]) btn.classList.add('active');
+                else btn.classList.remove('active');
+            }
+            const rsiContainer = document.getElementById('nx-rsi-container');
+            if (rsiContainer) {
+                rsiContainer.style.display = nobitexIndicators.rsi ? 'block' : 'none';
+            }
+            resizeAndRenderNobitexChart();
+        }
+
+        function setNobitexQuickPercent(pct) {
+            const availBalance = nobitexOrderSide === 'buy' 
+                ? (nobitexLastBundle?.portfolio?.free_irt || 50000000)
+                : 0.05;
+
+            if (nobitexOrderSide === 'buy') {
+                const totalIrt = Math.round((availBalance * pct) / 100);
+                const totalInput = document.getElementById('nx-order-total-irt');
+                if (totalInput) totalInput.value = totalIrt;
+                calculateNobitexOrderValues('total');
+            } else {
+                const amount = +((availBalance * pct) / 100).toFixed(6);
+                const amountInput = document.getElementById('nx-order-amount');
+                if (amountInput) amountInput.value = amount;
+                calculateNobitexOrderValues('amount');
+            }
+        }
+
+        function calculateNobitexOrderValues(changedField = 'amount') {
+            const curPrice = nobitexLastBundle?.ticker?.price || 18058758200;
+            const price = nobitexOrderType === 'limit' 
+                ? (Number(document.getElementById('nx-order-limit-price')?.value) || curPrice)
+                : curPrice;
+
+            const amountInput = document.getElementById('nx-order-amount');
+            const totalInput = document.getElementById('nx-order-total-irt');
+            const feeEl = document.getElementById('nx-order-fee-estimate');
+
+            let amount = Number(amountInput?.value) || 0;
+            let totalIrt = Number(totalInput?.value) || 0;
+
+            if (changedField === 'amount' && amount > 0) {
+                totalIrt = Math.round(amount * price);
+                if (totalInput) totalInput.value = totalIrt;
+            } else if (changedField === 'total' && totalIrt > 0) {
+                amount = +(totalIrt / price).toFixed(6);
+                if (amountInput) amountInput.value = amount;
+            }
+
+            const fee = Math.round(totalIrt * 0.0035);
+            if (feeEl) {
+                feeEl.textContent = `${fee.toLocaleString('fa-IR')} تومان`;
+            }
+        }
+
+        async function executeNobitexManualOrder() {
+            const amount = Number(document.getElementById('nx-order-amount')?.value) || 0;
+            const totalIrt = Number(document.getElementById('nx-order-total-irt')?.value) || 0;
+            const limitPrice = Number(document.getElementById('nx-order-limit-price')?.value) || null;
+            const sl = Number(document.getElementById('nx-order-sl')?.value) || null;
+            const tp = Number(document.getElementById('nx-order-tp')?.value) || null;
+
+            if (amount <= 0 && totalIrt <= 0) {
+                showToast('لطفاً حجم یا ارزش سفارش را وارد نمایید.', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('nx-btn-submit-order');
+            const originalText = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ در حال ارسال سفارش به نوبیتکس...';
+            }
+
+            try {
+                const payload = {
+                    market: activeNobitexMarket,
+                    type: nobitexOrderSide,
+                    card: nobitexOrderType,
+                    amount,
+                    total_irt: totalIrt,
+                    price: nobitexOrderType === 'limit' ? limitPrice : null,
+                    stop_loss: sl,
+                    take_profit: tp,
+                    strategy: 'MANUAL_NOBITEX_DASHBOARD'
+                };
+
+                const res = await fetch('/api/v1/nobitex/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    const orderId = data.order?.nobitex_order_id || '849120';
+                    showToast(`🎉 سفارش #${orderId} با موفقیت در صرافی نوبیتکس ثبت گردید!`, 'success');
+                    const amountInput = document.getElementById('nx-order-amount');
+                    const totalInput = document.getElementById('nx-order-total-irt');
+                    if (amountInput) amountInput.value = '';
+                    if (totalInput) totalInput.value = '';
+                    fetchNobitexBundle(true);
+                } else {
+                    showToast(`⚠️ خطا: ${data.error || 'ثبت سفارش ناموفق بود'}`, 'error');
+                }
+            } catch (err) {
+                showToast(`❌ خطا در ارتباط با سرور: ${err.message}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            }
+        }
+
+        async function cancelSingleNobitexOrder(orderId) {
+            try {
+                const res = await fetch(`/api/v1/nobitex/order/${orderId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`سفارش #${orderId} با موفقیت لغو شد.`, 'info');
+                    fetchNobitexBundle(true);
+                } else {
+                    showToast(`خطا در لغو: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                showToast(`خطا: ${e.message}`, 'error');
+            }
+        }
+
+        async function toggleNobitexAutoTrading(enabled) {
+            try {
+                const res = await fetch('/api/v1/nobitex/agent/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(enabled ? '🤖 ترید خودکار ایجنت در نوبیتکس فعال شد!' : 'ربات هوشمند نوبیتکس متوقف شد.', 'success');
+                    fetchNobitexBundle(true);
+                }
+            } catch (e) {
+                showToast(`خطا: ${e.message}`, 'error');
+            }
+        }
+
+        async function saveNobitexAgentSettingsUI() {
+            const maxTrade = Number(document.getElementById('nx-agent-max-trade')?.value) || 2000000;
+            const tp = Number(document.getElementById('nx-agent-tp')?.value) || 3.2;
+            const sl = Number(document.getElementById('nx-agent-sl')?.value) || 1.5;
+
+            try {
+                const res = await fetch('/api/v1/nobitex/agent/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        max_trade_irt: maxTrade,
+                        take_profit_pct: tp,
+                        stop_loss_pct: sl
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('✅ تنظیمات ایجنت نوبیتکس ذخیره شد.', 'success');
+                }
+            } catch (e) {
+                showToast(`خطا: ${e.message}`, 'error');
+            }
+        }
+
+        async function triggerNobitexAgentSignalNow() {
+            const btn = document.getElementById('nx-btn-trigger-agent-now');
+            const originalText = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ در حال ارزیابی ۶۰ فاکتور بازار و ارسال معامله...';
+            }
+
+            try {
+                const res = await fetch('/api/v1/nobitex/agent/trigger', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ market: activeNobitexMarket })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`🤖 ${data.message}`, data.action === 'WAIT' ? 'info' : 'success');
+                    fetchNobitexBundle(true);
+                } else {
+                    showToast(`خطا در ارزیابی: ${data.error}`, 'error');
+                }
+            } catch (err) {
+                showToast(`خطا: ${err.message}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            }
+        }
+
+        async function syncNobitexWithServer() {
+            showToast('🔄 در حال همگام‌سازی اطلاعات با نوبیتکس...', 'info');
+            await fetchNobitexBundle(true);
+            showToast('✅ اطلاعات زنده با صرافی نوبیتکس همگام شد.', 'success');
+        }
+
+        async function closeNobitexPosition(id) {
+            try {
+                const res = await fetch('/api/v1/nobitex/position/close', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ پوزیشن نوبیتکس با موفقیت بسته شد. سود محقق‌شده: ${Math.round(data.realized_pnl || 0).toLocaleString('fa-IR')} تومان`, 'success');
+                    fetchNobitexBundle(true);
+                } else {
+                    showToast(`خطا در بستن پوزیشن: ${data.error}`, 'error');
+                }
+            } catch (err) {
+                showToast(`خطای ارتباط: ${err.message}`, 'error');
+            }
+        }
+
+        async function closeAllNobitexPositions() {
+            if (!confirm('آیا از بستن تمام پوزیشن‌های باز در نوبیتکس به قیمت لحظه‌ای بازار مطمئنید؟')) return;
+            try {
+                const res = await fetch('/api/v1/nobitex/position/close-all', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`🛑 تمام ${data.closed_count} پوزیشن نوبیتکس بسته شد.`, 'info');
+                    fetchNobitexBundle(true);
+                } else {
+                    showToast(`خطا: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                showToast(`خطا: ${e.message}`, 'error');
+            }
+        }
+
+        async function scanNobitexOpportunitiesNow() {
+            try {
+                const res = await fetch('/api/v1/nobitex/opportunities/scan', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`⚡ ${data.count} بازار نوبیتکس رصد شد. ${data.actionable_count} فرصت سود با ریسک مناسب شناسایی شد.`, 'success');
+                    fetchNobitexBundle(true);
+                }
+            } catch (err) {
+                showToast(`خطا در اسکن: ${err.message}`, 'error');
+            }
+        }
+
+        async function executeNobitexOpportunisticScalps() {
+            try {
+                const res = await fetch('/api/v1/nobitex/opportunities/scalp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ min_score: 70 })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    if (data.executed_count > 0) {
+                        showToast(`🚀 ${data.executed_count} فرصت اسکالپ نوبیتکس بلافاصله معامله شد!`, 'success');
+                    } else {
+                        showToast('در حال حاضر فرصتی با امتیاز بالای ۷۰٪ یافت نشد.', 'info');
+                    }
+                    fetchNobitexBundle(true);
+                }
+            } catch (err) {
+                showToast(`خطا در اجرای اسکالپ: ${err.message}`, 'error');
+            }
+        }
+
+        async function quickNobitexScalpTrade(marketOrSymbol, side) {
+            let market = marketOrSymbol;
+            if (!market.includes('_')) {
+                market = `${market}_IRT`;
+            }
+            const orderSide = (side && side.toUpperCase().includes('SELL')) ? 'sell' : 'buy';
+            try {
+                const res = await fetch('/api/v1/nobitex/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        market,
+                        type: orderSide,
+                        card: 'market',
+                        total_irt: 2000000,
+                        strategy: 'SCALP_SCANNER_OPPORTUNITY'
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`⚡ سفارش اسکالپ سریع روی ${market} ثبت شد!`, 'success');
+                    fetchNobitexBundle(true);
+                } else {
+                    showToast(`خطا: ${data.error}`, 'error');
+                }
+            } catch (err) {
+                showToast(`خطا: ${err.message}`, 'error');
+            }
+        }
+
+        async function fetchNobitexBundle(force = false) {
+            try {
+                const res = await fetch(`/api/v1/nobitex/bundle?market=${activeNobitexMarket}`);
+                if (!res.ok) return;
+                const bundle = await res.json();
+                if (!bundle.success) return;
+
+                nobitexLastBundle = bundle;
+                nobitexCandlesData = bundle.candles || [];
+
+                // Update Top Bar Prices
+                if (bundle.markets_list) {
+                    for (const m of bundle.markets_list) {
+                        const el = document.getElementById(`nx-top-price-${m.code}`);
+                        if (el && m.price) {
+                            if (m.code.endsWith('_IRT')) {
+                                el.textContent = `${Math.round(m.price).toLocaleString('fa-IR')} ت`;
+                            } else {
+                                el.textContent = `$${Number(m.price).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+                            }
+                        }
+                    }
+                }
+
+                // Update Header Ticker
+                const curPriceEl = document.getElementById('nx-chart-current-price');
+                const changeEl = document.getElementById('nx-chart-price-change');
+                if (curPriceEl && bundle.ticker) {
+                    if (activeNobitexMarket.endsWith('_IRT')) {
+                        curPriceEl.textContent = `${Math.round(bundle.ticker.price).toLocaleString('fa-IR')} تومان`;
+                    } else {
+                        curPriceEl.textContent = `$${Number(bundle.ticker.price).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+                    }
+                }
+                if (changeEl && bundle.ticker) {
+                    const ch = bundle.ticker.change24h || 0;
+                    changeEl.textContent = `${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%`;
+                    changeEl.className = ch >= 0 ? 'pnl-green' : 'pnl-red';
+                }
+
+                // Connection badge
+                const connBadge = document.getElementById('nx-conn-text');
+                const pulseDot = document.getElementById('nx-pulse-dot');
+                if (connBadge && pulseDot) {
+                    if (bundle.connection?.authenticated) {
+                        connBadge.textContent = '🟢 متصل به حساب کاربری نوبیتکس (Nobitex Live Trading)';
+                        pulseDot.style.background = '#3b82f6';
+                    } else {
+                        connBadge.textContent = '🟢 اتصال زنده به موتور قیمت نوبیتکس (آماده ترید)';
+                        pulseDot.style.background = '#2563eb';
+                    }
+                }
+
+                // Latency
+                const latEl = document.getElementById('nx-latency-val');
+                if (latEl && bundle.connection?.latency_ms) {
+                    latEl.textContent = `${bundle.connection.latency_ms}ms`;
+                }
+
+                // Wallets stats
+                const equityEl = document.getElementById('nx-wallet-equity');
+                const pnlEl = document.getElementById('nx-wallet-unrealized-pnl');
+                const freeIrtEl = document.getElementById('nx-wallet-free-irt');
+                const freeUsdtEl = document.getElementById('nx-wallet-free-usdt');
+                const availDisplay = document.getElementById('nx-avail-balance-display');
+
+                if (equityEl && bundle.portfolio) {
+                    equityEl.textContent = `${Math.round(bundle.portfolio.total_irt).toLocaleString('fa-IR')} تومان`;
+                }
+                if (pnlEl) {
+                    const unPnl = bundle.portfolio?.unrealized_pnl || 0;
+                    const pnlSign = unPnl >= 0 ? '+' : '';
+                    pnlEl.textContent = `${pnlSign}${Math.round(unPnl).toLocaleString('fa-IR')} تومان`;
+                    pnlEl.className = unPnl >= 0 ? 'wallet-stat-value pnl-green' : 'wallet-stat-value pnl-red';
+                }
+                if (freeIrtEl && bundle.portfolio) {
+                    freeIrtEl.textContent = `${Math.round(bundle.portfolio.free_irt).toLocaleString('fa-IR')} تومان`;
+                }
+                if (availDisplay && bundle.portfolio) {
+                    availDisplay.textContent = nobitexOrderSide === 'buy'
+                        ? `${Math.round(bundle.portfolio.free_irt).toLocaleString('fa-IR')} تومان`
+                        : `${Number(bundle.portfolio.free_usdt).toLocaleString()} تتر`;
+                }
+                if (freeUsdtEl && bundle.portfolio) {
+                    freeUsdtEl.textContent = `$${Number(bundle.portfolio.free_usdt).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+                }
+
+                // Auto Trading Switch State
+                const autoSwitch = document.getElementById('nx-auto-trading-switch');
+                if (autoSwitch && bundle.agent) {
+                    autoSwitch.checked = !!bundle.agent.auto_trading;
+                }
+
+                // HUD indicators
+                const hudDecision = document.getElementById('nx-hud-agent-decision');
+                const hudScore = document.getElementById('nx-hud-quant-score');
+                const hudRsi = document.getElementById('nx-hud-rsi-val');
+                const hudTrend = document.getElementById('nx-hud-trend-val');
+                const hudEma9 = document.getElementById('nx-hud-val-ema9');
+                const hudEma21 = document.getElementById('nx-hud-val-ema21');
+
+                if (hudDecision && bundle.hud) hudDecision.textContent = bundle.hud.agent_decision;
+                if (hudScore && bundle.hud) hudScore.textContent = `${bundle.hud.quant_score}/100`;
+                if (hudRsi && bundle.hud) hudRsi.textContent = bundle.hud.rsi;
+                if (hudTrend && bundle.hud) hudTrend.textContent = bundle.hud.trend;
+                if (hudEma9 && bundle.hud) hudEma9.textContent = bundle.hud.ema9 ? Math.round(bundle.hud.ema9).toLocaleString('fa-IR') : '-';
+                if (hudEma21 && bundle.hud) hudEma21.textContent = bundle.hud.ema21 ? Math.round(bundle.hud.ema21).toLocaleString('fa-IR') : '-';
+
+                // Render Tables & OrderBook
+                renderNobitexOrderBook(bundle.orderbook);
+                renderNobitexPositions(bundle.open_positions || []);
+                renderNobitexOpportunities(bundle.opportunities || []);
+                renderNobitexExecutedTrades(bundle.executed_trades || []);
+                renderNobitexOpenOrders(bundle.open_orders || []);
+                renderNobitexWallets(bundle.portfolio?.wallets || []);
+                renderNobitexAgentLogs(bundle.agent_logs || []);
+
+                // Draw Charts
+                resizeAndRenderNobitexChart();
+            } catch (err) {
+                console.warn('[Nobitex Bundle] Warning:', err);
+            }
+        }
+
+        function renderNobitexOrderBook(ob) {
+            const asksBox = document.getElementById('nx-orderbook-asks');
+            const bidsBox = document.getElementById('nx-orderbook-bids');
+            const midPriceBox = document.getElementById('nx-orderbook-mid-price');
+
+            if (!ob || !asksBox || !bidsBox) return;
+
+            if (midPriceBox && nobitexLastBundle?.ticker?.price) {
+                const p = nobitexLastBundle.ticker.price;
+                midPriceBox.textContent = activeNobitexMarket.endsWith('_IRT')
+                    ? `${Math.round(p).toLocaleString('fa-IR')} تومان`
+                    : `$${Number(p).toFixed(2)}`;
+            }
+
+            // Asks (Red)
+            asksBox.innerHTML = (ob.asks || []).slice(0, 5).map(item => `
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 3px 8px; font-size: 0.72rem; color: #f87171; font-family: monospace;">
+                    <span>${Math.round(item.price).toLocaleString()}</span>
+                    <span style="text-align: center; color: #cbd5e1;">${item.amount}</span>
+                    <span style="text-align: left; color: #64748b;">${Math.round(item.total / 1000)}k</span>
+                </div>
+            `).join('');
+
+            // Bids (Green)
+            bidsBox.innerHTML = (ob.bids || []).slice(0, 5).map(item => `
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 3px 8px; font-size: 0.72rem; color: #34d399; font-family: monospace;">
+                    <span>${Math.round(item.price).toLocaleString()}</span>
+                    <span style="text-align: center; color: #cbd5e1;">${item.amount}</span>
+                    <span style="text-align: left; color: #64748b;">${Math.round(item.total / 1000)}k</span>
+                </div>
+            `).join('');
+        }
+
+        function renderNobitexPositions(positions) {
+            const tbody = document.getElementById('nx-positions-tbody');
+            const badge = document.getElementById('nx-positions-count-badge');
+            if (!tbody) return;
+
+            if (badge) badge.textContent = positions.length;
+
+            if (positions.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="11" style="text-align: center; color: #64748b; padding: 22px;">
+                            در حال حاضر پوزیشن بازی در نوبیتکس وجود ندارد. ایجنت در حال پایش بازار برای ورود بهینه است.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = positions.map(p => {
+                const isBuy = p.side === 'buy' || p.side === 'LONG';
+                const pnl = p.unrealized_pnl || 0;
+                const pnlPct = p.unrealized_pnl_pct || 0;
+                const pnlColor = pnl >= 0 ? '#34d399' : '#f87171';
+                const pnlSign = pnl >= 0 ? '+' : '';
+                const isUsdt = p.is_usdt || (p.market && p.market.includes('USDT')) || (p.symbol && p.symbol.includes('USDT'));
+
+                const entryStr = isUsdt ? `$${Number(p.entry_price).toFixed(2)}` : `${Math.round(p.entry_price).toLocaleString()} ت`;
+                const currStr = isUsdt ? `$${Number(p.current_price || p.entry_price).toFixed(2)}` : `${Math.round(p.current_price || p.entry_price).toLocaleString()} ت`;
+                const liqStr = p.liquidation_price ? (isUsdt ? `$${Number(p.liquidation_price).toFixed(2)}` : `${Math.round(p.liquidation_price).toLocaleString()} ت`) : '-';
+                const marginStr = p.margin ? (isUsdt ? `$${Number(p.margin).toFixed(2)}` : `${Math.round(p.margin).toLocaleString()} ت`) : (isUsdt ? `$${Number((p.amount * p.entry_price) / (p.leverage || 10)).toFixed(2)}` : `${Math.round((p.amount * p.entry_price) / (p.leverage || 10)).toLocaleString()} ت`);
+                const slStr = p.stop_loss ? (isUsdt ? `$${Number(p.stop_loss).toFixed(2)}` : Math.round(p.stop_loss).toLocaleString()) : '-';
+                const tpStr = p.take_profit ? (isUsdt ? `$${Number(p.take_profit).toFixed(2)}` : Math.round(p.take_profit).toLocaleString()) : '-';
+                const pnlStr = isUsdt ? `${pnlSign}$${pnl.toFixed(2)}` : `${pnlSign}${Math.round(pnl).toLocaleString()} ت`;
+
+                return `
+                    <tr style="border-bottom: 1px solid #1e293b; background: rgba(15, 23, 42, 0.4);">
+                        <td style="padding: 8px 12px; font-weight: bold;">
+                            <span style="color: #60a5fa; cursor: pointer;" onclick="switchNobitexMarket('${p.market || p.symbol}')">${p.symbol}</span>
+                        </td>
+                        <td style="padding: 8px 12px;">
+                            <span style="background: ${isBuy ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}; color: ${isBuy ? '#34d399' : '#f87171'}; padding: 2px 7px; border-radius: 4px; font-weight: bold;">
+                                ${isBuy ? 'LONG' : 'SHORT'}
+                            </span>
+                        </td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #38bdf8;">${p.amount}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; font-weight: 800; color: #38bdf8;">${p.leverage ? p.leverage + 'x' : '10x'}</td>
+                        <td style="padding: 8px 12px; font-family: monospace;">${entryStr}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; font-weight: bold; color: #f8fafc;">${currStr}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #f87171;">${liqStr}</td>
+                        <td style="padding: 8px 12px; font-size: 0.72rem; color: #94a3b8; font-family: monospace;">
+                            SL: <span style="color: #f87171;">${slStr}</span> | TP: <span style="color: #34d399;">${tpStr}</span>
+                        </td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #c084fc;">${marginStr}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; font-weight: bold; color: ${pnlColor};">
+                            ${pnlStr} (${pnlSign}${pnlPct.toFixed(2)}%)
+                        </td>
+                        <td style="padding: 8px 12px;">
+                            <button onclick="closeNobitexPosition('${p.id}')" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #f87171; padding: 4px 10px; border-radius: 5px; font-size: 0.72rem; font-weight: bold; cursor: pointer;">
+                                ✕ بستن
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderNobitexOpportunities(opportunities) {
+            const tbody = document.getElementById('nx-opportunities-tbody');
+            const badge = document.getElementById('nx-badge-opportunities-count');
+            if (!tbody) return;
+
+            const actionableCount = opportunities.filter(o => o.signal === 'BUY' || o.signal === 'SELL').length;
+            if (badge) badge.textContent = actionableCount > 0 ? `${actionableCount} فرصت` : `${opportunities.length} جفت`;
+
+            if (opportunities.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="10" style="text-align: center; color: #64748b; padding: 22px;">
+                            در حال حاضر فرصت با ریسک مناسب یافت نشد. موتور پایش هر ۵ ثانیه تمام بازارهای نوبیتکس را اسکن می‌کند.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = opportunities.map(opp => {
+                const isBuy = opp.signal === 'BUY';
+                const isSell = opp.signal === 'SELL';
+                const signalColor = isBuy ? '#10b981' : (isSell ? '#ef4444' : '#64748b');
+                const signalBg = isBuy ? 'rgba(16, 185, 129, 0.15)' : (isSell ? 'rgba(239, 68, 68, 0.15)' : 'rgba(100, 116, 139, 0.1)');
+                const signalText = isBuy ? '🟢 خرید صعودی (LONG)' : (isSell ? '🔴 اصلاح نزولی (SHORT)' : '⚪ نظاره‌گر');
+
+                const changeVal = Number(opp.change24h !== undefined ? opp.change24h : 0);
+                const changeColor = changeVal >= 0 ? '#34d399' : '#f87171';
+                const changeSign = changeVal >= 0 ? '+' : '';
+
+                const score = Math.round(opp.profit_potential || 50);
+                let scoreBarColor = '#3b82f6';
+                if (score >= 75) scoreBarColor = '#10b981';
+                else if (score >= 60) scoreBarColor = '#06b6d4';
+                else if (score < 40) scoreBarColor = '#f59e0b';
+
+                let rsiColor = '#94a3b8';
+                if (opp.rsi <= 35) rsiColor = '#34d399';
+                else if (opp.rsi >= 65) rsiColor = '#f87171';
+
+                const rvolVal = Number(opp.rvol || 1).toFixed(2);
+                const rvolColor = opp.rvol >= 1.3 ? '#38bdf8' : '#94a3b8';
+
+                let catBadge = '';
+                if (opp.category === 'meme' || opp.category === 'Meme') catBadge = '<span style="background: rgba(236, 72, 153, 0.2); color: #f472b6; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; margin-right: 4px;">Meme</span>';
+                else if (opp.category === 'ai' || opp.category === 'AI') catBadge = '<span style="background: rgba(168, 85, 247, 0.2); color: #c084fc; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; margin-right: 4px;">AI</span>';
+                else if (opp.category === 'toman' || opp.category === 'Toman') catBadge = '<span style="background: rgba(234, 179, 8, 0.2); color: #facc15; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; margin-right: 4px;">تومان</span>';
+                else catBadge = '<span style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; margin-right: 4px;">Major</span>';
+
+                const sideAction = isSell ? 'SELL' : 'BUY';
+                const actionBtn = (isBuy || isSell)
+                    ? `<button onclick="quickNobitexScalpTrade('${opp.symbol}', '${sideAction}')" style="background: ${signalColor}; color: #fff; border: none; padding: 4px 10px; border-radius: 5px; font-size: 0.72rem; font-weight: bold; cursor: pointer; white-space: nowrap;">
+                        ⚡ معامله ${sideAction === 'BUY' ? 'خرید' : 'فروش'}
+                       </button>`
+                    : `<span style="font-size: 0.72rem; color: #64748b;">در انتظار تأیید</span>`;
+
+                return `
+                    <tr style="border-bottom: 1px solid #1e293b; ${isBuy || isSell ? 'background: rgba(15, 23, 42, 0.4);' : ''}">
+                        <td style="padding: 8px 12px;">
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                ${catBadge}
+                                <strong style="color: #f8fafc; font-family: monospace; cursor: pointer;" onclick="switchNobitexMarket('${opp.symbol}')" title="مشاهده چارت ${opp.symbol}">
+                                    ${opp.symbol}
+                                </strong>
+                            </div>
+                        </td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #f1f5f9;">
+                            ${Math.round(opp.price).toLocaleString()} ت
+                        </td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: ${changeColor}; direction: ltr;">
+                            ${changeSign}${changeVal.toFixed(2)}%
+                        </td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: ${rsiColor}; font-weight: 600;">
+                            ${Number(opp.rsi || 50).toFixed(1)}
+                        </td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: ${rvolColor};">
+                            ${rvolVal}x
+                        </td>
+                        <td style="padding: 8px 12px;">
+                            <span style="background: ${signalBg}; color: ${signalColor}; padding: 2px 8px; border-radius: 4px; font-size: 0.74rem; font-weight: 600; white-space: nowrap;">
+                                ${signalText}
+                            </span>
+                        </td>
+                        <td style="padding: 8px 12px; min-width: 100px;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <div style="flex: 1; height: 5px; background: #334155; border-radius: 3px; overflow: hidden;">
+                                    <div style="width: ${score}%; height: 100%; background: ${scoreBarColor};"></div>
+                                </div>
+                                <span style="font-family: monospace; font-size: 0.7rem; color: #cbd5e1;">${score}%</span>
+                            </div>
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 0.7rem; color: #94a3b8; font-family: monospace;">
+                            TP: <span style="color: #34d399;">${Math.round(opp.target_tp || opp.price * 1.025).toLocaleString()}</span> | SL: <span style="color: #f87171;">${Math.round(opp.target_sl || opp.price * 0.985).toLocaleString()}</span>
+                        </td>
+                        <td style="padding: 8px 12px; font-size: 0.72rem; color: #94a3b8; max-width: 180px;">
+                            ${opp.rationale || 'بررسی شرایط ورود'}
+                        </td>
+                        <td style="padding: 8px 12px;">
+                            ${actionBtn}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderNobitexExecutedTrades(trades) {
+            const tbody = document.getElementById('nx-executed-trades-tbody');
+            const badge = document.getElementById('nx-trades-count-badge');
+            if (!tbody) return;
+
+            if (badge) badge.textContent = trades.length;
+
+            if (trades.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: #64748b; padding: 20px;">هیچ معامله‌ای هنوز انجام نشده است.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = trades.map(t => {
+                const isBuy = t.side === 'buy';
+                return `
+                    <tr style="border-bottom: 1px solid #1e293b;">
+                        <td style="padding: 8px 12px; font-family: monospace; color: #60a5fa;">#${t.nobitex_order_id || t.id.slice(0, 8)}</td>
+                        <td style="padding: 8px 12px; font-weight: bold;">${t.symbol}</td>
+                        <td style="padding: 8px 12px;">
+                            <span style="background: ${isBuy ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}; color: ${isBuy ? '#34d399' : '#f87171'}; padding: 2px 7px; border-radius: 4px; font-weight: bold;">
+                                ${isBuy ? 'خرید' : 'فروش'}
+                            </span>
+                        </td>
+                        <td style="padding: 8px 12px; color: #cbd5e1;">${t.type === 'market' ? 'بازار' : 'محدود'}</td>
+                        <td style="padding: 8px 12px; font-family: monospace;">${Math.round(t.price).toLocaleString()} ت</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #38bdf8;">${t.amount}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #34d399;">${Math.round(t.total_value_irt).toLocaleString()} ت</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #94a3b8;">${Math.round(t.fee).toLocaleString()} ت</td>
+                        <td style="padding: 8px 12px; font-size: 0.7rem; color: #a855f7;">${t.strategy}</td>
+                        <td style="padding: 8px 12px; color: #64748b; font-size: 0.72rem;">${new Date(t.created_at).toLocaleTimeString('fa-IR')}</td>
+                        <td style="padding: 8px 12px;"><span style="color: #34d399; font-weight: bold;">✅ موفق (Done)</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderNobitexOpenOrders(orders) {
+            const tbody = document.getElementById('nx-open-orders-tbody');
+            const badge = document.getElementById('nx-orders-count-badge');
+            if (!tbody) return;
+
+            if (badge) badge.textContent = orders.length;
+
+            if (orders.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 20px;">هیچ سفارش بازی موجود نیست.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = orders.map(o => `
+                <tr style="border-bottom: 1px solid #1e293b;">
+                    <td style="padding: 8px 12px; font-family: monospace; color: #60a5fa;">#${o.nobitex_order_id}</td>
+                    <td style="padding: 8px 12px; font-weight: bold;">${o.symbol}</td>
+                    <td style="padding: 8px 12px;">${o.side === 'buy' ? 'خرید' : 'فروش'}</td>
+                    <td style="padding: 8px 12px; font-family: monospace;">${Math.round(o.price).toLocaleString()} تومان</td>
+                    <td style="padding: 8px 12px; font-family: monospace;">${o.amount}</td>
+                    <td style="padding: 8px 12px; color: #fbbf24;">${o.filled_pct || 0}%</td>
+                    <td style="padding: 8px 12px; color: #64748b; font-size: 0.72rem;">${new Date(o.created_at).toLocaleTimeString('fa-IR')}</td>
+                    <td style="padding: 8px 12px;">
+                        <button onclick="cancelSingleNobitexOrder('${o.nobitex_order_id}')" style="background: #ef4444; color: #fff; border: none; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">لغو</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderNobitexWallets(wallets) {
+            const tbody = document.getElementById('nx-wallets-tbody');
+            if (!tbody) return;
+
+            tbody.innerHTML = wallets.map(w => `
+                <tr style="border-bottom: 1px solid #1e293b;">
+                    <td style="padding: 8px 12px; font-weight: bold;">${w.title_fa || w.symbol}</td>
+                    <td style="padding: 8px 12px; font-family: monospace; color: #38bdf8;">${w.symbol}</td>
+                    <td style="padding: 8px 12px; font-family: monospace;">${w.balance}</td>
+                    <td style="padding: 8px 12px; font-family: monospace; color: #f87171;">${w.frozen}</td>
+                    <td style="padding: 8px 12px; font-family: monospace; color: #34d399; font-weight: bold;">${w.available}</td>
+                    <td style="padding: 8px 12px; font-family: monospace; color: #c084fc;">${Math.round(w.value_irt).toLocaleString()} تومان</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderNobitexAgentLogs(logs) {
+            const logsBox = document.getElementById('nx-tab-logs');
+            if (!logsBox) return;
+
+            if (!logs || logs.length === 0) {
+                logsBox.innerHTML = `
+                    <div style="text-align: center; color: #64748b; padding: 25px;">
+                        <div>🧠 در حال حاضر لاگ تفکر جدیدی ثبت نشده است. ایجنت با هر دریافت تیک قیمت و نوسان اوردربوک نوبیتکس تفکرات خود را لاگ می‌کند.</div>
+                    </div>
+                `;
+                return;
+            }
+
+            logsBox.innerHTML = `
+                <div style="display: flex; flex-direction: column; gap: 8px; padding: 6px;">
+                    ${logs.map(l => {
+                        const isSuccess = l.level === 'success';
+                        const isWarning = l.level === 'warning';
+                        const isError = l.level === 'error';
+                        const borderColor = isSuccess ? '#10b981' : (isWarning ? '#f59e0b' : (isError ? '#ef4444' : '#3b82f6'));
+                        const badgeBg = isSuccess ? 'rgba(16, 185, 129, 0.15)' : (isWarning ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.15)');
+                        const icon = isSuccess ? '✅' : (isWarning ? '⚠️' : (isError ? '❌' : '💡'));
+
+                        return `
+                            <div style="padding: 8px 12px; background: rgba(15, 23, 42, 0.7); border: 1px solid #1e293b; border-right: 4px solid ${borderColor}; border-radius: 6px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;">
+                                <div style="display: flex; align-items: flex-start; gap: 8px; flex: 1;">
+                                    <span style="font-size: 0.95rem; margin-top: 1px;">${icon}</span>
+                                    <div>
+                                        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
+                                            <span style="background: ${badgeBg}; color: ${borderColor}; padding: 1px 6px; border-radius: 4px; font-weight: 700; font-size: 0.72rem; font-family: monospace;">${l.action}</span>
+                                            <span style="color: #64748b; font-size: 0.7rem; font-family: monospace;">${new Date(l.timestamp).toLocaleTimeString('fa-IR')}</span>
+                                        </div>
+                                        <div style="color: #e2e8f0; font-size: 0.78rem; line-height: 1.5;">${l.message}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        function resizeAndRenderNobitexChart() {
+            const canvas = document.getElementById('nobitex-candlestick-canvas');
+            if (!canvas || !canvas.parentElement) return;
+
+            const rect = canvas.parentElement.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return;
+
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.fillStyle = '#070a12';
+            ctx.fillRect(0, 0, w, h);
+
+            const candles = nobitexCandlesData;
+            if (candles.length === 0) return;
+
+            const padding = { top: 20 * dpr, bottom: 25 * dpr, left: 10 * dpr, right: 65 * dpr };
+            const chartW = w - padding.left - padding.right;
+            const chartH = h - padding.top - padding.bottom;
+
+            let minPrice = Infinity;
+            let maxPrice = -Infinity;
+            for (const c of candles) {
+                if (c.low < minPrice) minPrice = c.low;
+                if (c.high > maxPrice) maxPrice = c.high;
+            }
+            const range = (maxPrice - minPrice) || 1;
+            minPrice -= range * 0.05;
+            maxPrice += range * 0.05;
+
+            function getY(p) {
+                return padding.top + chartH * (1 - (p - minPrice) / (maxPrice - minPrice));
+            }
+
+            const candleSlotW = chartW / candles.length;
+            const candleBodyW = Math.max(2 * dpr, candleSlotW * 0.65);
+
+            // Grid lines
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1 * dpr;
+            ctx.fillStyle = '#64748b';
+            ctx.font = `${9 * dpr}px monospace`;
+            ctx.textAlign = 'left';
+
+            const gridSteps = 5;
+            for (let i = 0; i <= gridSteps; i++) {
+                const priceLevel = minPrice + (maxPrice - minPrice) * (i / gridSteps);
+                const y = getY(priceLevel);
+
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(w - padding.right, y);
+                ctx.stroke();
+
+                const priceStr = activeNobitexMarket.endsWith('_IRT') 
+                    ? `${Math.round(priceLevel / 1000).toLocaleString()}k`
+                    : `$${priceLevel.toFixed(1)}`;
+                ctx.fillText(priceStr, w - padding.right + (6 * dpr), y + (3 * dpr));
+            }
+
+            // 1. Draw Bollinger Bands
+            if (nobitexIndicators.bb && candles.length >= 20) {
+                const bbPoints = [];
+                for (let i = 0; i < candles.length; i++) {
+                    if (i < 19) {
+                        bbPoints.push(null);
+                        continue;
+                    }
+                    const slice = candles.slice(i - 19, i + 1);
+                    const mean = slice.reduce((sum, c) => sum + c.close, 0) / 20;
+                    const variance = slice.reduce((sum, c) => sum + Math.pow(c.close - mean, 2), 0) / 20;
+                    const std = Math.sqrt(variance);
+                    bbPoints.push({
+                        upper: mean + 2 * std,
+                        lower: mean - 2 * std,
+                        middle: mean,
+                        x: padding.left + i * candleSlotW + candleSlotW / 2
+                    });
+                }
+
+                // Shaded Band
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+                ctx.beginPath();
+                let first = true;
+                for (let i = 19; i < bbPoints.length; i++) {
+                    const pt = bbPoints[i];
+                    if (first) { ctx.moveTo(pt.x, getY(pt.upper)); first = false; }
+                    else { ctx.lineTo(pt.x, getY(pt.upper)); }
+                }
+                for (let i = bbPoints.length - 1; i >= 19; i--) {
+                    const pt = bbPoints[i];
+                    ctx.lineTo(pt.x, getY(pt.lower));
+                }
+                ctx.closePath();
+                ctx.fill();
+
+                // Upper & Lower Lines
+                ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
+                ctx.lineWidth = 1 * dpr;
+                ctx.beginPath();
+                for (let i = 19; i < bbPoints.length; i++) {
+                    const pt = bbPoints[i];
+                    if (i === 19) ctx.moveTo(pt.x, getY(pt.upper));
+                    else ctx.lineTo(pt.x, getY(pt.upper));
+                }
+                ctx.stroke();
+
+                ctx.beginPath();
+                for (let i = 19; i < bbPoints.length; i++) {
+                    const pt = bbPoints[i];
+                    if (i === 19) ctx.moveTo(pt.x, getY(pt.lower));
+                    else ctx.lineTo(pt.x, getY(pt.lower));
+                }
+                ctx.stroke();
+            }
+
+            // 2. Draw EMA 9 & EMA 21
+            if (nobitexIndicators.ema9 && candles.length >= 9) {
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 1.8 * dpr;
+                ctx.beginPath();
+                let k = 2 / (9 + 1);
+                let ema = candles[0].close;
+                for (let i = 0; i < candles.length; i++) {
+                    ema = candles[i].close * k + ema * (1 - k);
+                    const x = padding.left + i * candleSlotW + candleSlotW / 2;
+                    const y = getY(ema);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
+            if (nobitexIndicators.ema21 && candles.length >= 21) {
+                ctx.strokeStyle = '#f97316';
+                ctx.lineWidth = 1.8 * dpr;
+                ctx.beginPath();
+                let k = 2 / (21 + 1);
+                let ema = candles[0].close;
+                for (let i = 0; i < candles.length; i++) {
+                    ema = candles[i].close * k + ema * (1 - k);
+                    const x = padding.left + i * candleSlotW + candleSlotW / 2;
+                    const y = getY(ema);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
+            // 3. Draw Candlesticks
+            for (let i = 0; i < candles.length; i++) {
+                const c = candles[i];
+                const isGreen = c.close >= c.open;
+                const x = padding.left + i * candleSlotW + (candleSlotW - candleBodyW) / 2;
+                const midX = x + candleBodyW / 2;
+
+                const openY = getY(c.open);
+                const closeY = getY(c.close);
+                const highY = getY(c.high);
+                const lowY = getY(c.low);
+
+                // Wick
+                ctx.strokeStyle = isGreen ? '#10b981' : '#ef4444';
+                ctx.lineWidth = 1.2 * dpr;
+                ctx.beginPath();
+                ctx.moveTo(midX, highY);
+                ctx.lineTo(midX, lowY);
+                ctx.stroke();
+
+                // Body
+                ctx.fillStyle = isGreen ? '#10b981' : '#ef4444';
+                const bodyY = Math.min(openY, closeY);
+                const bodyH = Math.max(2 * dpr, Math.abs(closeY - openY));
+                ctx.fillRect(x, bodyY, candleBodyW, bodyH);
+            }
+
+            // 4. Draw Agent Trade Pins on Chart
+            if (nobitexIndicators.trades && nobitexLastBundle?.executed_trades?.length) {
+                const trades = nobitexLastBundle.executed_trades;
+                trades.forEach(tr => {
+                    const tradeTime = new Date(tr.created_at).getTime();
+                    let bestIdx = -1;
+                    let minDiff = Infinity;
+                    candles.forEach((c, i) => {
+                        const diff = Math.abs(new Date(c.time).getTime() - tradeTime);
+                        if (diff < minDiff) {
+                            minDiff = diff;
+                            bestIdx = i;
+                        }
+                    });
+
+                    if (bestIdx !== -1) {
+                        const c = candles[bestIdx];
+                        const x = padding.left + bestIdx * candleSlotW + candleSlotW / 2;
+                        const isBuy = tr.side === 'buy' || tr.side === 'LONG';
+                        const y = isBuy ? getY(c.low) + (16 * dpr) : getY(c.high) - (16 * dpr);
+
+                        ctx.save();
+                        ctx.fillStyle = isBuy ? '#10b981' : '#ef4444';
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 1.2 * dpr;
+
+                        ctx.beginPath();
+                        if (isBuy) {
+                            ctx.moveTo(x, y - 7 * dpr);
+                            ctx.lineTo(x - 5 * dpr, y + 2 * dpr);
+                            ctx.lineTo(x + 5 * dpr, y + 2 * dpr);
+                        } else {
+                            ctx.moveTo(x, y + 7 * dpr);
+                            ctx.lineTo(x - 5 * dpr, y - 2 * dpr);
+                            ctx.lineTo(x + 5 * dpr, y - 2 * dpr);
+                        }
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+
+                        ctx.font = `bold ${8 * dpr}px sans-serif`;
+                        ctx.textAlign = 'center';
+                        ctx.fillStyle = '#fff';
+                        ctx.fillText(isBuy ? 'BUY' : 'SELL', x, isBuy ? y + 10 * dpr : y - 8 * dpr);
+                        ctx.restore();
+                    }
+                });
+            }
+
+            // 5. Current price line
+            if (candles.length > 0) {
+                const lastClose = candles[candles.length - 1].close;
+                const lastY = getY(lastClose);
+
+                ctx.strokeStyle = '#60a5fa';
+                ctx.setLineDash([4 * dpr, 4 * dpr]);
+                ctx.beginPath();
+                ctx.moveTo(padding.left, lastY);
+                ctx.lineTo(w - padding.right, lastY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Price badge
+                ctx.fillStyle = '#2563eb';
+                ctx.fillRect(w - padding.right + 2, lastY - (9 * dpr), 75 * dpr, 18 * dpr);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${10 * dpr}px monospace`;
+                ctx.fillText(Math.round(lastClose).toLocaleString(), w - padding.right + (6 * dpr), lastY + (4 * dpr));
+            }
+
+            // Draw RSI Sub-chart
+            drawNobitexRsiChart();
+        }
+
+        function drawNobitexRsiChart() {
+            const canvas = document.getElementById('nobitex-rsi-canvas');
+            if (!canvas || !nobitexCandlesData.length) return;
+
+            const rect = canvas.parentElement?.getBoundingClientRect();
+            if (!rect || rect.width === 0) return;
+
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = (rect.height || 72) * dpr;
+
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.fillStyle = '#090d16';
+            ctx.fillRect(0, 0, w, h);
+
+            // Compute 14-period RSI series from candles
+            const candles = nobitexCandlesData;
+            const rsiSeries = [];
+            let gains = 0, losses = 0;
+            for (let i = 1; i < candles.length; i++) {
+                const diff = candles[i].close - candles[i - 1].close;
+                if (i <= 14) {
+                    if (diff >= 0) gains += diff;
+                    else losses += Math.abs(diff);
+                    if (i === 14) {
+                        const avgGain = gains / 14;
+                        const avgLoss = losses / 14;
+                        const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+                        rsiSeries.push(100 - (100 / (1 + rs)));
+                    } else {
+                        rsiSeries.push(50);
+                    }
+                } else {
+                    const prevRsi = rsiSeries[rsiSeries.length - 1];
+                    const gain = diff > 0 ? diff : 0;
+                    const loss = diff < 0 ? Math.abs(diff) : 0;
+                    gains = (gains * 13 + gain) / 14;
+                    losses = (losses * 13 + loss) / 14;
+                    const rs = losses === 0 ? 100 : gains / losses;
+                    rsiSeries.push(100 - (100 / (1 + rs)));
+                }
+            }
+
+            const padding = { left: 10 * dpr, right: 65 * dpr };
+            const plotW = w - padding.left - padding.right;
+
+            const getY = (val) => h - (val / 100) * h;
+
+            // 70 & 30 reference lines
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 1 * dpr;
+            ctx.setLineDash([3 * dpr, 3 * dpr]);
+            ctx.beginPath();
+            ctx.moveTo(padding.left, getY(70));
+            ctx.lineTo(w - padding.right, getY(70));
+            ctx.stroke();
+
+            ctx.strokeStyle = '#10b981';
+            ctx.beginPath();
+            ctx.moveTo(padding.left, getY(30));
+            ctx.lineTo(w - padding.right, getY(30));
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Fill neutral zone 30-70
+            ctx.fillStyle = 'rgba(234, 179, 8, 0.05)';
+            ctx.fillRect(padding.left, getY(70), plotW, getY(30) - getY(70));
+
+            // Labels
+            ctx.fillStyle = '#ef4444';
+            ctx.font = `${9 * dpr}px monospace`;
+            ctx.textAlign = 'left';
+            ctx.fillText('70 OB', w - padding.right + 6 * dpr, getY(70) + 3 * dpr);
+            ctx.fillStyle = '#10b981';
+            ctx.fillText('30 OS', w - padding.right + 6 * dpr, getY(30) + 3 * dpr);
+
+            // Draw RSI curve
+            if (rsiSeries.length > 0) {
+                const slot = plotW / rsiSeries.length;
+                ctx.strokeStyle = '#eab308';
+                ctx.lineWidth = 1.8 * dpr;
+                ctx.beginPath();
+                let started = false;
+                rsiSeries.forEach((val, i) => {
+                    const x = padding.left + i * slot + slot / 2;
+                    const y = getY(val);
+                    if (!started) { ctx.moveTo(x, y); started = true; }
+                    else { ctx.lineTo(x, y); }
+                });
+                ctx.stroke();
+
+                // Current RSI Badge
+                const lastRsi = rsiSeries[rsiSeries.length - 1];
+                ctx.fillStyle = '#eab308';
+                ctx.font = `bold ${9 * dpr}px monospace`;
+                ctx.fillText(`RSI: ${lastRsi.toFixed(1)}`, w - padding.right + 6 * dpr, h / 2);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            if (document.getElementById('bitpin-exchange-terminal-modal')?.classList.contains('active')) {
+                resizeAndRenderBitpinChart();
+            }
+            if (document.getElementById('nobitex-exchange-terminal-modal')?.classList.contains('active')) {
+                resizeAndRenderNobitexChart();
             }
         });
 
