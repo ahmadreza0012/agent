@@ -14,7 +14,7 @@
  */
 
 import express from 'express';
-import { recordOrder, recordClosedTrade, getClosedTrades, getDatabaseStats, saveOpenPositionsToDb, loadOpenPositionsFromDb, saveAccountStateToDb, loadAccountStateFromDb, recordMarketOpportunity, getRecentMarketOpportunities, updateMarketOpportunityStatus } from './trading_db_manager.js';
+import { recordOrder, recordClosedTrade, getClosedTrades, getDatabaseStats, saveOpenPositionsToDb, loadOpenPositionsFromDb, saveAccountStateToDb, loadAccountStateFromDb, recordMarketOpportunity, getRecentMarketOpportunities, updateMarketOpportunityStatus, syncFromMasterEc2Database, getMasterSyncStatus, MASTER_EC2_BASE } from './trading_db_manager.js';
 import { evaluateMarketWith60Features } from './sixty_features_quant_engine.js';
 import { agentLearner } from './self_improving_agent.js';
 
@@ -443,6 +443,29 @@ setInterval(() => {
   updatePositionsPnL();
 }, 1000);
 
+// Unified Master EC2 Database Synchronizer (Single Shared Source of Truth)
+setInterval(async () => {
+  try {
+    const status = await syncFromMasterEc2Database();
+    if (status && status.connected) {
+      const latestTrades = getClosedTrades(100);
+      if (latestTrades && latestTrades.length > 0) {
+        PAPER_ACCOUNT.trades = latestTrades;
+      }
+      const latestPositions = loadOpenPositionsFromDb();
+      if (latestPositions) {
+        PAPER_ACCOUNT.positions = latestPositions;
+      }
+      if (status.account) {
+        if (status.account.cash_balance !== undefined) PAPER_ACCOUNT.cash_balance = status.account.cash_balance;
+        if (status.account.equity !== undefined) PAPER_ACCOUNT.equity = status.account.equity;
+      }
+    }
+  } catch (syncErr) {
+    // Graceful silent fallback
+  }
+}, 2000);
+
 
 
 // ==========================================
@@ -844,6 +867,11 @@ export async function evaluateAutomatedBot() {
     PAPER_ACCOUNT.bot.last_evaluated = new Date().toISOString();
     PAPER_ACCOUNT.bot.last_signal = { signal, reason, score: compositeScore, price: currentPrice };
 
+    const masterStatus = getMasterSyncStatus();
+    if (masterStatus && masterStatus.connected) {
+      return; // Master EC2 bot handles live order execution
+    }
+
     // Check if we should place an automated paper order
     const existingPos = PAPER_ACCOUNT.positions.find(p => p.symbol === symbol);
 
@@ -1082,6 +1110,12 @@ export async function scanAllMarketsForOpportunities() {
  */
 export async function executeOpportunisticScalps(opportunities) {
   try {
+    const masterStatus = getMasterSyncStatus();
+    // When connected to Master EC2 Database, the EC2 server is the master execution authority
+    if (masterStatus && masterStatus.connected) {
+      return;
+    }
+
     const summary = getAccountSummary();
     if (summary.free_margin < 8) return; // Need at least $8 free margin
 
@@ -1409,6 +1443,11 @@ export function buildTerminalBundle(symbol = 'BTC/USDT', limit = 65) {
     closed_trades: (PAPER_ACCOUNT.trades && PAPER_ACCOUNT.trades.length > 0) ? PAPER_ACCOUNT.trades.slice(0, 50) : [],
     orderbook: ob,
     opportunities: RECENT_MARKET_OPPORTUNITIES.slice(0, 30),
+    master_db: {
+      is_shared: true,
+      master_host: '52.23.157.88:5000',
+      status: getMasterSyncStatus()
+    },
     agent: {
       status: PAPER_ACCOUNT.bot.enabled ? 'active' : 'idle',
       enabled: PAPER_ACCOUNT.bot.enabled,
@@ -1729,4 +1768,44 @@ paperRouter.get('/history', (req, res) => {
     success: true,
     trades: PAPER_ACCOUNT.trades
   });
+});
+
+// SYNC directly from live EC2 server (52.23.157.88:5000)
+paperRouter.all('/sync-ec2', async (req, res) => {
+  try {
+    const fetchRes = await fetch('http://52.23.157.88:5000/api/v1/paper/bundle', {
+      signal: AbortSignal.timeout(6000)
+    });
+    if (!fetchRes.ok) {
+      return res.status(502).json({ success: false, error: `EC2 server returned HTTP ${fetchRes.status}` });
+    }
+    const bundle = await fetchRes.json();
+    if (bundle && bundle.closed_trades) {
+      PAPER_ACCOUNT.trades = bundle.closed_trades;
+      if (bundle.positions) {
+        PAPER_ACCOUNT.positions = bundle.positions;
+        try {
+          saveOpenPositionsToDb(bundle.positions);
+        } catch {}
+      }
+      try {
+        const db = getDatabase();
+        db.exec('DELETE FROM closed_trades');
+        for (const t of bundle.closed_trades) {
+          recordClosedTrade(t);
+        }
+      } catch (dbErr) {
+        console.warn('Sync EC2 db note:', dbErr.message);
+      }
+      return res.json({
+        success: true,
+        message: 'همگام‌سازی دیتابیس با سرور زنده EC2 با موفقیت انجام شد',
+        trades_count: bundle.closed_trades.length,
+        positions_count: (bundle.positions || []).length
+      });
+    }
+    res.json({ success: false, error: 'Invalid bundle received from EC2' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });

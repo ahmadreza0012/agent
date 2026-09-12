@@ -1072,6 +1072,16 @@
                         <span id="ws-status-text">⚡ وب‌سوکت زنده (۰ms)</span>
                     </div>
 
+                    <div id="master-db-badge" style="background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.45); color: #c084fc; font-size: 0.74rem; padding: 4px 10px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" title="دیتابیس مشترک متصل به سرور مستر EC2 (52.23.157.88)">
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: #a855f7; box-shadow: 0 0 8px #a855f7;"></span>
+                        <span id="master-db-text">🔗 دیتابیس مشترک EC2 (Master DB)</span>
+                    </div>
+
+                    <button id="btn-sync-ec2" onclick="syncWithEC2Server()" style="background: rgba(59, 130, 246, 0.18); border: 1px solid rgba(59, 130, 246, 0.5); color: #60a5fa; font-size: 0.74rem; padding: 4px 12px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;" title="همگام‌سازی مستقیم داده‌ها و تاریخچه معاملات با سرور لایو EC2">
+                        <span id="sync-ec2-icon">🔄</span>
+                        <span id="sync-ec2-text">همگام‌سازی با سرور EC2</span>
+                    </button>
+
                     <div class="wallet-stat-card">
                         <div class="wallet-stat-title">دارایی کل حساب (Equity)</div>
                         <div class="wallet-stat-value" id="wallet-equity">$10,000.00</div>
@@ -3353,6 +3363,39 @@
                 dot.style.background = '#f59e0b';
                 dot.style.boxShadow = 'none';
                 text.textContent = '⚠️ ارتباط HTTP (رزرو)';
+            }
+        }
+
+        async function syncWithEC2Server() {
+            const btn = document.getElementById('btn-sync-ec2');
+            const icon = document.getElementById('sync-ec2-icon');
+            const text = document.getElementById('sync-ec2-text');
+            if (icon) icon.style.animation = 'spin 1s linear infinite';
+            if (text) text.textContent = 'در حال دریافت از EC2...';
+            try {
+                const res = await fetch(`${API_BASE}/v1/paper/sync-ec2`);
+                const data = await res.json();
+                if (data.success) {
+                    if (text) text.textContent = `همگام شد (${data.trades_count} معامله)`;
+                    // Immediately re-fetch exchange data to refresh table
+                    fetchExchangeData();
+                    setTimeout(() => {
+                        if (text) text.textContent = 'همگام‌سازی با سرور EC2';
+                        if (icon) icon.style.animation = '';
+                    }, 3000);
+                } else {
+                    if (text) text.textContent = 'خطا در ارتباط با EC2';
+                    setTimeout(() => {
+                        if (text) text.textContent = 'همگام‌سازی با سرور EC2';
+                        if (icon) icon.style.animation = '';
+                    }, 3000);
+                }
+            } catch (e) {
+                if (text) text.textContent = 'خطا در اتصال به EC2';
+                setTimeout(() => {
+                    if (text) text.textContent = 'همگام‌سازی با سرور EC2';
+                    if (icon) icon.style.animation = '';
+                }, 3000);
             }
         }
 

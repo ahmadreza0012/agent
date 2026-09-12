@@ -14,7 +14,8 @@ import {
   getOrders,
   getCapabilityExecutions,
   getTrainingEpochs,
-  getAgentCycles
+  getAgentCycles,
+  MASTER_EC2_BASE
 } from './trading_db_manager.js';
 import { agentLearner } from './self_improving_agent.js';
 import { evaluateMarketWith60Features } from './sixty_features_quant_engine.js';
@@ -1294,31 +1295,58 @@ app.use('/api/paper', paperRouter);
 app.use('/api/v1/mcp', mcpRouter);
 app.use('/api/mcp', mcpRouter);
 
-// Database persistence endpoints
-app.get('/api/v1/database/stats', (req, res) => {
+// Database persistence endpoints (Direct Master EC2 Proxy with local SQLite fallback)
+app.get('/api/v1/database/stats', async (req, res) => {
   try {
+    try {
+      const ec2Res = await fetch(`${MASTER_EC2_BASE}/api/v1/database/stats`, { signal: AbortSignal.timeout(2500) });
+      if (ec2Res.ok) {
+        const ec2Data = await ec2Res.json();
+        if (ec2Data && ec2Data.success) {
+          return res.json({ ...ec2Data, source: 'master_ec2_live' });
+        }
+      }
+    } catch {}
     const stats = getDatabaseStats();
-    res.json({ success: true, stats });
+    res.json({ success: true, stats, source: 'local_sqlite_mirror' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.get('/api/v1/database/trades', (req, res) => {
+app.get('/api/v1/database/trades', async (req, res) => {
   try {
-    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+    try {
+      const ec2Res = await fetch(`${MASTER_EC2_BASE}/api/v1/database/trades?limit=${limit}`, { signal: AbortSignal.timeout(2500) });
+      if (ec2Res.ok) {
+        const ec2Data = await ec2Res.json();
+        if (ec2Data && ec2Data.success) {
+          return res.json({ ...ec2Data, source: 'master_ec2_live' });
+        }
+      }
+    } catch {}
     const trades = getClosedTrades(limit);
-    res.json({ success: true, count: trades.length, trades });
+    res.json({ success: true, count: trades.length, trades, source: 'local_sqlite_mirror' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.get('/api/v1/database/orders', (req, res) => {
+app.get('/api/v1/database/orders', async (req, res) => {
   try {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+    try {
+      const ec2Res = await fetch(`${MASTER_EC2_BASE}/api/v1/database/orders?limit=${limit}`, { signal: AbortSignal.timeout(2500) });
+      if (ec2Res.ok) {
+        const ec2Data = await ec2Res.json();
+        if (ec2Data && ec2Data.success) {
+          return res.json({ ...ec2Data, source: 'master_ec2_live' });
+        }
+      }
+    } catch {}
     const orders = getOrders(limit);
-    res.json({ success: true, count: orders.length, orders });
+    res.json({ success: true, count: orders.length, orders, source: 'local_sqlite_mirror' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

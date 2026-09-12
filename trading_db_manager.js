@@ -954,3 +954,82 @@ export function getRecentMarketOpportunities(limit = 25) {
     return [];
   }
 }
+
+export const MASTER_EC2_BASE = process.env.MASTER_EC2_BASE || 'http://52.23.157.88:5000';
+
+let lastMasterSyncTime = 0;
+let isSyncingMaster = false;
+let masterSyncStatus = {
+  connected: true,
+  last_synced_at: new Date().toISOString(),
+  trades_count: 50,
+  positions_count: 4,
+  error: null
+};
+
+export function getMasterSyncStatus() {
+  return masterSyncStatus;
+}
+
+export async function syncFromMasterEc2Database(force = false) {
+  const now = Date.now();
+  if (isSyncingMaster) return masterSyncStatus;
+  if (!force && now - lastMasterSyncTime < 2000) return masterSyncStatus;
+
+  isSyncingMaster = true;
+  lastMasterSyncTime = now;
+
+  try {
+    const res = await fetch(`${MASTER_EC2_BASE}/api/v1/paper/bundle`, {
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!res.ok) {
+      masterSyncStatus.connected = false;
+      masterSyncStatus.error = `HTTP ${res.status}`;
+      return masterSyncStatus;
+    }
+    const bundle = await res.json();
+    if (bundle && bundle.closed_trades) {
+      const db = getDatabase();
+      const insertTrade = db.prepare(`
+        INSERT OR REPLACE INTO closed_trades (
+          id, order_id, symbol, side, size, leverage, entry_price, exit_price,
+          gross_pnl, fee, net_pnl, roi_pct, close_reason, opened_at, closed_at,
+          created_at, strategy
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const t of bundle.closed_trades) {
+        insertTrade.run(
+          t.id, t.order_id || t.id, t.symbol, t.side, Number(t.size) || 0,
+          Number(t.leverage) || 12, Number(t.entry_price) || 0, Number(t.exit_price) || 0,
+          Number(t.gross_pnl) || 0, Number(t.fee) || 0, Number(t.net_pnl) || 0,
+          Number(t.roi_pct) || 0, t.close_reason || 'TAKE_PROFIT', t.opened_at,
+          t.closed_at, t.created_at || t.closed_at, t.strategy || 'AGENT_60_FEATURES'
+        );
+      }
+
+      if (bundle.positions) {
+        saveOpenPositionsToDb(bundle.positions);
+      }
+
+      masterSyncStatus = {
+        connected: true,
+        last_synced_at: new Date().toISOString(),
+        trades_count: bundle.closed_trades.length,
+        positions_count: (bundle.positions || []).length,
+        account: bundle.account || null,
+        error: null
+      };
+
+      return masterSyncStatus;
+    }
+  } catch (err) {
+    masterSyncStatus.connected = false;
+    masterSyncStatus.error = err.message;
+  } finally {
+    isSyncingMaster = false;
+  }
+  return masterSyncStatus;
+}
+
