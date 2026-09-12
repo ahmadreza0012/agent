@@ -1,6 +1,6 @@
 {
   "name": "Crypto Trading Bot Dashboard",
-  "description": "داشبورد معاملات کریپتو بر اساس قیمت لحظه‌ای، پایگاه داده پایدار SQLite، موتور اجماع ۶۰ ویژگی، سرور MCP و حلقه یادگیری و تکامل خودکار ایجنت و LLM",
+  "description": "داشبورد معاملات کریپتو بر اساس قیمت لحظه‌ای، اتصال به صرافی زنده بیت‌پین (Bitpin)، پایگاه داده پایدار SQLite، موتور اجماع ۶۰ ویژگی، سرور MCP و حلقه یادگیری و تکامل خودکار ایجنت",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

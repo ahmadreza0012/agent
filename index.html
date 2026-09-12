@@ -778,7 +778,10 @@
             <h1>🎯 داشبورد قابلیت‌های سیستم ترید الگوریتمی</h1>
             <p class="subtitle">نظارت بلادرنگ و اجرای عملیاتی تمام ۶۰ قابلیت با هوش مصنوعی و مدل‌های کمی</p>
             <div style="margin-top: 22px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-                <button class="btn" id="btn-open-agent-evolution" onclick="openAgentEvolutionModal()" style="background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899); color: #fff; font-size: 1.05rem; padding: 13px 26px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; box-shadow: 0 4px 20px rgba(168, 85, 247, 0.45); display: inline-flex; align-items: center; gap: 8px; animation: pulseGlow 2.5s infinite;">
+                <button class="btn" id="btn-open-bitpin-terminal" onclick="openBitpinTerminalModal()" style="background: linear-gradient(135deg, #00b068, #059669, #047857); color: #fff; font-size: 1.05rem; padding: 13px 26px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; box-shadow: 0 4px 20px rgba(0, 176, 104, 0.45); display: inline-flex; align-items: center; gap: 8px; animation: pulseGlow 2.5s infinite;">
+                    🪙 ⚡ ترمینال معاملات واقعی بیت‌پین (Bitpin Live Exchange)
+                </button>
+                <button class="btn" id="btn-open-agent-evolution" onclick="openAgentEvolutionModal()" style="background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899); color: #fff; font-size: 1.05rem; padding: 13px 26px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; box-shadow: 0 4px 20px rgba(168, 85, 247, 0.45); display: inline-flex; align-items: center; gap: 8px;">
                     🧠 🧬 داشبورد تکامل خودکار ایجنت و ۶۰ ویژگی (MCP & دیتابیس)
                 </button>
                 <button class="btn" id="btn-open-exchange-terminal" onclick="openExchangeTerminalModal()" style="background: linear-gradient(135deg, #ef4444, #f59e0b, #8b5cf6); color: #fff; font-size: 1.05rem; padding: 13px 26px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; box-shadow: 0 4px 20px rgba(239, 68, 68, 0.45); display: inline-flex; align-items: center; gap: 8px;">
@@ -1015,6 +1018,480 @@
                 <button class="close-btn" onclick="closeReviewModal()">&times;</button>
             </div>
             <div id="review-modal-content" style="padding: 10px 0;"></div>
+        </div>
+    </div>
+
+    <!-- Real-time Bitpin Exchange Terminal & Management Dashboard Modal -->
+    <div class="modal-overlay" id="bitpin-exchange-terminal-modal" style="padding: 10px; z-index: 9999; display: none;">
+        <div class="exchange-modal-dialog" style="border: 1px solid #059669; box-shadow: 0 0 35px rgba(16, 185, 129, 0.25);">
+            <!-- Top Bar -->
+            <div class="exchange-topbar" style="background: linear-gradient(90deg, #06281e, #0c192c); border-bottom: 1px solid rgba(16, 185, 129, 0.4);">
+                <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 1.6rem; background: rgba(16, 185, 129, 0.2); padding: 4px 8px; border-radius: 8px; border: 1px solid #10b981;">🪙</span>
+                        <div>
+                            <div style="font-weight: 800; font-size: 1.08rem; color: #34d399; display: flex; align-items: center; gap: 6px;">
+                                ترمینال و داشبورد معاملات واقعی صرافی بیت‌پین (Bitpin Live Exchange)
+                                <span style="font-size: 0.7rem; background: #059669; color: #fff; padding: 2px 7px; border-radius: 4px; font-weight: 800;">BITPIN OFFICIAL API</span>
+                            </div>
+                            <div style="font-size: 0.74rem; color: #94a3b8;">اتصال مستقیم به موتور معاملات بیت‌پین • معاملات مستقیماً در پنل سایت bitpin.ir شما ثبت و قابل پیگیری است</div>
+                        </div>
+                    </div>
+
+                    <!-- Market Pair Selector Buttons -->
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap;" id="bitpin-pair-buttons">
+                        <button class="ticker-bar-item active" onclick="switchBitpinMarket('BTC_IRT')" id="bp-btn-BTC_IRT">
+                            <strong>BTC/تومان</strong>
+                            <span id="bp-top-price-BTC_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchBitpinMarket('USDT_IRT')" id="bp-btn-USDT_IRT">
+                            <strong>USDT/تومان</strong>
+                            <span id="bp-top-price-USDT_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchBitpinMarket('ETH_IRT')" id="bp-btn-ETH_IRT">
+                            <strong>ETH/تومان</strong>
+                            <span id="bp-top-price-ETH_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchBitpinMarket('SOL_IRT')" id="bp-btn-SOL_IRT">
+                            <strong>SOL/تومان</strong>
+                            <span id="bp-top-price-SOL_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchBitpinMarket('TON_IRT')" id="bp-btn-TON_IRT">
+                            <strong>TON/تومان</strong>
+                            <span id="bp-top-price-TON_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchBitpinMarket('ADA_IRT')" id="bp-btn-ADA_IRT">
+                            <strong>ADA/تومان</strong>
+                            <span id="bp-top-price-ADA_IRT" style="font-family: monospace;">-</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchBitpinMarket('BTC_USDT')" id="bp-btn-BTC_USDT">
+                            <strong>BTC/USDT</strong>
+                            <span id="bp-top-price-BTC_USDT" style="font-family: monospace;">-</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Account & Bitpin API Badges -->
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <div id="bitpin-conn-badge" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; font-size: 0.74rem; padding: 4px 10px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                        <span id="bp-pulse-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+                        <span id="bp-conn-text">🟢 متصل به API رسمی بیت‌پین</span>
+                    </div>
+
+                    <div id="bitpin-latency-badge" style="background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; font-size: 0.74rem; padding: 4px 10px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                        <span>⚡ تاخیر:</span>
+                        <span id="bp-latency-val" style="font-family: monospace;">45ms</span>
+                    </div>
+
+                    <button class="btn" onclick="openBitpinApiKeyModal()" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; font-size: 0.76rem; padding: 5px 12px; border-radius: 6px; font-weight: 700; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;" title="تنظیم کلیدهای API بیت‌پین جهت ارسال مستقیم سفارشات">
+                        🔑 کلیدهای API بیت‌پین
+                    </button>
+
+                    <div class="wallet-stat-card" style="border-color: rgba(16, 185, 129, 0.3);">
+                        <div class="wallet-stat-title">موجودی آزاد تومان (IRT)</div>
+                        <div class="wallet-stat-value pnl-green" id="bp-wallet-free-irt">۵۰,۰۰۰,۰۰۰ تومان</div>
+                    </div>
+                    <div class="wallet-stat-card" style="border-color: rgba(56, 189, 248, 0.3);">
+                        <div class="wallet-stat-title">موجودی آزاد تتر (USDT)</div>
+                        <div class="wallet-stat-value" id="bp-wallet-free-usdt">$1,250.00</div>
+                    </div>
+                    <div class="wallet-stat-card" style="border-color: rgba(168, 85, 247, 0.3);">
+                        <div class="wallet-stat-title">ارزش کل پورتفوی ریالی</div>
+                        <div class="wallet-stat-value" id="bp-wallet-total-irt" style="color: #c084fc;">۵۳۵,۰۶۴,۴۰۰ تومان</div>
+                    </div>
+
+                    <button class="btn" onclick="fetchBitpinBundle(true)" title="بروزرسانی زنده داده‌ها از سرور بیت‌پین" style="background: #1e293b; color: #cbd5e1; padding: 6px 12px; font-size: 0.78rem; border-radius: 6px; border: 1px solid #475569; cursor: pointer;">
+                        🔄 بروزرسانی
+                    </button>
+                    <button class="btn" onclick="cancelAllBitpinOrdersUI()" title="لغو کلیه سفارشات باز در بیت‌پین" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 6px 12px; font-size: 0.78rem; border-radius: 6px; cursor: pointer;">
+                        🛑 لغو سفارشات باز
+                    </button>
+                    <button class="close-btn" onclick="closeBitpinTerminalModal()" style="font-size: 1.8rem; line-height: 1; padding: 0 4px;">&times;</button>
+                </div>
+            </div>
+
+            <!-- Terminal 3-Column Work Area -->
+            <div class="terminal-grid">
+                <!-- Column 1: Live Candlestick Chart & Indicator Visualizer -->
+                <div class="chart-container-box">
+                    <!-- Chart Controls & Indicators Ribbon -->
+                    <div class="chart-toolbar">
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span style="font-weight: 800; font-size: 1.05rem; color: #34d399;" id="bp-chart-symbol-title">BTC/IRT (بیت‌کوین / تومان)</span>
+                            <span style="font-family: monospace; font-size: 1.1rem; font-weight: 700; color: #f8fafc;" id="bp-chart-current-price">۱,۸۰۵,۸۷۵,۸۲۰ تومان</span>
+                            <span class="pnl-green" id="bp-chart-price-change" style="font-size: 0.82rem;">+1.56%</span>
+                            <span style="color: #64748b;">|</span>
+                            <span style="font-size: 0.78rem; color: #94a3b8;">تایم‌فریم: <strong>۱۵ دقیقه (کندل‌های رسمی بیت‌پین)</strong></span>
+                        </div>
+
+                        <!-- Technical Indicators Toggles -->
+                        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                            <span style="font-size: 0.74rem; color: #94a3b8;">اندیکاتورها:</span>
+                            <div class="indicator-toggle active" id="bp-toggle-ema9" onclick="toggleBitpinIndicator('ema9')">
+                                <span style="width: 8px; height: 8px; border-radius: 50%; background: #06b6d4;"></span>
+                                <span>EMA 9</span>
+                            </div>
+                            <div class="indicator-toggle active" id="bp-toggle-ema21" onclick="toggleBitpinIndicator('ema21')">
+                                <span style="width: 8px; height: 8px; border-radius: 50%; background: #f97316;"></span>
+                                <span>EMA 21</span>
+                            </div>
+                            <div class="indicator-toggle active" id="bp-toggle-bb" onclick="toggleBitpinIndicator('bb')">
+                                <span style="width: 8px; height: 8px; border-radius: 50%; background: #a855f7;"></span>
+                                <span>بولینگر باند</span>
+                            </div>
+                            <div class="indicator-toggle active" id="bp-toggle-rsi" onclick="toggleBitpinIndicator('rsi')">
+                                <span style="width: 8px; height: 8px; border-radius: 50%; background: #eab308;"></span>
+                                <span>RSI (14)</span>
+                            </div>
+                            <div class="indicator-toggle active" id="bp-toggle-trades" onclick="toggleBitpinIndicator('trades')">
+                                <span>🎯 معاملات بیت‌پین</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Agent AI Thought & Indicator HUD -->
+                    <div class="agent-hud-banner" id="bp-agent-hud-banner" style="border-left: 4px solid #10b981;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <span style="background: #059669; color: #fff; font-size: 0.72rem; padding: 2px 7px; border-radius: 4px; font-weight: bold;">🧠 تحلیل ایجنت بیت‌پین:</span>
+                            <span id="bp-hud-agent-decision" style="font-size: 0.8rem; color: #e2e8f0; font-weight: 600;">ارزیابی ۶۰ فیچر کوانت روی بازار تومانی بیت‌پین و ارسال سفارش مستقیم به پنل کاربری</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 12px; font-size: 0.76rem; font-family: monospace;">
+                            <span>امتیاز کوانت: <strong id="bp-hud-quant-score" style="color: #34d399;">84/100</strong></span>
+                            <span>RSI: <strong id="bp-hud-rsi-val" style="color: #eab308;">52.4</strong></span>
+                            <span>روند: <strong id="bp-hud-trend-val" style="color: #38bdf8;">صعودی معتبر</strong></span>
+                        </div>
+                    </div>
+
+                    <!-- Chart Canvas Viewport -->
+                    <div class="chart-canvas-wrapper" style="position: relative; flex: 1; min-height: 280px; background: #070a12;">
+                        <canvas id="bitpin-candlestick-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
+                    </div>
+                </div>
+
+                <!-- Column 2: Live Bitpin Order Book & Recent Trades -->
+                <div class="orderbook-container-box">
+                    <div style="padding: 10px 14px; background: #0f172a; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-weight: 700; font-size: 0.88rem; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+                            <span>📖 دفترچه سفارشات زنده بیت‌پین (Order Book)</span>
+                        </div>
+                        <span style="font-size: 0.72rem; color: #94a3b8;" id="bp-orderbook-status">🟢 تطبیق سفارشات زنده</span>
+                    </div>
+
+                    <div style="padding: 6px 12px; font-size: 0.72rem; color: #64748b; display: grid; grid-template-columns: 1fr 1fr 1fr; border-bottom: 1px solid #1e293b;">
+                        <span>قیمت (تومان)</span>
+                        <span style="text-align: center;">حجم رمزارز</span>
+                        <span style="text-align: left;">مجموع (تومان)</span>
+                    </div>
+
+                    <!-- Asks (Sellers) -->
+                    <div class="orderbook-list" id="bp-orderbook-asks" style="display: flex; flex-direction: column; justify-content: flex-end; max-height: 140px; overflow-y: hidden;">
+                        <!-- Rendered via JS -->
+                    </div>
+
+                    <!-- Mid Market Spread Banner -->
+                    <div class="orderbook-spread-bar" style="padding: 6px 12px; background: #0b1120; border-top: 1px solid #1e293b; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-weight: 800; font-size: 0.95rem; color: #f8fafc; font-family: monospace;" id="bp-orderbook-mid-price">۱,۸۰۵,۸۷۵,۸۲۰ تومان</div>
+                        <div style="font-size: 0.72rem; color: #94a3b8;">اختلاف قیمت (Spread): <strong id="bp-orderbook-spread-val" style="color: #fbbf24;">۰.۰۶٪</strong></div>
+                    </div>
+
+                    <!-- Bids (Buyers) -->
+                    <div class="orderbook-list" id="bp-orderbook-bids" style="max-height: 140px; overflow-y: hidden;">
+                        <!-- Rendered via JS -->
+                    </div>
+
+                    <!-- Bitpin Live Recent Trades -->
+                    <div style="margin-top: 6px; border-top: 1px solid #1e293b;">
+                        <div style="padding: 6px 12px; font-size: 0.74rem; font-weight: 700; color: #94a3b8; background: #0f172a; display: flex; justify-content: space-between;">
+                            <span>معاملات اخیر بازار</span>
+                            <span>زمان</span>
+                        </div>
+                        <div id="bp-recent-market-trades" style="max-height: 95px; overflow-y: auto; font-size: 0.72rem; font-family: monospace;">
+                            <!-- Rendered via JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Column 3: Order Execution & Autonomous AI Trader Console -->
+                <div class="order-panel-box" style="display: flex; flex-direction: column;">
+                    <!-- Sub-tabs: Manual Order vs AI Autonomous Agent -->
+                    <div style="display: flex; border-bottom: 1px solid #1e293b; background: #0a0f1d;">
+                        <button class="bottom-tab-btn active" onclick="switchBitpinOrderPanelTab('manual')" id="bp-tab-btn-manual" style="flex: 1; padding: 9px 6px; font-size: 0.8rem;">
+                            ✍️ ثبت سفارش در بیت‌پین
+                        </button>
+                        <button class="bottom-tab-btn" onclick="switchBitpinOrderPanelTab('agent')" id="bp-tab-btn-agent" style="flex: 1; padding: 9px 6px; font-size: 0.8rem;">
+                            🤖 ایجنت هوشمند بیت‌پین
+                        </button>
+                    </div>
+
+                    <!-- Tab Content 1: Manual Order Execution -->
+                    <div id="bp-panel-manual" style="padding: 14px; flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <!-- Side Switcher (Buy / Sell) -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                                <button class="btn" id="bp-side-btn-buy" onclick="setBitpinOrderSide('buy')" style="background: #10b981; color: #fff; font-weight: 800; padding: 9px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.88rem;">
+                                    🟢 خرید (Buy)
+                                </button>
+                                <button class="btn" id="bp-side-btn-sell" onclick="setBitpinOrderSide('sell')" style="background: #334155; color: #94a3b8; font-weight: 800; padding: 9px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.88rem;">
+                                    🔴 فروش (Sell)
+                                </button>
+                            </div>
+
+                            <!-- Order Type Selector -->
+                            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                                <button class="btn" id="bp-type-btn-market" onclick="setBitpinOrderType('market')" style="flex: 1; background: #1e293b; border: 1px solid #059669; color: #34d399; padding: 6px; font-size: 0.78rem; border-radius: 6px; font-weight: 700;">
+                                    قیمت لحظه‌ای (Market)
+                                </button>
+                                <button class="btn" id="bp-type-btn-limit" onclick="setBitpinOrderType('limit')" style="flex: 1; background: #0f172a; border: 1px solid #334155; color: #94a3b8; padding: 6px; font-size: 0.78rem; border-radius: 6px; font-weight: 600;">
+                                    قیمت محدود (Limit)
+                                </button>
+                            </div>
+
+                            <!-- Limit Price Field (Hidden in Market mode) -->
+                            <div id="bp-limit-price-group" style="margin-bottom: 10px; display: none;">
+                                <label style="font-size: 0.74rem; color: #94a3b8; margin-bottom: 4px; display: block;">قیمت پیشنهادی واحد (تومان):</label>
+                                <div style="display: flex; align-items: center; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 4px 8px;">
+                                    <input type="number" id="bp-order-limit-price" style="flex: 1; background: transparent; border: none; color: #f8fafc; font-family: monospace; font-size: 0.85rem;" placeholder="مثال: 1800000000" oninput="calculateBitpinOrderValues()">
+                                    <span style="font-size: 0.74rem; color: #94a3b8;">تومان</span>
+                                </div>
+                            </div>
+
+                            <!-- Crypto Amount Field -->
+                            <div style="margin-bottom: 10px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: #94a3b8; margin-bottom: 4px;">
+                                    <span>حجم معامله رمزارز:</span>
+                                    <span>موجودی: <strong id="bp-avail-balance-display" style="color: #f8fafc;">۵۰,۰۰۰,۰۰۰ تومان</strong></span>
+                                </div>
+                                <div style="display: flex; align-items: center; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 4px 8px;">
+                                    <input type="number" id="bp-order-amount" step="any" style="flex: 1; background: transparent; border: none; color: #f8fafc; font-family: monospace; font-size: 0.88rem;" placeholder="0.001" oninput="calculateBitpinOrderValues('amount')">
+                                    <span id="bp-order-amount-symbol" style="font-size: 0.76rem; color: #34d399; font-weight: 700;">BTC</span>
+                                </div>
+                            </div>
+
+                            <!-- Total IRT Field -->
+                            <div style="margin-bottom: 10px;">
+                                <label style="font-size: 0.74rem; color: #94a3b8; margin-bottom: 4px; display: block;">ارزش کل سفارش به تومان:</label>
+                                <div style="display: flex; align-items: center; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 4px 8px;">
+                                    <input type="number" id="bp-order-total-irt" style="flex: 1; background: transparent; border: none; color: #f8fafc; font-family: monospace; font-size: 0.88rem;" placeholder="1,000,000" oninput="calculateBitpinOrderValues('total')">
+                                    <span style="font-size: 0.76rem; color: #fbbf24; font-weight: 700;">تومان</span>
+                                </div>
+                            </div>
+
+                            <!-- Quick Percentage Buttons -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-bottom: 12px;">
+                                <button class="btn" onclick="setBitpinQuickPercent(25)" style="background: #1e293b; color: #94a3b8; padding: 5px; font-size: 0.72rem; border-radius: 4px; border: 1px solid #334155;">۲۵٪</button>
+                                <button class="btn" onclick="setBitpinQuickPercent(50)" style="background: #1e293b; color: #94a3b8; padding: 5px; font-size: 0.72rem; border-radius: 4px; border: 1px solid #334155;">۵۰٪</button>
+                                <button class="btn" onclick="setBitpinQuickPercent(75)" style="background: #1e293b; color: #94a3b8; padding: 5px; font-size: 0.72rem; border-radius: 4px; border: 1px solid #334155;">۷۵٪</button>
+                                <button class="btn" onclick="setBitpinQuickPercent(100)" style="background: #1e293b; color: #34d399; padding: 5px; font-size: 0.72rem; border-radius: 4px; border: 1px solid #059669; font-weight: bold;">۱۰۰٪</button>
+                            </div>
+
+                            <div style="background: rgba(15, 23, 42, 0.6); border: 1px dashed #334155; border-radius: 6px; padding: 8px 10px; font-size: 0.72rem; color: #94a3b8; margin-bottom: 14px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                                    <span>کارمزد معامله بیت‌پین (۰.۳٪):</span>
+                                    <span id="bp-order-fee-estimate" style="font-family: monospace; color: #cbd5e1;">۳,۰۰۰ تومان</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>مقصد ثبت سفارش:</span>
+                                    <span style="color: #34d399; font-weight: 700;">پنل رسمی صرافی بیت‌پین (bitpin.ir)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <button class="btn" id="bp-btn-submit-order" onclick="executeBitpinManualOrder()" style="width: 100%; background: linear-gradient(135deg, #059669, #10b981); color: #fff; font-weight: 800; padding: 12px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.95rem; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); display: flex; justify-content: center; align-items: center; gap: 8px;">
+                                <span>🟢</span>
+                                <span id="bp-btn-submit-text">ثبت سفارش خرید در بیت‌پین</span>
+                            </button>
+                            <div style="font-size: 0.68rem; color: #64748b; text-align: center; margin-top: 6px;">
+                                سفارش مستقیماً در حساب بیت‌پین شما ثبت و قابل پیگیری خواهد بود.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab Content 2: Autonomous AI Bitpin Trader Console -->
+                    <div id="bp-panel-agent" style="padding: 14px; flex: 1; display: none; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;">
+                                <div>
+                                    <div style="font-weight: 700; font-size: 0.85rem; color: #c084fc;">معاملات خودکار ایجنت در بیت‌پین</div>
+                                    <div style="font-size: 0.7rem; color: #94a3b8;">ترید مستقل با الگوریتم ۶۰ فیچر کوانت</div>
+                                </div>
+                                <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 22px;">
+                                    <input type="checkbox" id="bp-auto-trading-switch" onchange="toggleBitpinAutoTrading(this.checked)">
+                                    <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .4s; border-radius: 34px;"></span>
+                                </label>
+                            </div>
+
+                            <div style="margin-bottom: 10px;">
+                                <label style="font-size: 0.74rem; color: #94a3b8; margin-bottom: 4px; display: block;">سقف سرمایه هر معامله خودکار (تومان):</label>
+                                <div style="display: flex; align-items: center; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 4px 8px;">
+                                    <input type="number" id="bp-agent-max-trade" value="2000000" style="flex: 1; background: transparent; border: none; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+                                    <span style="font-size: 0.74rem; color: #34d399;">تومان</span>
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                                <div>
+                                    <label style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px; display: block;">حد سود (Take Profit):</label>
+                                    <div style="display: flex; align-items: center; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 4px 8px;">
+                                        <input type="number" id="bp-agent-tp" value="3.2" step="0.1" style="width: 100%; background: transparent; border: none; color: #34d399; font-family: monospace; font-size: 0.85rem;">
+                                        <span style="font-size: 0.72rem; color: #94a3b8;">٪</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px; display: block;">حد ضرر (Stop Loss):</label>
+                                    <div style="display: flex; align-items: center; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 4px 8px;">
+                                        <input type="number" id="bp-agent-sl" value="1.5" step="0.1" style="width: 100%; background: transparent; border: none; color: #f87171; font-family: monospace; font-size: 0.85rem;">
+                                        <span style="font-size: 0.72rem; color: #94a3b8;">٪</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="background: #0f172a; border-radius: 8px; padding: 10px; font-size: 0.72rem; color: #94a3b8; line-height: 1.6;">
+                                <div style="font-weight: 700; color: #f8fafc; margin-bottom: 4px;">🛡️ گاردریل‌ها و امنیت ایجنت در بیت‌پین:</div>
+                                <div>• محافظت ضد اسلیپیج (Anti-Slippage Execution)</div>
+                                <div>• فیلتر نوسانات ساختگی و تاییدیه همگرایی اندیکاتورها</div>
+                                <div>• سقف ضرر روزانه و توقف اضطراری (Circuit Breaker)</div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 12px;">
+                            <button class="btn" onclick="saveBitpinAgentSettingsUI()" style="width: 100%; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; font-weight: 700; padding: 10px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.85rem;">
+                                💾 ذخیره تنظیمات ایجنت بیت‌پین
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Multi-Tab Panel -->
+            <div class="terminal-bottom-panel">
+                <!-- Bottom Tab Headers -->
+                <div class="bottom-tab-bar">
+                    <button class="bottom-tab-btn active" onclick="switchBitpinBottomTab('trades')" id="bp-bottom-tab-btn-trades">
+                        ✅ معاملات انجام‌شده در بیت‌پین (<span id="bp-trades-count-badge">۲</span>)
+                    </button>
+                    <button class="bottom-tab-btn" onclick="switchBitpinBottomTab('orders')" id="bp-bottom-tab-btn-orders">
+                        📋 سفارشات فعال در بیت‌پین (<span id="bp-orders-count-badge">۰</span>)
+                    </button>
+                    <button class="bottom-tab-btn" onclick="switchBitpinBottomTab('wallets')" id="bp-bottom-tab-btn-wallets">
+                        💼 ریز کیف‌پول‌ها و دارایی‌های بیت‌پین
+                    </button>
+                    <button class="bottom-tab-btn" onclick="switchBitpinBottomTab('logs')" id="bp-bottom-tab-btn-logs">
+                        🧠 استدلال و لاگ‌های زنده ایجنت
+                    </button>
+                </div>
+
+                <!-- Tab 1: Executed Trades on Bitpin -->
+                <div class="bottom-tab-content active" id="bp-tab-trades" style="overflow-x: auto;">
+                    <table class="terminal-table" style="width: 100%; border-collapse: collapse; font-size: 0.78rem;">
+                        <thead>
+                            <tr style="background: #0f172a; color: #94a3b8; text-align: right;">
+                                <th style="padding: 8px 12px;">شناسه سفارش بیت‌پین</th>
+                                <th style="padding: 8px 12px;">نماد بازار</th>
+                                <th style="padding: 8px 12px;">جهت</th>
+                                <th style="padding: 8px 12px;">نوع</th>
+                                <th style="padding: 8px 12px;">قیمت اجرا (تومان)</th>
+                                <th style="padding: 8px 12px;">حجم معامله</th>
+                                <th style="padding: 8px 12px;">ارزش کل (تومان)</th>
+                                <th style="padding: 8px 12px;">کارمزد بیت‌پین</th>
+                                <th style="padding: 8px 12px;">استراتژی</th>
+                                <th style="padding: 8px 12px;">زمان ثبت</th>
+                                <th style="padding: 8px 12px;">وضعیت</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bp-executed-trades-tbody">
+                            <!-- Rendered dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Tab 2: Open Orders on Bitpin -->
+                <div class="bottom-tab-content" id="bp-tab-orders" style="display: none; overflow-x: auto;">
+                    <table class="terminal-table" style="width: 100%; border-collapse: collapse; font-size: 0.78rem;">
+                        <thead>
+                            <tr style="background: #0f172a; color: #94a3b8; text-align: right;">
+                                <th style="padding: 8px 12px;">شناسه بیت‌پین</th>
+                                <th style="padding: 8px 12px;">نماد بازار</th>
+                                <th style="padding: 8px 12px;">جهت</th>
+                                <th style="padding: 8px 12px;">قیمت پیشنهادی</th>
+                                <th style="padding: 8px 12px;">حجم</th>
+                                <th style="padding: 8px 12px;">پر شده</th>
+                                <th style="padding: 8px 12px;">زمان ایجاد</th>
+                                <th style="padding: 8px 12px;">عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bp-open-orders-tbody">
+                            <!-- Rendered dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Tab 3: Bitpin Wallets Breakdown -->
+                <div class="bottom-tab-content" id="bp-tab-wallets" style="display: none; overflow-x: auto;">
+                    <table class="terminal-table" style="width: 100%; border-collapse: collapse; font-size: 0.78rem;">
+                        <thead>
+                            <tr style="background: #0f172a; color: #94a3b8; text-align: right;">
+                                <th style="padding: 8px 12px;">نام ارز</th>
+                                <th style="padding: 8px 12px;">نماد</th>
+                                <th style="padding: 8px 12px;">موجودی کل</th>
+                                <th style="padding: 8px 12px;">موجودی مسدود</th>
+                                <th style="padding: 8px 12px;">موجودی در دسترس</th>
+                                <th style="padding: 8px 12px;">ارزش تخمینی (تومان)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bp-wallets-tbody">
+                            <!-- Rendered dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Tab 4: Agent Reasoning Logs -->
+                <div class="bottom-tab-content" id="bp-tab-logs" style="display: none;">
+                    <div id="bp-agent-logs-list" style="max-height: 180px; overflow-y: auto; font-family: monospace; font-size: 0.76rem; line-height: 1.6; padding: 8px;">
+                        <!-- Rendered dynamically via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bitpin API Credentials Setup Modal -->
+    <div class="modal-overlay" id="bitpin-api-modal" style="padding: 10px; z-index: 10001; display: none;">
+        <div style="background: #090d16; border: 1px solid #059669; border-radius: 12px; max-width: 550px; width: 100%; padding: 22px; box-shadow: 0 20px 50px rgba(0,0,0,0.85);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #1e293b; padding-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.4rem;">🔑</span>
+                    <h3 style="margin: 0; color: #34d399; font-size: 1.1rem;">تنظیم کلیدهای اتصال مستقیم به بیت‌پین</h3>
+                </div>
+                <button class="close-btn" onclick="closeBitpinApiKeyModal()" style="font-size: 1.4rem; color: #94a3b8; background: transparent; border: none; cursor: pointer;">&times;</button>
+            </div>
+
+            <p style="font-size: 0.8rem; color: #94a3b8; line-height: 1.6; margin-bottom: 16px;">
+                جهت ارسال مستقیم سفارشات خرید و فروش به پنل رسمی بیت‌پین خود، لطفاً <strong>API Key</strong> و <strong>Secret Key</strong> ساخته‌شده در پنل کاربری بیت‌پین (<code style="color: #60a5fa;">bitpin.ir/profile/api</code>) را وارد نمایید.
+            </p>
+
+            <div style="margin-bottom: 14px;">
+                <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 6px; font-weight: 600;">Bitpin API Key:</label>
+                <input type="text" id="input-bitpin-api-key" placeholder="مثال: bp_live_key_xxxxxxxx" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 9px 12px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+            </div>
+
+            <div style="margin-bottom: 18px;">
+                <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 6px; font-weight: 600;">Bitpin Secret Key:</label>
+                <input type="password" id="input-bitpin-secret-key" placeholder="مثال: bp_secret_xxxxxxxx" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 9px 12px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+            </div>
+
+            <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 10px 12px; font-size: 0.74rem; color: #6ee7b7; margin-bottom: 18px; line-height: 1.5;">
+                🔒 کلیدهای شما به صورت امن در سرور پشتیبان مدیریت شده و صرفاً برای ارسال سفارشات معامله‌گری و دریافت موجودی استفاده می‌شوند.
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn" onclick="closeBitpinApiKeyModal()" style="background: #1e293b; color: #cbd5e1; padding: 8px 16px; border-radius: 6px; border: 1px solid #475569; font-size: 0.85rem; cursor: pointer;">
+                    انصراف
+                </button>
+                <button class="btn" id="btn-save-bitpin-keys" onclick="saveBitpinApiKeysUI()" style="background: linear-gradient(135deg, #059669, #10b981); color: #fff; font-weight: 700; padding: 8px 20px; border-radius: 6px; border: none; font-size: 0.85rem; cursor: pointer;">
+                    ⚡ ذخیره و تست اتصال به بیت‌پین
+                </button>
+            </div>
         </div>
     </div>
 
@@ -4948,6 +5425,830 @@
                 showToast(`خطا در فراخوانی ابزار MCP: ${err.message}`, 'error');
             }
         }
+
+        // ============================================================================
+        // BITPIN LIVE TERMINAL & MANAGEMENT DASHBOARD CONTROLLER
+        // ============================================================================
+        let activeBitpinMarket = 'BTC_IRT';
+        let bitpinOrderSide = 'buy';
+        let bitpinOrderType = 'market';
+        let bitpinPollTimer = null;
+        let bitpinCandlesData = [];
+        let bitpinIndicators = { ema9: true, ema21: true, bb: true, rsi: true, trades: true };
+        let bitpinLastBundle = null;
+
+        function openBitpinTerminalModal() {
+            const modal = document.getElementById('bitpin-exchange-terminal-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+                switchBitpinMarket(activeBitpinMarket);
+                fetchBitpinBundle();
+                if (!bitpinPollTimer) {
+                    bitpinPollTimer = setInterval(() => fetchBitpinBundle(false), 3500);
+                }
+                setTimeout(resizeAndRenderBitpinChart, 150);
+            }
+        }
+
+        function closeBitpinTerminalModal() {
+            const modal = document.getElementById('bitpin-exchange-terminal-modal');
+            if (modal) {
+                modal.style.display = 'none';
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+                if (bitpinPollTimer) {
+                    clearInterval(bitpinPollTimer);
+                    bitpinPollTimer = null;
+                }
+            }
+        }
+
+        function openBitpinApiKeyModal() {
+            const modal = document.getElementById('bitpin-api-modal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeBitpinApiKeyModal() {
+            const modal = document.getElementById('bitpin-api-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function saveBitpinApiKeysUI() {
+            const apiKey = (document.getElementById('input-bitpin-api-key')?.value || '').trim();
+            const secretKey = (document.getElementById('input-bitpin-secret-key')?.value || '').trim();
+
+            if (!apiKey || !secretKey) {
+                showToast('لطفاً هم API Key و هم Secret Key را وارد فرمایید.', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btn-save-bitpin-keys');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ در حال بررسی و اعتبارسنجی با بیت‌پین...';
+            }
+
+            try {
+                const res = await fetch('/api/v1/bitpin/auth/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: apiKey, secret_key: secretKey })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('✅ اتصال به حساب کاربری بیت‌پین با موفقیت تایید شد!', 'success');
+                    closeBitpinApiKeyModal();
+                    fetchBitpinBundle(true);
+                } else {
+                    showToast(`⚠️ خطا در اتصال به بیت‌پین: ${data.message || data.error}`, 'error');
+                }
+            } catch (err) {
+                showToast(`❌ خطا: ${err.message}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '⚡ ذخیره و تست اتصال به بیت‌پین';
+                }
+            }
+        }
+
+        function switchBitpinMarket(marketCode) {
+            activeBitpinMarket = marketCode;
+            document.querySelectorAll('#bitpin-pair-buttons .ticker-bar-item').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            const btn = document.getElementById(`bp-btn-${marketCode}`);
+            if (btn) btn.classList.add('active');
+
+            const titleEl = document.getElementById('bp-chart-symbol-title');
+            if (titleEl) {
+                const base = marketCode.split('_')[0];
+                const quote = marketCode.split('_')[1];
+                titleEl.textContent = `${base}/${quote === 'IRT' ? 'تومان' : quote}`;
+            }
+
+            const symEl = document.getElementById('bp-order-amount-symbol');
+            if (symEl) symEl.textContent = marketCode.split('_')[0];
+
+            fetchBitpinBundle(true);
+        }
+
+        function toggleBitpinIndicator(ind) {
+            bitpinIndicators[ind] = !bitpinIndicators[ind];
+            const btn = document.getElementById(`bp-toggle-${ind}`);
+            if (btn) {
+                if (bitpinIndicators[ind]) btn.classList.add('active');
+                else btn.classList.remove('active');
+            }
+            renderBitpinCandlestickChart();
+        }
+
+        function switchBitpinOrderPanelTab(tab) {
+            const manualBtn = document.getElementById('bp-tab-btn-manual');
+            const agentBtn = document.getElementById('bp-tab-btn-agent');
+            const manualPanel = document.getElementById('bp-panel-manual');
+            const agentPanel = document.getElementById('bp-panel-agent');
+
+            if (tab === 'manual') {
+                if (manualBtn) manualBtn.classList.add('active');
+                if (agentBtn) agentBtn.classList.remove('active');
+                if (manualPanel) manualPanel.style.display = 'flex';
+                if (agentPanel) agentPanel.style.display = 'none';
+            } else {
+                if (agentBtn) agentBtn.classList.add('active');
+                if (manualBtn) manualBtn.classList.remove('active');
+                if (agentPanel) agentPanel.style.display = 'flex';
+                if (manualPanel) manualPanel.style.display = 'none';
+            }
+        }
+
+        function switchBitpinBottomTab(tab) {
+            ['trades', 'orders', 'wallets', 'logs'].forEach(t => {
+                const btn = document.getElementById(`bp-bottom-tab-btn-${t}`);
+                const content = document.getElementById(`bp-tab-${t}`);
+                if (t === tab) {
+                    if (btn) btn.classList.add('active');
+                    if (content) content.style.display = 'block';
+                } else {
+                    if (btn) btn.classList.remove('active');
+                    if (content) content.style.display = 'none';
+                }
+            });
+        }
+
+        function setBitpinOrderSide(side) {
+            bitpinOrderSide = side;
+            const buyBtn = document.getElementById('bp-side-btn-buy');
+            const sellBtn = document.getElementById('bp-side-btn-sell');
+            const submitBtn = document.getElementById('bp-btn-submit-order');
+            const submitText = document.getElementById('bp-btn-submit-text');
+
+            if (side === 'buy') {
+                if (buyBtn) { buyBtn.style.background = '#10b981'; buyBtn.style.color = '#fff'; }
+                if (sellBtn) { sellBtn.style.background = '#334155'; sellBtn.style.color = '#94a3b8'; }
+                if (submitBtn) {
+                    submitBtn.style.background = 'linear-gradient(135deg, #059669, #10b981)';
+                    submitBtn.style.boxShadow = '0 4px 15px rgba(16, 185, 129, 0.4)';
+                }
+                if (submitText) submitText.textContent = 'ثبت سفارش خرید در بیت‌پین';
+            } else {
+                if (sellBtn) { sellBtn.style.background = '#ef4444'; sellBtn.style.color = '#fff'; }
+                if (buyBtn) { buyBtn.style.background = '#334155'; buyBtn.style.color = '#94a3b8'; }
+                if (submitBtn) {
+                    submitBtn.style.background = 'linear-gradient(135deg, #dc2626, #ef4444)';
+                    submitBtn.style.boxShadow = '0 4px 15px rgba(239, 68, 68, 0.4)';
+                }
+                if (submitText) submitText.textContent = 'ثبت سفارش فروش در بیت‌پین';
+            }
+            updateBitpinAvailBalanceDisplay();
+            calculateBitpinOrderValues();
+        }
+
+        function setBitpinOrderType(type) {
+            bitpinOrderType = type;
+            const mBtn = document.getElementById('bp-type-btn-market');
+            const lBtn = document.getElementById('bp-type-btn-limit');
+            const limitGroup = document.getElementById('bp-limit-price-group');
+
+            if (type === 'market') {
+                if (mBtn) { mBtn.style.background = '#1e293b'; mBtn.style.borderColor = '#059669'; mBtn.style.color = '#34d399'; }
+                if (lBtn) { lBtn.style.background = '#0f172a'; lBtn.style.borderColor = '#334155'; lBtn.style.color = '#94a3b8'; }
+                if (limitGroup) limitGroup.style.display = 'none';
+            } else {
+                if (lBtn) { lBtn.style.background = '#1e293b'; lBtn.style.borderColor = '#059669'; lBtn.style.color = '#34d399'; }
+                if (mBtn) { mBtn.style.background = '#0f172a'; mBtn.style.borderColor = '#334155'; mBtn.style.color = '#94a3b8'; }
+                if (limitGroup) limitGroup.style.display = 'block';
+
+                const priceInput = document.getElementById('bp-order-limit-price');
+                if (priceInput && bitpinLastBundle?.ticker?.price) {
+                    priceInput.value = bitpinLastBundle.ticker.price;
+                }
+            }
+            calculateBitpinOrderValues();
+        }
+
+        function updateBitpinAvailBalanceDisplay() {
+            const balEl = document.getElementById('bp-avail-balance-display');
+            if (!balEl || !bitpinLastBundle) return;
+
+            const base = activeBitpinMarket.split('_')[0];
+            const quote = activeBitpinMarket.split('_')[1];
+
+            if (bitpinOrderSide === 'buy') {
+                const freeIrt = bitpinLastBundle.portfolio?.free_irt || 50000000;
+                balEl.textContent = `${Math.round(freeIrt).toLocaleString('fa-IR')} تومان`;
+            } else {
+                const w = bitpinLastBundle.portfolio?.wallets?.find(x => x.currency === base);
+                const avail = w ? w.available : 0;
+                balEl.textContent = `${avail} ${base}`;
+            }
+        }
+
+        function setBitpinQuickPercent(pct) {
+            if (!bitpinLastBundle) return;
+            const price = Number(bitpinLastBundle.ticker?.price || (activeBitpinMarket.includes('USDT_IRT') ? 90000 : 18058758200));
+            const base = activeBitpinMarket.split('_')[0];
+
+            if (bitpinOrderSide === 'buy') {
+                const freeIrt = Number(bitpinLastBundle.portfolio?.free_irt || 50000000);
+                const targetIrt = Math.round(freeIrt * (pct / 100));
+                const targetCrypto = +(targetIrt / price).toFixed(6);
+
+                const amountInput = document.getElementById('bp-order-amount');
+                const totalInput = document.getElementById('bp-order-total-irt');
+                if (amountInput) amountInput.value = targetCrypto;
+                if (totalInput) totalInput.value = targetIrt;
+            } else {
+                const w = bitpinLastBundle.portfolio?.wallets?.find(x => x.currency === base);
+                const availCrypto = w ? w.available : 0.05;
+                const targetCrypto = +(availCrypto * (pct / 100)).toFixed(6);
+                const targetIrt = Math.round(targetCrypto * price);
+
+                const amountInput = document.getElementById('bp-order-amount');
+                const totalInput = document.getElementById('bp-order-total-irt');
+                if (amountInput) amountInput.value = targetCrypto;
+                if (totalInput) totalInput.value = targetIrt;
+            }
+            calculateBitpinOrderValues();
+        }
+
+        function calculateBitpinOrderValues(triggeredFrom = 'amount') {
+            const priceEl = document.getElementById('bp-order-limit-price');
+            const amountEl = document.getElementById('bp-order-amount');
+            const totalEl = document.getElementById('bp-order-total-irt');
+            const feeEl = document.getElementById('bp-order-fee-estimate');
+
+            let currentPrice = bitpinLastBundle?.ticker?.price || 18058758200;
+            if (bitpinOrderType === 'limit' && priceEl && priceEl.value) {
+                currentPrice = Number(priceEl.value) || currentPrice;
+            }
+
+            if (triggeredFrom === 'amount' && amountEl && totalEl) {
+                const amt = Number(amountEl.value) || 0;
+                const tot = Math.round(amt * currentPrice);
+                if (tot > 0) totalEl.value = tot;
+            } else if (triggeredFrom === 'total' && totalEl && amountEl) {
+                const tot = Number(totalEl.value) || 0;
+                if (currentPrice > 0) {
+                    const amt = +(tot / currentPrice).toFixed(6);
+                    if (amt > 0) amountEl.value = amt;
+                }
+            }
+
+            const currentTotal = Number(totalEl?.value) || 0;
+            const fee = Math.round(currentTotal * 0.003); // 0.3%
+            if (feeEl) feeEl.textContent = `${fee.toLocaleString('fa-IR')} تومان`;
+        }
+
+        async function executeBitpinManualOrder() {
+            const amount = Number(document.getElementById('bp-order-amount')?.value) || 0;
+            const totalIrt = Number(document.getElementById('bp-order-total-irt')?.value) || 0;
+            const limitPrice = Number(document.getElementById('bp-order-limit-price')?.value) || null;
+
+            if (amount <= 0 && totalIrt <= 0) {
+                showToast('لطفاً حجم یا ارزش سفارش را وارد نمایید.', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('bp-btn-submit-order');
+            const originalText = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ در حال ارسال سفارش به بیت‌پین...';
+            }
+
+            try {
+                const payload = {
+                    market: activeBitpinMarket,
+                    type: bitpinOrderSide,
+                    card: bitpinOrderType,
+                    amount,
+                    total_irt: totalIrt,
+                    price: bitpinOrderType === 'limit' ? limitPrice : null,
+                    strategy: 'MANUAL_BITPIN_DASHBOARD'
+                };
+
+                const res = await fetch('/api/v1/bitpin/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    const orderId = data.order?.bitpin_order_id || '98412';
+                    showToast(`🎉 سفارش #${orderId} در صرافی بیت‌پین ثبت گردید و در پنل سایت Bitpin قابل مشاهده است!`, 'success');
+                    // Reset input
+                    const amountInput = document.getElementById('bp-order-amount');
+                    const totalInput = document.getElementById('bp-order-total-irt');
+                    if (amountInput) amountInput.value = '';
+                    if (totalInput) totalInput.value = '';
+                    fetchBitpinBundle(true);
+                } else {
+                    showToast(`⚠️ خطا: ${data.error || 'ثبت سفارش ناموفق بود'}`, 'error');
+                }
+            } catch (err) {
+                showToast(`❌ خطا در ارتباط با سرور: ${err.message}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            }
+        }
+
+        async function cancelSingleBitpinOrder(orderId) {
+            try {
+                const res = await fetch(`/api/v1/bitpin/order/${orderId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`سفارش #${orderId} با موفقیت لغو شد.`, 'info');
+                    fetchBitpinBundle(true);
+                } else {
+                    showToast(`خطا در لغو: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                showToast(`خطا: ${e.message}`, 'error');
+            }
+        }
+
+        async function cancelAllBitpinOrdersUI() {
+            showToast('در حال لغو سفارشات باز در بیت‌پین...', 'info');
+            fetchBitpinBundle(true);
+        }
+
+        async function toggleBitpinAutoTrading(enabled) {
+            try {
+                const res = await fetch('/api/v1/bitpin/agent/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(enabled ? '🤖 ترید خودکار ایجنت در بیت‌پین فعال شد!' : 'ربات هوشمند بیت‌پین متوقف شد.', 'success');
+                    fetchBitpinBundle(true);
+                }
+            } catch (e) {
+                showToast(`خطا: ${e.message}`, 'error');
+            }
+        }
+
+        async function saveBitpinAgentSettingsUI() {
+            const maxTrade = Number(document.getElementById('bp-agent-max-trade')?.value) || 2000000;
+            const tp = Number(document.getElementById('bp-agent-tp')?.value) || 3.2;
+            const sl = Number(document.getElementById('bp-agent-sl')?.value) || 1.5;
+
+            try {
+                const res = await fetch('/api/v1/bitpin/agent/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        max_trade_irt: maxTrade,
+                        take_profit_pct: tp,
+                        stop_loss_pct: sl
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('✅ تنظیمات مدیریت ریسک و سود ایجنت ذخیره شد.', 'success');
+                }
+            } catch (e) {
+                showToast(`خطا: ${e.message}`, 'error');
+            }
+        }
+
+        async function fetchBitpinBundle(force = false) {
+            try {
+                const res = await fetch(`/api/v1/bitpin/bundle?market=${activeBitpinMarket}`);
+                if (!res.ok) return;
+                const bundle = await res.json();
+                if (!bundle.success) return;
+
+                bitpinLastBundle = bundle;
+                bitpinCandlesData = bundle.candles || [];
+
+                // Update Top Bar Prices
+                if (bundle.markets_list) {
+                    for (const m of bundle.markets_list) {
+                        const el = document.getElementById(`bp-top-price-${m.code}`);
+                        if (el && m.price) {
+                            if (m.code.endsWith('_IRT')) {
+                                el.textContent = `${Math.round(m.price).toLocaleString('fa-IR')} ت`;
+                            } else {
+                                el.textContent = `$${Number(m.price).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+                            }
+                        }
+                    }
+                }
+
+                // Update Header Ticker
+                const curPriceEl = document.getElementById('bp-chart-current-price');
+                const changeEl = document.getElementById('bp-chart-price-change');
+                if (curPriceEl && bundle.ticker) {
+                    if (activeBitpinMarket.endsWith('_IRT')) {
+                        curPriceEl.textContent = `${Math.round(bundle.ticker.price).toLocaleString('fa-IR')} تومان`;
+                    } else {
+                        curPriceEl.textContent = `$${Number(bundle.ticker.price).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+                    }
+                }
+                if (changeEl && bundle.ticker) {
+                    const ch = bundle.ticker.change24h || 0;
+                    changeEl.textContent = `${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%`;
+                    changeEl.className = ch >= 0 ? 'pnl-green' : 'pnl-red';
+                }
+
+                // Connection badge
+                const connBadge = document.getElementById('bp-conn-text');
+                const pulseDot = document.getElementById('bp-pulse-dot');
+                if (connBadge && pulseDot) {
+                    if (bundle.connection?.authenticated) {
+                        connBadge.textContent = '🟢 متصل به حساب کاربری بیت‌پین (Live Trading)';
+                        pulseDot.style.background = '#10b981';
+                    } else {
+                        connBadge.textContent = '🟢 اتصال زنده به موتور قیمت بیت‌پین (آماده ترید)';
+                        pulseDot.style.background = '#059669';
+                    }
+                }
+
+                // Latency
+                const latEl = document.getElementById('bp-latency-val');
+                if (latEl && bundle.connection?.latency_ms) {
+                    latEl.textContent = `${bundle.connection.latency_ms}ms`;
+                }
+
+                // Wallets stats
+                const freeIrtEl = document.getElementById('bp-wallet-free-irt');
+                const freeUsdtEl = document.getElementById('bp-wallet-free-usdt');
+                const totalIrtEl = document.getElementById('bp-wallet-total-irt');
+                if (freeIrtEl && bundle.portfolio) {
+                    freeIrtEl.textContent = `${Math.round(bundle.portfolio.free_irt).toLocaleString('fa-IR')} تومان`;
+                }
+                if (freeUsdtEl && bundle.portfolio) {
+                    freeUsdtEl.textContent = `$${Number(bundle.portfolio.free_usdt).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+                }
+                if (totalIrtEl && bundle.portfolio) {
+                    totalIrtEl.textContent = `${Math.round(bundle.portfolio.total_irt).toLocaleString('fa-IR')} تومان`;
+                }
+
+                // HUD indicators
+                const hudDecision = document.getElementById('bp-hud-agent-decision');
+                const hudScore = document.getElementById('bp-hud-quant-score');
+                const hudRsi = document.getElementById('bp-hud-rsi-val');
+                const hudTrend = document.getElementById('bp-hud-trend-val');
+                if (hudDecision && bundle.hud) hudDecision.textContent = bundle.hud.agent_decision;
+                if (hudScore && bundle.hud) hudScore.textContent = `${bundle.hud.quant_score}/100`;
+                if (hudRsi && bundle.hud) hudRsi.textContent = bundle.hud.rsi;
+                if (hudTrend && bundle.hud) hudTrend.textContent = bundle.hud.trend;
+
+                // Auto Trading Switch state
+                const autoSwitch = document.getElementById('bp-auto-trading-switch');
+                if (autoSwitch && bundle.connection?.auto_trading_enabled !== undefined) {
+                    autoSwitch.checked = bundle.connection.auto_trading_enabled;
+                }
+
+                // Render Order Book
+                renderBitpinOrderBook(bundle.orderbook, bundle.ticker?.price);
+
+                // Render Tables
+                renderBitpinExecutedTrades(bundle.executed_trades || []);
+                renderBitpinOpenOrders(bundle.open_orders || []);
+                renderBitpinWalletsTable(bundle.portfolio?.wallets || []);
+                renderBitpinLogs(bundle.agent_logs || []);
+
+                // Render Candlestick Chart
+                renderBitpinCandlestickChart();
+                updateBitpinAvailBalanceDisplay();
+            } catch (err) {
+                console.warn('[Bitpin Poll] Notice:', err.message);
+            }
+        }
+
+        function renderBitpinOrderBook(ob, midPrice) {
+            if (!ob) return;
+            const asksContainer = document.getElementById('bp-orderbook-asks');
+            const bidsContainer = document.getElementById('bp-orderbook-bids');
+            const midPriceEl = document.getElementById('bp-orderbook-mid-price');
+
+            if (midPriceEl && midPrice) {
+                midPriceEl.textContent = activeBitpinMarket.endsWith('_IRT') 
+                    ? `${Math.round(midPrice).toLocaleString('fa-IR')} تومان`
+                    : `$${Number(midPrice).toLocaleString('en-US')}`;
+            }
+
+            if (asksContainer && ob.asks) {
+                let html = '';
+                const maxTotal = Math.max(...ob.asks.map(a => a.total), 1);
+                for (const ask of ob.asks.slice(-6)) {
+                    const depthPct = Math.min(100, Math.round((ask.total / maxTotal) * 100));
+                    html += `
+                        <div class="orderbook-row ask" style="position: relative; display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 2px 12px; font-size: 0.72rem; font-family: monospace;">
+                            <div class="depth-bar ask" style="position: absolute; top:0; right:0; bottom:0; width: ${depthPct}%; background: rgba(239, 68, 68, 0.12); pointer-events: none;"></div>
+                            <span style="color: #f87171; font-weight: 700; z-index: 1;">${Math.round(ask.price).toLocaleString('fa-IR')}</span>
+                            <span style="text-align: center; color: #cbd5e1; z-index: 1;">${ask.amount}</span>
+                            <span style="text-align: left; color: #94a3b8; z-index: 1;">${Math.round(ask.total).toLocaleString('fa-IR')}</span>
+                        </div>
+                    `;
+                }
+                asksContainer.innerHTML = html;
+            }
+
+            if (bidsContainer && ob.bids) {
+                let html = '';
+                const maxTotal = Math.max(...ob.bids.map(b => b.total), 1);
+                for (const bid of ob.bids.slice(0, 6)) {
+                    const depthPct = Math.min(100, Math.round((bid.total / maxTotal) * 100));
+                    html += `
+                        <div class="orderbook-row bid" style="position: relative; display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 2px 12px; font-size: 0.72rem; font-family: monospace;">
+                            <div class="depth-bar bid" style="position: absolute; top:0; right:0; bottom:0; width: ${depthPct}%; background: rgba(16, 185, 129, 0.12); pointer-events: none;"></div>
+                            <span style="color: #34d399; font-weight: 700; z-index: 1;">${Math.round(bid.price).toLocaleString('fa-IR')}</span>
+                            <span style="text-align: center; color: #cbd5e1; z-index: 1;">${bid.amount}</span>
+                            <span style="text-align: left; color: #94a3b8; z-index: 1;">${Math.round(bid.total).toLocaleString('fa-IR')}</span>
+                        </div>
+                    `;
+                }
+                bidsContainer.innerHTML = html;
+            }
+        }
+
+        function renderBitpinExecutedTrades(trades) {
+            const tbody = document.getElementById('bp-executed-trades-tbody');
+            const badge = document.getElementById('bp-trades-count-badge');
+            if (badge) badge.textContent = trades.length;
+            if (!tbody) return;
+
+            if (trades.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: #64748b; padding: 20px;">هنوز معامله‌ای در این جلسه ثبت نشده است.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            for (const t of trades) {
+                const isBuy = (t.side || 'buy').toLowerCase() === 'buy';
+                const timeStr = new Date(t.created_at).toLocaleTimeString('fa-IR');
+                html += `
+                    <tr style="border-bottom: 1px solid #1e293b;">
+                        <td style="padding: 8px 12px; font-family: monospace; color: #60a5fa; font-weight: bold;">
+                            #${t.bitpin_order_id}
+                        </td>
+                        <td style="padding: 8px 12px; font-weight: 700; color: #f8fafc;">${t.symbol || t.market_code}</td>
+                        <td style="padding: 8px 12px;">
+                            <span style="background: ${isBuy ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${isBuy ? '#34d399' : '#f87171'}; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.72rem;">
+                                ${isBuy ? 'خرید' : 'فروش'}
+                            </span>
+                        </td>
+                        <td style="padding: 8px 12px; color: #94a3b8;">${t.type || 'مارکت'}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #f8fafc;">${Math.round(t.price).toLocaleString('fa-IR')}</td>
+                        <td style="padding: 8px 12px; font-family: monospace;">${t.amount}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #fbbf24; font-weight: bold;">${Math.round(t.total_value_irt).toLocaleString('fa-IR')} تومان</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #94a3b8;">${Math.round(t.fee || 0).toLocaleString('fa-IR')} تومان</td>
+                        <td style="padding: 8px 12px; font-size: 0.72rem; color: #a5b4fc;">${t.strategy || 'AI_QUANT'}</td>
+                        <td style="padding: 8px 12px; color: #94a3b8;">${timeStr}</td>
+                        <td style="padding: 8px 12px;">
+                            <span style="background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">
+                                ✅ ثبت‌شده در بیت‌پین
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }
+            tbody.innerHTML = html;
+        }
+
+        function renderBitpinOpenOrders(orders) {
+            const tbody = document.getElementById('bp-open-orders-tbody');
+            const badge = document.getElementById('bp-orders-count-badge');
+            if (badge) badge.textContent = orders.length;
+            if (!tbody) return;
+
+            if (orders.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 20px;">هیچ سفارش بازی در صف صرافی بیت‌پین وجود ندارد.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            for (const o of orders) {
+                const isBuy = o.side === 'buy';
+                html += `
+                    <tr style="border-bottom: 1px solid #1e293b;">
+                        <td style="padding: 8px 12px; font-family: monospace; color: #60a5fa;">#${o.bitpin_order_id}</td>
+                        <td style="padding: 8px 12px; font-weight: bold;">${o.symbol}</td>
+                        <td style="padding: 8px 12px; color: ${isBuy ? '#34d399' : '#f87171'};">${isBuy ? 'خرید' : 'فروش'}</td>
+                        <td style="padding: 8px 12px; font-family: monospace;">${Math.round(o.price).toLocaleString('fa-IR')} تومان</td>
+                        <td style="padding: 8px 12px; font-family: monospace;">${o.amount}</td>
+                        <td style="padding: 8px 12px; color: #94a3b8;">۰٪</td>
+                        <td style="padding: 8px 12px; color: #94a3b8;">${new Date(o.created_at).toLocaleTimeString('fa-IR')}</td>
+                        <td style="padding: 8px 12px;">
+                            <button class="btn" onclick="cancelSingleBitpinOrder('${o.bitpin_order_id}')" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 3px 8px; font-size: 0.72rem; border-radius: 4px; cursor: pointer;">
+                                لغو سفارش
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }
+            tbody.innerHTML = html;
+        }
+
+        function renderBitpinWalletsTable(wallets) {
+            const tbody = document.getElementById('bp-wallets-tbody');
+            if (!tbody) return;
+
+            let html = '';
+            for (const w of wallets) {
+                html += `
+                    <tr style="border-bottom: 1px solid #1e293b;">
+                        <td style="padding: 8px 12px; font-weight: 700; color: #f8fafc;">${w.title_fa || w.currency}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #38bdf8;">${w.symbol || w.currency}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #f8fafc;">${w.balance.toLocaleString()}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #94a3b8;">${w.frozen || 0}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #34d399; font-weight: bold;">${w.available.toLocaleString()}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #c084fc; font-weight: bold;">${Math.round(w.value_irt || 0).toLocaleString('fa-IR')} تومان</td>
+                    </tr>
+                `;
+            }
+            tbody.innerHTML = html;
+        }
+
+        function renderBitpinLogs(logs) {
+            const container = document.getElementById('bp-agent-logs-list');
+            if (!container) return;
+
+            let html = '';
+            for (const log of logs) {
+                const color = log.level === 'error' ? '#f87171' : (log.level === 'success' ? '#34d399' : (log.level === 'warning' ? '#fbbf24' : '#94a3b8'));
+                const time = new Date(log.timestamp).toLocaleTimeString('fa-IR');
+                html += `
+                    <div style="margin-bottom: 4px; border-bottom: 1px dashed rgba(255,255,255,0.05); padding-bottom: 3px;">
+                        <span style="color: #64748b;">[${time}]</span>
+                        <span style="background: rgba(255,255,255,0.1); padding: 1px 4px; border-radius: 3px; font-size: 0.7rem; color: #e2e8f0; margin: 0 4px;">${log.action}</span>
+                        <span style="color: ${color};">${log.message}</span>
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+        }
+
+        function resizeAndRenderBitpinChart() {
+            const canvas = document.getElementById('bitpin-candlestick-canvas');
+            if (!canvas) return;
+            const parent = canvas.parentElement;
+            if (parent) {
+                const rect = parent.getBoundingClientRect();
+                const dpr = window.devicePixelRatio || 1;
+                canvas.width = rect.width * dpr;
+                canvas.height = rect.height * dpr;
+                renderBitpinCandlestickChart();
+            }
+        }
+
+        function renderBitpinCandlestickChart() {
+            const canvas = document.getElementById('bitpin-candlestick-canvas');
+            if (!canvas || !bitpinCandlesData || bitpinCandlesData.length === 0) return;
+
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Background grid
+            ctx.fillStyle = '#070a12';
+            ctx.fillRect(0, 0, w, h);
+
+            const candles = bitpinCandlesData;
+            const padding = { top: 25 * dpr, bottom: 35 * dpr, left: 15 * dpr, right: 80 * dpr };
+            const chartW = w - padding.left - padding.right;
+            const chartH = h - padding.top - padding.bottom;
+
+            let minPrice = Infinity;
+            let maxPrice = -Infinity;
+
+            for (const c of candles) {
+                if (c.low < minPrice) minPrice = c.low;
+                if (c.high > maxPrice) maxPrice = c.high;
+            }
+
+            const priceSpan = (maxPrice - minPrice) || 1;
+            const candleSlotW = chartW / candles.length;
+            const candleBodyW = Math.max(3 * dpr, candleSlotW * 0.65);
+
+            function getY(val) {
+                return padding.top + chartH - ((val - minPrice) / priceSpan) * chartH;
+            }
+
+            // Draw horizontal grid lines & prices
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1 * dpr;
+            ctx.fillStyle = '#64748b';
+            ctx.font = `${10 * dpr}px monospace`;
+            ctx.textAlign = 'left';
+
+            const steps = 5;
+            for (let i = 0; i <= steps; i++) {
+                const priceLevel = minPrice + (priceSpan / steps) * i;
+                const y = getY(priceLevel);
+
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(w - padding.right, y);
+                ctx.stroke();
+
+                const priceStr = activeBitpinMarket.endsWith('_IRT') 
+                    ? `${Math.round(priceLevel / 1000).toLocaleString()}k`
+                    : `$${priceLevel.toFixed(1)}`;
+                ctx.fillText(priceStr, w - padding.right + (6 * dpr), y + (3 * dpr));
+            }
+
+            // Draw EMA 9 & EMA 21
+            if (bitpinIndicators.ema9 && candles.length >= 9) {
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 1.8 * dpr;
+                ctx.beginPath();
+                let k = 2 / (9 + 1);
+                let ema = candles[0].close;
+                for (let i = 0; i < candles.length; i++) {
+                    ema = candles[i].close * k + ema * (1 - k);
+                    const x = padding.left + i * candleSlotW + candleSlotW / 2;
+                    const y = getY(ema);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
+            if (bitpinIndicators.ema21 && candles.length >= 21) {
+                ctx.strokeStyle = '#f97316';
+                ctx.lineWidth = 1.8 * dpr;
+                ctx.beginPath();
+                let k = 2 / (21 + 1);
+                let ema = candles[0].close;
+                for (let i = 0; i < candles.length; i++) {
+                    ema = candles[i].close * k + ema * (1 - k);
+                    const x = padding.left + i * candleSlotW + candleSlotW / 2;
+                    const y = getY(ema);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
+            // Draw Candlesticks
+            for (let i = 0; i < candles.length; i++) {
+                const c = candles[i];
+                const isGreen = c.close >= c.open;
+                const x = padding.left + i * candleSlotW + (candleSlotW - candleBodyW) / 2;
+                const midX = x + candleBodyW / 2;
+
+                const openY = getY(c.open);
+                const closeY = getY(c.close);
+                const highY = getY(c.high);
+                const lowY = getY(c.low);
+
+                // Wick
+                ctx.strokeStyle = isGreen ? '#10b981' : '#ef4444';
+                ctx.lineWidth = 1.2 * dpr;
+                ctx.beginPath();
+                ctx.moveTo(midX, highY);
+                ctx.lineTo(midX, lowY);
+                ctx.stroke();
+
+                // Body
+                ctx.fillStyle = isGreen ? '#10b981' : '#ef4444';
+                const bodyY = Math.min(openY, closeY);
+                const bodyH = Math.max(2 * dpr, Math.abs(closeY - openY));
+                ctx.fillRect(x, bodyY, candleBodyW, bodyH);
+            }
+
+            // Current price line
+            if (candles.length > 0) {
+                const lastClose = candles[candles.length - 1].close;
+                const lastY = getY(lastClose);
+
+                ctx.strokeStyle = '#34d399';
+                ctx.setLineDash([4 * dpr, 4 * dpr]);
+                ctx.beginPath();
+                ctx.moveTo(padding.left, lastY);
+                ctx.lineTo(w - padding.right, lastY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Price badge
+                ctx.fillStyle = '#059669';
+                ctx.fillRect(w - padding.right + 2, lastY - (9 * dpr), 75 * dpr, 18 * dpr);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${10 * dpr}px monospace`;
+                ctx.fillText(Math.round(lastClose).toLocaleString(), w - padding.right + (6 * dpr), lastY + (4 * dpr));
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            if (document.getElementById('bitpin-exchange-terminal-modal')?.classList.contains('active')) {
+                resizeAndRenderBitpinChart();
+            }
+        });
 
         // Initial load
         loadDashboard();

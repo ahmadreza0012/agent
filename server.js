@@ -7,6 +7,7 @@ import { GoogleGenAI } from '@google/genai';
 import { WebSocketServer } from 'ws';
 import { executeCapabilityDomain, CAPABILITY_HANDLERS } from './capability_engine.js';
 import { paperRouter, buildTerminalBundle } from './paper_exchange_engine.js';
+import { bitpinRouter } from './bitpin_live_engine.js';
 import { mcpRouter } from './mcp_server.js';
 import {
   getDatabaseStats,
@@ -1290,6 +1291,10 @@ app.post('/api/v1/api-keys/ping-test', async (req, res) => {
 // Mount Real-time Paper Trading & Virtual Exchange API
 app.use('/api/v1/paper', paperRouter);
 app.use('/api/paper', paperRouter);
+
+// Mount Live Bitpin Real Exchange API
+app.use('/api/v1/bitpin', bitpinRouter);
+app.use('/api/bitpin', bitpinRouter);
 
 // Mount Model Context Protocol (MCP) Router
 app.use('/api/v1/mcp', mcpRouter);
