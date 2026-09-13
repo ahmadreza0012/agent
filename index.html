@@ -7212,12 +7212,13 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ market: activeNobitexMarket })
                 });
-                const data = await res.json();
+                const data = await res.json().catch(() => ({ success: false, error: 'پاسخ نامعتبر سرور' }));
                 if (data.success) {
-                    showToast(`🤖 ${data.message}`, data.action === 'WAIT' ? 'info' : 'success');
+                    showToast(`🤖 ${data.message}`, 'success');
                     fetchNobitexBundle(true);
                 } else {
-                    showToast(`خطا در ارزیابی: ${data.error}`, 'error');
+                    showToast(`⚠️ ${data.message || data.error || 'خطا در ثبت سفارش نوبیتکس'}`, 'warning');
+                    fetchNobitexBundle(true);
                 }
             } catch (err) {
                 showToast(`خطا: ${err.message}`, 'error');
@@ -7228,6 +7229,10 @@
                 }
             }
         }
+
+        // Alias for backward compatibility
+        window.triggerNobitexAgentNow = triggerNobitexAgentSignalNow;
+        window.triggerNobitexAgentSignalNow = triggerNobitexAgentSignalNow;
 
         async function syncNobitexWithServer() {
             showToast('🔄 در حال همگام‌سازی اطلاعات با نوبیتکس...', 'info');

@@ -573,11 +573,7 @@ ${customQuery ? `- درخواست کاربر: ${customQuery}` : ''}
 // -------------------------------------------------------------
 
 // Serve dashboard HTML at / and /index.html
-app.get('/', (req, res) => {
-  const staticIndex = path.join(__dirname, 'static', 'index.html');
-  if (fs.existsSync(staticIndex)) {
-    return res.sendFile(staticIndex);
-  }
+app.get(['/', '/index.html'], (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
