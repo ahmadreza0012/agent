@@ -1,0 +1,26 @@
+{
+  "config": {
+    "accountNumber": "91447058",
+    "serverName": "LiteFinance-MT5-Demo",
+    "broker": "LiteFinance Global LLC",
+    "leverage": "1000",
+    "isConnected": true,
+    "autoTradingEnabled": true,
+    "symbol": "ETHUSD_cl",
+    "cloudEngine": "metaapi"
+  },
+  "account": {
+    "login": "91447058",
+    "server": "LiteFinance-MT5-Demo",
+    "broker": "LiteFinance Global LLC",
+    "balance": 1500,
+    "equity": 1500,
+    "margin": 0,
+    "freeMargin": 1500,
+    "marginLevel": 0,
+    "leverage": 1000,
+    "currency": "USD"
+  },
+  "positions": [],
+  "history": []
+}

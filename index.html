@@ -791,6 +791,9 @@
             <h1>🎯 داشبورد قابلیت‌های سیستم ترید الگوریتمی</h1>
             <p class="subtitle">نظارت بلادرنگ و اجرای عملیاتی تمام ۶۰ قابلیت با هوش مصنوعی و مدل‌های کمی</p>
             <div style="margin-top: 22px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                <button class="btn" id="btn-open-mt5-terminal" onclick="openMT5TerminalModal()" style="background: linear-gradient(135deg, #059669, #10b981, #047857); color: #fff; font-size: 1.05rem; padding: 13px 26px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; box-shadow: 0 4px 20px rgba(16, 185, 129, 0.45); display: inline-flex; align-items: center; gap: 8px; animation: pulseGlow 2.5s infinite;">
+                    📈 ⚡ ترمینال معاملات اهرمی متاتریدر ۵ (MetaTrader 5 / MT5)
+                </button>
                 <button class="btn" id="btn-open-nobitex-terminal" onclick="openNobitexTerminalModal()" style="background: linear-gradient(135deg, #1d4ed8, #2563eb, #0284c7); color: #fff; font-size: 1.05rem; padding: 13px 26px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; box-shadow: 0 4px 20px rgba(37, 99, 235, 0.45); display: inline-flex; align-items: center; gap: 8px; animation: pulseGlow 2.5s infinite;">
                     💎 ⚡ ترمینال معاملات واقعی نوبیتکس (Nobitex Live Exchange)
                 </button>
@@ -859,12 +862,21 @@
                 </div>
             </div>
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <!-- Live MT5 Balance Badge -->
+                <div onclick="openMT5TerminalModal()" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px; padding: 6px 14px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.2s;" title="کلیک کنید تا ترمینال MT5 باز شود">
+                    <span style="font-size: 1.1rem;">📈</span>
+                    <div>
+                        <div style="font-size: 0.68rem; color: #94a3b8;">موجودی زنده متاتریدر ۵ (#91447058)</div>
+                        <div id="topbar-mt5-balance" style="font-size: 0.95rem; font-weight: 800; color: #34d399; font-family: monospace; direction: ltr;">$100.00</div>
+                    </div>
+                </div>
+
                 <div class="observer-status-badge">
                     <span>👁️</span>
-                    <span>وضعیت: مشاهده‌گر فعال • معاملات توسط ایجنت با $10,000 فرضی</span>
+                    <span>وضعیت: مشاهده‌گر فعال • معاملات خودکار با متاتریدر ۵ و صرافی</span>
                 </div>
-                <button class="btn" onclick="openExchangeTerminalModal()" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-size: 0.86rem; padding: 8px 18px; border-radius: 6px; font-weight: bold; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
-                    ورود به صفحه صرافی ↗
+                <button class="btn" onclick="openMT5TerminalModal()" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-size: 0.86rem; padding: 8px 18px; border-radius: 6px; font-weight: bold; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                    ورود به متاتریدر ۵ ↗
                 </button>
             </div>
         </div>
@@ -1594,6 +1606,10 @@
                         <button class="btn" onclick="openNobitexApiKeyModal()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; font-size: 0.76rem; padding: 5px 12px; border-radius: 6px; font-weight: 700; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;" title="تنظیم کلیدهای API نوبیتکس">
                             🔑 کلید API نوبیتکس
                         </button>
+
+                        <button class="btn" onclick="openMT5ApiKeyModal()" style="background: linear-gradient(135deg, #059669, #10b981); color: #fff; font-size: 0.76rem; padding: 5px 12px; border-radius: 6px; font-weight: 700; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;" title="تنظیم و اتصال حساب متاتریدر ۵ (MetaTrader 5 / MT5)">
+                            📈 اتصال MetaTrader 5
+                        </button>
                     </div>
 
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -2067,6 +2083,25 @@
                 <input type="password" id="input-nobitex-secret-key" placeholder="مثال: RMIgmjeRvFzAF6ueWHcnbH0WnW96Vo5ToLyYZ4SaUXs=" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 9px 12px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
             </div>
 
+            <!-- Advanced Proxy & Gateway Accordion -->
+            <details style="margin-bottom: 15px; background: #0b1120; border: 1px solid #1e293b; border-radius: 8px; padding: 10px 14px;">
+                <summary style="color: #38bdf8; font-size: 0.82rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none;">
+                    🌐 تنظیمات پروکسی / پراکسی سرور ایران (برای اتصال از سرورهای کلود)
+                </summary>
+                <div style="margin-top: 10px; border-top: 1px dashed #1e293b; padding-top: 10px;">
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; color: #94a3b8; font-size: 0.74rem; margin-bottom: 4px;">آدرس پروکسی اختصاصی ایران (HTTP/HTTPS/SOCKS5):</label>
+                        <input type="text" id="input-nobitex-proxy" placeholder="مثال: http://user:pass@185.x.x.x:8080 یا socks5://185.x.x.x:1080" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 7px 10px; color: #38bdf8; font-family: monospace; font-size: 0.8rem;">
+                        <span style="font-size: 0.7rem; color: #64748b;">در صورت تنظیم، تمام درخواست‌های نوبیتکس از طریق این پروکسی ارسال شده و فایروال آروان را دور می‌زند.</span>
+                    </div>
+
+                    <div>
+                        <label style="display: block; color: #94a3b8; font-size: 0.74rem; margin-bottom: 4px;">یا آدرس گیت‌وی/ریورس پروکسی اختصاصی (اختیاری):</label>
+                        <input type="text" id="input-nobitex-gateway" placeholder="مثال: https://my-vps-iran.com/nobitex-api" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 7px 10px; color: #38bdf8; font-family: monospace; font-size: 0.8rem;">
+                    </div>
+                </div>
+            </details>
+
             <div style="background: rgba(37, 99, 235, 0.1); border: 1px solid rgba(37, 99, 235, 0.3); border-radius: 6px; padding: 10px 12px; font-size: 0.74rem; color: #93c5fd; margin-bottom: 18px; line-height: 1.5;">
                 🔒 کلیدهای شما به صورت امن ذخیره شده و صرفاً برای استعلام موجودی و ارسال سفارشات در صرافی نوبیتکس استفاده می‌شوند.
             </div>
@@ -2078,6 +2113,285 @@
                 <button class="btn" id="btn-save-nobitex-keys" onclick="saveNobitexApiKeysUI()" style="background: linear-gradient(135deg, #1d4ed8, #2563eb); color: #fff; font-weight: 700; padding: 8px 20px; border-radius: 6px; border: none; font-size: 0.85rem; cursor: pointer;">
                     ⚡ ذخیره و تست اتصال به نوبیتکس
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for MetaTrader 5 (MT5) Setup -->
+    <div class="modal-overlay" id="mt5-api-modal" style="padding: 10px; z-index: 10001; display: none;">
+        <div style="background: #0f172a; border: 1px solid #10b981; border-radius: 12px; max-width: 540px; width: 100%; padding: 22px; box-shadow: 0 0 40px rgba(16, 185, 129, 0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #1e293b; padding-bottom: 10px;">
+                <h3 style="color: #34d399; margin: 0; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+                    📈 تنظیم و اتصال حساب MetaTrader 5 (MT5)
+                </h3>
+                <button onclick="closeMT5ApiKeyModal()" style="background: transparent; border: none; color: #94a3b8; font-size: 1.4rem; cursor: pointer;">&times;</button>
+            </div>
+
+            <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.6; margin-bottom: 15px;">
+                برای اتصال ربات هوش مصنوعی به حساب **دمو یا واقعی متاتریدر ۵ (MT5)**، اطلاعات حساب لوریج‌دار خود را وارد نمایید.
+            </p>
+
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #94a3b8; font-size: 0.78rem; margin-bottom: 5px; font-weight: 600;">شماره حساب متاتریدر (Account / Login ID):</label>
+                <input type="text" id="input-mt5-account" value="91447058" placeholder="مثال: 91447058" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 9px 12px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #94a3b8; font-size: 0.78rem; margin-bottom: 5px; font-weight: 600;">رمز عبور حساب (Trading Password):</label>
+                <input type="password" id="input-mt5-password" placeholder="رمز عبور حساب متاتریدر لایت‌فایننس" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 9px 12px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                <div style="flex: 1;">
+                    <label style="display: block; color: #94a3b8; font-size: 0.78rem; margin-bottom: 5px; font-weight: 600;">موجودی حساب (Balance $):</label>
+                    <input type="number" id="input-mt5-balance" placeholder="مثلاً: 1000" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 9px 12px; color: #38bdf8; font-family: monospace; font-size: 0.85rem; font-weight: 700;">
+                </div>
+                <div style="width: 130px;">
+                    <label style="display: block; color: #94a3b8; font-size: 0.78rem; margin-bottom: 5px; font-weight: 600;">اهرم حساب (Leverage):</label>
+                    <select id="input-mt5-leverage" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 8px; color: #34d399; font-size: 0.8rem;">
+                        <option value="1:50">1:50</option>
+                        <option value="1:100" selected>1:100</option>
+                        <option value="1:200">1:200</option>
+                        <option value="1:500">1:500</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #94a3b8; font-size: 0.78rem; margin-bottom: 5px; font-weight: 600;">توکن ابری MetaApi (اختیاری جهت اتصال مستقیم سرور به سرور بدون نرم‌افزار):</label>
+                <input type="password" id="input-mt5-token" placeholder="توکن رایگان از metaapi.cloud" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; color: #a78bfa; font-family: monospace; font-size: 0.8rem;">
+            </div>
+
+            <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 10px 12px; font-size: 0.74rem; color: #6ee7b7; margin-bottom: 18px; line-height: 1.5;">
+                🌐 <strong>اتصال مستقیم ابری (Cloud Gateway):</strong> با وارد کردن شماره حساب و پسورد، سرور مستقیماً به لایت‌فایننس متصل شده و تمامی پوزیشن‌های هوش مصنوعی را روی حساب شما ثبت و کنترل می‌کند.
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn" onclick="closeMT5ApiKeyModal()" style="background: #1e293b; color: #cbd5e1; padding: 8px 16px; border-radius: 6px; border: 1px solid #475569; font-size: 0.85rem; cursor: pointer;">
+                    انصراف
+                </button>
+                <button class="btn" id="btn-save-mt5-keys" onclick="saveMT5AccountUI()" style="background: linear-gradient(135deg, #059669, #10b981); color: #fff; font-weight: 700; padding: 8px 20px; border-radius: 6px; border: none; font-size: 0.85rem; cursor: pointer;">
+                    ⚡ اتصال و تایید حساب MT5
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MetaTrader 5 (MT5) Live Exchange Terminal & Management Dashboard Modal -->
+    <div class="modal-overlay" id="mt5-exchange-terminal-modal" style="padding: 10px; z-index: 9999; display: none;">
+        <div class="exchange-modal-dialog" style="border: 1px solid #10b981; box-shadow: 0 0 35px rgba(16, 185, 129, 0.35);">
+            <!-- Top Bar -->
+            <div class="exchange-topbar" style="background: linear-gradient(90deg, #06281e, #0f172a); border-bottom: 1px solid rgba(16, 185, 129, 0.4); padding: 10px 16px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 1.6rem; background: rgba(16, 185, 129, 0.2); padding: 4px 8px; border-radius: 8px; border: 1px solid #10b981;">📈</span>
+                        <div>
+                            <div style="font-weight: 800; font-size: 1.08rem; color: #34d399; display: flex; align-items: center; gap: 6px;">
+                                ترمینال معاملات اهرمی متاتریدر ۵ (MetaTrader 5 Live Terminal)
+                                <span style="font-size: 0.7rem; background: #059669; color: #fff; padding: 2px 7px; border-radius: 4px; font-weight: 800;">MT5 OFFICIAL BRIDGE</span>
+                            </div>
+                            <div style="font-size: 0.74rem; color: #94a3b8;">اتصال بلادرنگ به سرور متاتریدر • پوزیشن‌های اهرمی (CFD)، معاملات دوطرفه LONG/SHORT و اجرای ربات EA</div>
+                        </div>
+                    </div>
+
+                    <!-- Market Symbol Selector -->
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;" id="mt5-pair-buttons">
+                        <button class="ticker-bar-item active" onclick="switchMT5Symbol('ETHUSD_cl')" id="mt5-btn-ETHUSD_cl">
+                            <strong>ETHUSD_cl</strong>
+                            <span id="mt5-top-price-ETHUSD_cl" style="font-family: monospace;">$2,502.76</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchMT5Symbol('BTCUSD_cl')" id="mt5-btn-BTCUSD_cl">
+                            <strong>BTCUSD_cl</strong>
+                            <span id="mt5-top-price-BTCUSD_cl" style="font-family: monospace;">$60,420</span>
+                        </button>
+                        <button class="ticker-bar-item" onclick="switchMT5Symbol('XAUUSD_cl')" id="mt5-btn-XAUUSD_cl">
+                            <strong>XAUUSD_cl (طلا)</strong>
+                            <span id="mt5-top-price-XAUUSD_cl" style="font-family: monospace;">$2,585</span>
+                        </button>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="background: rgba(0,0,0,0.4); border: 1px solid #334155; border-radius: 6px; padding: 3px; display: flex; gap: 4px;">
+                            <button id="mt5-viewtab-native" class="btn" onclick="switchMT5TerminalView('native')" style="background: #10b981; color: #fff; font-size: 0.74rem; padding: 4px 10px; border-radius: 4px; font-weight: 700; border: none; cursor: pointer;">
+                                📊 پنل تحلیلی ربات
+                            </button>
+                            <button id="mt5-viewtab-webterminal" class="btn" onclick="switchMT5TerminalView('webterminal')" style="background: transparent; color: #94a3b8; font-size: 0.74rem; padding: 4px 10px; border-radius: 4px; font-weight: 700; border: none; cursor: pointer;">
+                                🌐 وب‌ترمینال رسمی لایت‌فایننس
+                            </button>
+                        </div>
+                        <button id="btn-mt5-desktop-sync" class="btn" onclick="triggerManualDesktopSync()" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-size: 0.76rem; padding: 6px 14px; border-radius: 6px; font-weight: 800; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(16,185,129,0.3);">
+                            <span id="mt5-sync-indicator-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #fff; display: inline-block;"></span>
+                            <span id="mt5-sync-btn-label">⚡ سینک فوری با متاتریدر سیستم</span>
+                        </button>
+                        <button class="btn" onclick="openMT5ApiKeyModal()" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #34d399; font-size: 0.76rem; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer;">
+                            ⚙️ تنظیمات حساب MT5
+                        </button>
+                        <button onclick="closeMT5TerminalModal()" style="background: transparent; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer; padding: 0 5px;">&times;</button>
+                    </div>
+                </div>
+
+                <!-- Account HUD Banner -->
+                <div style="display: flex; gap: 12px; margin-top: 10px; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 8px 12px; font-size: 0.8rem; justify-content: space-between; flex-wrap: wrap; border: 1px solid rgba(16, 185, 129, 0.2);">
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                        <div><span style="color: #94a3b8;">حساب:</span> <strong id="mt5-hud-account" style="color: #34d399; font-family: monospace;">91447058</strong></div>
+                        <div><span style="color: #94a3b8;">سرور:</span> <strong id="mt5-hud-server" style="color: #f8fafc;">LiteFinance-MT5-Demo</strong></div>
+                        <div><span style="color: #94a3b8;">اهرم:</span> <strong id="mt5-hud-leverage" style="color: #fbbf24;">1:100</strong></div>
+                        <div><span style="color: #94a3b8;">موجودی (Balance):</span> <strong id="mt5-hud-balance" style="color: #38bdf8; font-family: monospace;">$0.00</strong></div>
+                        <div><span style="color: #94a3b8;">ارزش کل (Equity):</span> <strong id="mt5-hud-equity" style="color: #a78bfa; font-family: monospace;">$0.00</strong></div>
+                        <div><span style="color: #94a3b8;">مارجین آزاد:</span> <strong id="mt5-hud-freemargin" style="color: #34d399; font-family: monospace;">$0.00</strong></div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+                        <span style="color: #34d399; font-weight: 700; font-size: 0.75rem;">CONNECTED / زنده</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Terminal Main Body -->
+            <div class="exchange-body" style="display: grid; grid-template-columns: 1fr 340px; gap: 12px; padding: 14px; background: #070a12; min-height: 520px;">
+                <!-- Left Main Column: Positions & History -->
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <!-- Active Positions Table -->
+                    <div style="background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; flex: 1;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #1e293b; padding-bottom: 6px;">
+                            <span style="color: #34d399; font-weight: 700; font-size: 0.88rem; display: flex; align-items: center; gap: 6px;">
+                                📊 پوزیشن‌های باز اهرمی (Open Positions)
+                            </span>
+                            <span style="font-size: 0.72rem; color: #94a3b8;">به‌روزرسانی بلادرنگ سود/زیان</span>
+                        </div>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem; text-align: center;">
+                                <thead>
+                                    <tr style="color: #94a3b8; border-bottom: 1px solid #334155; height: 30px;">
+                                        <th>Ticket</th>
+                                        <th>نماد</th>
+                                        <th>نوع</th>
+                                        <th>حجم (Lot)</th>
+                                        <th>قیمت ورود</th>
+                                        <th>قیمت فعلی</th>
+                                        <th>SL</th>
+                                        <th>TP</th>
+                                        <th>سود/زیان ($)</th>
+                                        <th>عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mt5-positions-tbody">
+                                    <tr style="border-bottom: 1px solid #1e293b; height: 36px;">
+                                        <td style="font-family: monospace; color: #94a3b8;">#9812401</td>
+                                        <td style="font-weight: 700; color: #f8fafc;">BTCUSD</td>
+                                        <td><span style="background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 2px 6px; border-radius: 4px; font-weight: 700;">BUY</span></td>
+                                        <td style="font-family: monospace;">0.10</td>
+                                        <td style="font-family: monospace;">$64,250</td>
+                                        <td style="font-family: monospace; color: #38bdf8;">$66,780</td>
+                                        <td style="color: #f87171; font-family: monospace;">$62,500</td>
+                                        <td style="color: #34d399; font-family: monospace;">$68,500</td>
+                                        <td style="font-family: monospace; font-weight: 700; color: #34d399;">+$253.00</td>
+                                        <td>
+                                            <button onclick="closeMT5PositionUI(9812401)" style="background: #ef4444; color: #fff; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; font-weight: 700;">بستن پوزیشن</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Trade History Table -->
+                    <div style="background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; height: 180px; overflow-y: auto;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #1e293b; padding-bottom: 6px;">
+                            <span style="color: #60a5fa; font-weight: 700; font-size: 0.82rem;">📜 تاریخچه معاملات بسته شده (History)</span>
+                        </div>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: center;">
+                            <thead>
+                                <tr style="color: #94a3b8; border-bottom: 1px solid #334155; height: 26px;">
+                                    <th>Ticket</th>
+                                    <th>نماد</th>
+                                    <th>نوع</th>
+                                    <th>حجم</th>
+                                    <th>قیمت ورود</th>
+                                    <th>قیمت خروج</th>
+                                    <th>سود نهایی</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mt5-history-tbody">
+                                <tr style="border-bottom: 1px solid #1e293b; height: 30px;">
+                                    <td style="font-family: monospace; color: #94a3b8;">#9811050</td>
+                                    <td>BTCUSD</td>
+                                    <td><span style="color: #f87171; font-weight: 700;">SELL</span></td>
+                                    <td>0.05</td>
+                                    <td>$65,100</td>
+                                    <td>$63,900</td>
+                                    <td style="color: #34d399; font-weight: 700;">+$60.00</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Right Column: Order Execution Panel -->
+                <div style="background: #0f172a; border: 1px solid #10b981; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px;">
+                    <div style="font-weight: 800; color: #34d399; font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
+                        ⚡ ثبت سفارش اهرمی MT5
+                    </div>
+
+                    <!-- Buy / Sell Mode Tabs -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <button id="mt5-tab-buy" onclick="setMT5OrderSide('BUY')" style="background: #059669; color: #fff; font-weight: 800; border: none; padding: 9px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;">
+                            🟢 خرید (BUY / LONG)
+                        </button>
+                        <button id="mt5-tab-sell" onclick="setMT5OrderSide('SELL')" style="background: #1e293b; color: #cbd5e1; font-weight: 800; border: 1px solid #475569; padding: 9px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;">
+                            🔴 فروش (SELL / SHORT)
+                        </button>
+                    </div>
+
+                    <!-- Volume / Lot Size -->
+                    <div>
+                        <label style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 4px; display: block;">حجم معامله (Lot Size):</label>
+                        <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                            <button onclick="setMT5Lot(0.01)" class="btn" style="flex: 1; padding: 4px; font-size: 0.72rem; background: #1e293b; color: #cbd5e1; border: 1px solid #334155; border-radius: 4px;">0.01</button>
+                            <button onclick="setMT5Lot(0.05)" class="btn" style="flex: 1; padding: 4px; font-size: 0.72rem; background: #1e293b; color: #cbd5e1; border: 1px solid #334155; border-radius: 4px;">0.05</button>
+                            <button onclick="setMT5Lot(0.10)" class="btn" style="flex: 1; padding: 4px; font-size: 0.72rem; background: #1e293b; color: #cbd5e1; border: 1px solid #334155; border-radius: 4px;">0.10</button>
+                            <button onclick="setMT5Lot(0.50)" class="btn" style="flex: 1; padding: 4px; font-size: 0.72rem; background: #1e293b; color: #cbd5e1; border: 1px solid #334155; border-radius: 4px;">0.50</button>
+                        </div>
+                        <input type="number" id="mt5-order-volume" value="0.05" step="0.01" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 8px 10px; color: #f8fafc; font-family: monospace; font-size: 0.85rem;">
+                    </div>
+
+                    <!-- Stop Loss & Take Profit -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div>
+                            <label style="font-size: 0.72rem; color: #f87171; margin-bottom: 3px; display: block;">حد ضرر (SL Price):</label>
+                            <input type="number" id="mt5-order-sl" placeholder="اختیاری" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-family: monospace; font-size: 0.8rem;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.72rem; color: #34d399; margin-bottom: 3px; display: block;">حد سود (TP Price):</label>
+                            <input type="number" id="mt5-order-tp" placeholder="اختیاری" style="width: 100%; background: #070a12; border: 1px solid #334155; border-radius: 6px; padding: 7px 10px; color: #f8fafc; font-family: monospace; font-size: 0.8rem;">
+                        </div>
+                    </div>
+
+                    <!-- Submit Order Button -->
+                    <button class="btn" id="mt5-btn-submit-order" onclick="executeMT5ManualOrderUI()" style="background: linear-gradient(135deg, #059669, #10b981); color: #fff; font-weight: 800; padding: 12px; border-radius: 6px; border: none; font-size: 0.92rem; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); margin-top: auto;">
+                        🚀 <span id="mt5-btn-submit-text">ارسال سفارش خرید BUY در MT5</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Embedded Official WebTerminal Container -->
+            <div id="mt5-webterminal-container" style="display: none; height: 600px; width: 100%; background: #070a12; border-top: 1px solid #1e293b; position: relative;">
+                <div style="padding: 10px 14px; background: #0f172a; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div style="font-size: 0.8rem; color: #cbd5e1; display: flex; align-items: center; gap: 8px;">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+                        <strong>وب‌ترمینال رسمی LiteFinance / MetaTrader 5</strong>
+                        <span style="color: #94a3b8; font-size: 0.74rem;">(مشاهده و مدیریت پوزیشن‌ها با لاگین رسمی بروکر بدون نیاز به هیچ ابزار اضافی)</span>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <a href="https://my.litefinance.org/trading" target="_blank" class="btn" style="background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; font-size: 0.75rem; padding: 5px 10px; border-radius: 4px; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+                            ↗️ باز کردن در تب جداگانه (تمام صفحه)
+                        </a>
+                        <button onclick="reloadWebTerminalIframe()" class="btn" style="background: #1e293b; border: 1px solid #334155; color: #cbd5e1; font-size: 0.75rem; padding: 5px 10px; border-radius: 4px; cursor: pointer;">
+                            🔄 بارگذاری مجدد
+                        </button>
+                    </div>
+                </div>
+                <iframe id="mt5-official-iframe" src="https://trade.mql5.com/trade?servers=LiteFinance-MT5-Demo,LiteFinance-MT5-Real,LiteFinance-Classic&demo_server=LiteFinance-MT5-Demo&startup_mode=open_quotes&lang=en" style="width: 100%; height: calc(100% - 45px); border: none; background: #000;" allow="clipboard-read; clipboard-write"></iframe>
             </div>
         </div>
     </div>
@@ -6892,9 +7206,417 @@
             if (modal) modal.style.display = 'none';
         }
 
+        function openMT5ApiKeyModal() {
+            const modal = document.getElementById('mt5-api-modal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeMT5ApiKeyModal() {
+            const modal = document.getElementById('mt5-api-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function saveMT5AccountUI() {
+            const accountNumber = (document.getElementById('input-mt5-account')?.value || '').trim();
+            const password = (document.getElementById('input-mt5-password')?.value || '').trim();
+            const balance = (document.getElementById('input-mt5-balance')?.value || '').trim();
+            const leverage = (document.getElementById('input-mt5-leverage')?.value || '').trim();
+            const apiToken = (document.getElementById('input-mt5-token')?.value || '').trim();
+
+            if (!accountNumber) {
+                showToast('لطفاً شماره حساب متاتریدر ۵ را وارد نمایید.', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btn-save-mt5-keys');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ در حال اتصال مستقیم ابری به MT5...';
+            }
+
+            try {
+                // First attempt cloud connection
+                const res = await fetch('/api/v1/mt5/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        account_number: accountNumber,
+                        password: password,
+                        server_name: 'LiteFinance-MT5-Demo',
+                        leverage: leverage,
+                        symbol: 'ETHUSD_cl',
+                        api_token: apiToken || undefined
+                    })
+                });
+                const data = await res.json();
+
+                if (balance) {
+                    await fetch('/api/v1/mt5/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            account_number: accountNumber,
+                            server_name: 'LiteFinance-MT5-Demo',
+                            balance: parseFloat(balance),
+                            leverage: leverage
+                        })
+                    });
+                }
+
+                if (data.success) {
+                    showToast(`🎉 ${data.message}`, 'success');
+                    closeMT5ApiKeyModal();
+                    refreshMT5Data();
+                } else {
+                    showToast(`⚠️ خطا: ${data.error || 'ارتباط با MT5 برقرار نشد'}`, 'error');
+                }
+            } catch (err) {
+                showToast(`❌ خطا در اتصال: ${err.message}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '⚡ اتصال و تایید حساب MT5';
+                }
+            }
+        }
+
+        let mt5ActiveSymbol = 'ETHUSD_cl';
+        let mt5ActiveSide = 'BUY';
+        let mt5TimerInterval = null;
+
+        function openMT5TerminalModal() {
+            const modal = document.getElementById('mt5-exchange-terminal-modal');
+            if (modal) modal.style.display = 'flex';
+            refreshMT5Data();
+            if (!mt5TimerInterval) {
+                mt5TimerInterval = setInterval(refreshMT5Data, 3000);
+            }
+        }
+
+        function closeMT5TerminalModal() {
+            const modal = document.getElementById('mt5-exchange-terminal-modal');
+            if (modal) modal.style.display = 'none';
+            if (mt5TimerInterval) {
+                clearInterval(mt5TimerInterval);
+                mt5TimerInterval = null;
+            }
+        }
+
+        function switchMT5Symbol(sym) {
+            mt5ActiveSymbol = sym;
+            document.querySelectorAll('#mt5-pair-buttons .ticker-bar-item').forEach(b => b.classList.remove('active'));
+            const btn = document.getElementById(`mt5-btn-${sym}`);
+            if (btn) btn.classList.add('active');
+            updateMT5SubmitBtnText();
+        }
+
+        function setMT5OrderSide(side) {
+            mt5ActiveSide = side;
+            const buyTab = document.getElementById('mt5-tab-buy');
+            const sellTab = document.getElementById('mt5-tab-sell');
+            if (side === 'BUY') {
+                if (buyTab) {
+                    buyTab.style.background = '#059669';
+                    buyTab.style.color = '#fff';
+                    buyTab.style.border = 'none';
+                }
+                if (sellTab) {
+                    sellTab.style.background = '#1e293b';
+                    sellTab.style.color = '#cbd5e1';
+                    sellTab.style.border = '1px solid #475569';
+                }
+            } else {
+                if (sellTab) {
+                    sellTab.style.background = '#dc2626';
+                    sellTab.style.color = '#fff';
+                    sellTab.style.border = 'none';
+                }
+                if (buyTab) {
+                    buyTab.style.background = '#1e293b';
+                    buyTab.style.color = '#cbd5e1';
+                    buyTab.style.border = '1px solid #475569';
+                }
+            }
+            updateMT5SubmitBtnText();
+        }
+
+        function updateMT5SubmitBtnText() {
+            const txt = document.getElementById('mt5-btn-submit-text');
+            const btn = document.getElementById('mt5-btn-submit-order');
+            if (txt && btn) {
+                if (mt5ActiveSide === 'BUY') {
+                    txt.textContent = `ارسال سفارش خرید LONG (${mt5ActiveSymbol}) در MT5`;
+                    btn.style.background = 'linear-gradient(135deg, #059669, #10b981)';
+                } else {
+                    txt.textContent = `ارسال سفارش فروش SHORT (${mt5ActiveSymbol}) در MT5`;
+                    btn.style.background = 'linear-gradient(135deg, #dc2626, #ef4444)';
+                }
+            }
+        }
+
+        function setMT5Lot(lot) {
+            const inp = document.getElementById('mt5-order-volume');
+            if (inp) inp.value = lot;
+        }
+
+        async function refreshMT5Data() {
+            try {
+                // First check if local desktop bridge is running on port 8080 (zero cloud firewall, instantaneous sync)
+                try {
+                    const localRes = await fetch('http://127.0.0.1:8080/status', { method: 'GET', mode: 'cors', cache: 'no-cache' });
+                    if (localRes.ok) {
+                        const localData = await localRes.json();
+                        if (localData && localData.account) {
+                            // Forward directly to server via local browser session (authenticated, never blocked by cloud firewall)
+                            await fetch('/api/v1/mt5/sync', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(localData)
+                            });
+                        }
+                    }
+                } catch (localErr) {
+                    // Local desktop bridge not active, gracefully continue with cloud state
+                }
+
+                const res = await fetch('/api/v1/mt5/bundle');
+                const data = await res.json();
+                if (!data.success) return;
+
+                const acc = data.account || {};
+                const positions = data.positions || [];
+                const history = data.history || [];
+
+                // Update HUD & Topbar
+                if (document.getElementById('mt5-hud-account')) document.getElementById('mt5-hud-account').textContent = acc.login || '91447058';
+                if (document.getElementById('mt5-hud-server')) document.getElementById('mt5-hud-server').textContent = acc.server || 'LiteFinance-MT5-Demo';
+                if (document.getElementById('mt5-hud-leverage')) document.getElementById('mt5-hud-leverage').textContent = '1:' + (acc.leverage || 1000);
+                const formattedBalance = `$${(acc.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                if (document.getElementById('mt5-hud-balance')) document.getElementById('mt5-hud-balance').textContent = formattedBalance;
+                if (document.getElementById('topbar-mt5-balance')) document.getElementById('topbar-mt5-balance').textContent = formattedBalance;
+                if (document.getElementById('mt5-hud-equity')) document.getElementById('mt5-hud-equity').textContent = `$${(acc.equity || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                if (document.getElementById('mt5-hud-freemargin')) document.getElementById('mt5-hud-freemargin').textContent = `$${(acc.freeMargin || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+
+                // Render Open Positions
+                const posTbody = document.getElementById('mt5-positions-tbody');
+                if (posTbody) {
+                    if (positions.length === 0) {
+                        posTbody.innerHTML = `<tr><td colspan="10" style="padding: 16px; color: #64748b;">هیچ پوزیشن بازی در متاتریدر ۵ وجود ندارد.</td></tr>`;
+                    } else {
+                        posTbody.innerHTML = positions.map(p => {
+                            const isProfit = (p.profit || 0) >= 0;
+                            const typeColor = p.type === 'BUY' ? '#34d399' : '#f87171';
+                            const typeBg = p.type === 'BUY' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+                            return `
+                                <tr style="border-bottom: 1px solid #1e293b; height: 36px;">
+                                    <td style="font-family: monospace; color: #94a3b8;">#${p.ticket}</td>
+                                    <td style="font-weight: 700; color: #f8fafc;">${p.symbol}</td>
+                                    <td><span style="background: ${typeBg}; color: ${typeColor}; padding: 2px 6px; border-radius: 4px; font-weight: 700;">${p.type}</span></td>
+                                    <td style="font-family: monospace;">${p.volume}</td>
+                                    <td style="font-family: monospace;">$${p.openPrice.toLocaleString()}</td>
+                                    <td style="font-family: monospace; color: #38bdf8;">$${p.currentPrice.toLocaleString()}</td>
+                                    <td style="color: #f87171; font-family: monospace;">${p.sl ? '$' + p.sl : '-'}</td>
+                                    <td style="color: #34d399; font-family: monospace;">${p.tp ? '$' + p.tp : '-'}</td>
+                                    <td style="font-family: monospace; font-weight: 700; color: ${isProfit ? '#34d399' : '#f87171'};">
+                                        ${isProfit ? '+' : ''}$${(p.profit || 0).toFixed(2)}
+                                    </td>
+                                    <td>
+                                        <button onclick="closeMT5PositionUI(${p.ticket})" style="background: #ef4444; color: #fff; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; font-weight: 700;">بستن پوزیشن</button>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+                }
+
+                // Render History
+                const histTbody = document.getElementById('mt5-history-tbody');
+                if (histTbody && history.length > 0) {
+                    histTbody.innerHTML = history.slice(0, 10).map(h => {
+                        const isProfit = (h.profit || 0) >= 0;
+                        return `
+                            <tr style="border-bottom: 1px solid #1e293b; height: 28px;">
+                                <td style="font-family: monospace; color: #94a3b8;">#${h.ticket}</td>
+                                <td>${h.symbol}</td>
+                                <td><span style="color: ${h.type === 'BUY' ? '#34d399' : '#f87171'}; font-weight: 700;">${h.type}</span></td>
+                                <td>${h.volume}</td>
+                                <td>$${(h.openPrice || 0).toLocaleString()}</td>
+                                <td>$${(h.closePrice || 0).toLocaleString()}</td>
+                                <td style="color: ${isProfit ? '#34d399' : '#f87171'}; font-weight: 700;">${isProfit ? '+' : ''}$${(h.profit || 0).toFixed(2)}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+            } catch (err) {
+                console.error('Error fetching MT5 bundle:', err);
+            }
+        }
+
+        async function executeMT5ManualOrderUI() {
+            const vol = parseFloat(document.getElementById('mt5-order-volume')?.value) || 0.05;
+            const sl = document.getElementById('mt5-order-sl')?.value || null;
+            const tp = document.getElementById('mt5-order-tp')?.value || null;
+
+            const btn = document.getElementById('mt5-btn-submit-order');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ در حال ارسال سفارش به MT5...';
+            }
+
+            try {
+                const res = await fetch('/api/v1/mt5/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: mt5ActiveSymbol,
+                        type: mt5ActiveSide,
+                        volume: vol,
+                        sl: sl,
+                        tp: tp
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`🚀 ${data.message}`, 'success');
+                    refreshMT5Data();
+                } else {
+                    showToast(`⚠️ خطا در ثبت سفارش: ${data.error}`, 'error');
+                }
+            } catch (err) {
+                showToast(`❌ خطا: ${err.message}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    updateMT5SubmitBtnText();
+                }
+            }
+        }
+
+        async function closeMT5PositionUI(ticket) {
+            try {
+                const res = await fetch('/api/v1/mt5/position/close', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticket: ticket })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ ${data.message}`, 'success');
+                    refreshMT5Data();
+                } else {
+                    showToast(`⚠️ ${data.error}`, 'error');
+                }
+            } catch (err) {
+                showToast(`❌ خطا: ${err.message}`, 'error');
+            }
+        }
+
+        function switchMT5TerminalView(view) {
+            const nativeBtn = document.getElementById('mt5-viewtab-native');
+            const webBtn = document.getElementById('mt5-viewtab-webterminal');
+            const nativeExchangeBody = document.querySelector('#mt5-terminal-modal .exchange-body');
+            const webContainer = document.getElementById('mt5-webterminal-container');
+
+            if (view === 'webterminal') {
+                if (nativeExchangeBody) nativeExchangeBody.style.display = 'none';
+                if (webContainer) webContainer.style.display = 'block';
+                if (webBtn) {
+                    webBtn.style.background = '#10b981';
+                    webBtn.style.color = '#fff';
+                }
+                if (nativeBtn) {
+                    nativeBtn.style.background = 'transparent';
+                    nativeBtn.style.color = '#94a3b8';
+                }
+            } else {
+                if (nativeExchangeBody) nativeExchangeBody.style.display = 'grid';
+                if (webContainer) webContainer.style.display = 'none';
+                if (nativeBtn) {
+                    nativeBtn.style.background = '#10b981';
+                    nativeBtn.style.color = '#fff';
+                }
+                if (webBtn) {
+                    webBtn.style.background = 'transparent';
+                    webBtn.style.color = '#94a3b8';
+                }
+            }
+        }
+
+        function reloadWebTerminalIframe() {
+            const iframe = document.getElementById('mt5-official-iframe');
+            if (iframe) {
+                iframe.src = iframe.src;
+                showToast('🔄 وب‌ترمینال رسمی لایت‌فایننس مجدداً بارگذاری شد.', 'info');
+            }
+        }
+
+        async function triggerManualDesktopSync() {
+            const btn = document.getElementById('btn-mt5-desktop-sync');
+            const label = document.getElementById('mt5-sync-btn-label');
+            const dot = document.getElementById('mt5-sync-indicator-dot');
+            if (label) label.textContent = '⏳ در حال بررسی متاتریدر ۵...';
+            if (dot) dot.style.background = '#f59e0b';
+
+            try {
+                // Read directly from Python bridge on local port 8080
+                const res = await fetch('http://127.0.0.1:8080/status', { method: 'GET', cache: 'no-cache' });
+                if (!res.ok) throw new Error('خطا در پاسخ‌دهی اسکریپت پایتون');
+                const data = await res.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Send payload to cloud server via user authenticated session
+                const syncRes = await fetch('/api/v1/mt5/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const syncData = await syncRes.json();
+
+                if (syncData.success) {
+                    if (label) label.textContent = '✅ همگام با متاتریدر';
+                    if (dot) dot.style.background = '#10b981';
+                    showToast(`⚡ اطلاعات زنده متاتریدر ۵ (حساب #${data.account_number} با موجودی $${(data.balance||0).toLocaleString()} و ${data.positions?.length || 0} معامله) همگام شد!`, 'success');
+                    refreshMT5Data();
+                } else {
+                    throw new Error(syncData.message || 'خطا در ثبت اطلاعات در سرور');
+                }
+            } catch (err) {
+                if (label) label.textContent = '❌ ارتباط برقرار نشد';
+                if (dot) dot.style.background = '#ef4444';
+                showToast(`خطا در اتصال به پایتون: مطمئن شوید python bridge.py در حال اجراست (${err.message})`, 'error');
+                setTimeout(() => {
+                    if (label) label.textContent = '⚡ سینک فوری با متاتریدر سیستم';
+                    if (dot) dot.style.background = '#fff';
+                }, 4000);
+            }
+        }
+
+        async function promptQuickMT5BalanceUpdate() {
+            const currentBalText = document.getElementById('mt5-hud-balance')?.textContent?.replace('$', '')?.replace(/,/g, '') || '100';
+            const newBal = prompt('لطفاً مبلغ جدید موجودی دلاری (Balance) متاتریدر ۵ را وارد فرمایید:', currentBalText);
+            if (newBal !== null && !isNaN(parseFloat(newBal))) {
+                const balNum = parseFloat(newBal);
+                try {
+                    const res = await fetch(`/api/v1/mt5/sync?account_number=91447058&balance=${balNum}&equity=${balNum}&leverage=1000`);
+                    const data = await res.json();
+                    if (data.success) {
+                        showToast(`💰 موجودی متاتریدر ۵ به $${balNum.toLocaleString()} بروزرسانی شد!`, 'success');
+                        refreshMT5Data();
+                    }
+                } catch (e) {
+                    showToast(`خطا در بروزرسانی: ${e.message}`, 'error');
+                }
+            }
+        }
+
         async function saveNobitexApiKeysUI() {
             const apiKey = (document.getElementById('input-nobitex-api-key')?.value || '').trim();
             const secretKey = (document.getElementById('input-nobitex-secret-key')?.value || '').trim();
+            const proxyUrl = (document.getElementById('input-nobitex-proxy')?.value || '').trim();
+            const apiGateway = (document.getElementById('input-nobitex-gateway')?.value || '').trim();
 
             if (!apiKey && !secretKey) {
                 showToast('لطفاً کلید API و Secret Key نوبیتکس را وارد فرمایید.', 'error');
@@ -6914,7 +7636,9 @@
                     body: JSON.stringify({
                         api_key: apiKey,
                         secret_key: secretKey,
-                        api_token: secretKey || apiKey
+                        api_token: secretKey || apiKey,
+                        proxy_url: proxyUrl,
+                        api_gateway: apiGateway
                     })
                 });
                 const data = await res.json();
@@ -8155,12 +8879,40 @@
             }
         });
 
+        // Setup Realtime WebSocket for Instant MT5 updates & Terminal sync
+        let liveWs = null;
+        function connectLiveWs() {
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                liveWs = new WebSocket(`${protocol}//${window.location.host}/ws`);
+                liveWs.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        if (msg.type === 'MT5_LIVE_UPDATE' && msg.data) {
+                            const acc = msg.data.account || {};
+                            const formattedBalance = `$${(acc.balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                            if (document.getElementById('mt5-hud-balance')) document.getElementById('mt5-hud-balance').textContent = formattedBalance;
+                            if (document.getElementById('topbar-mt5-balance')) document.getElementById('topbar-mt5-balance').textContent = formattedBalance;
+                            if (document.getElementById('mt5-hud-equity')) document.getElementById('mt5-hud-equity').textContent = `$${(acc.equity || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                            if (document.getElementById('mt5-hud-freemargin')) document.getElementById('mt5-hud-freemargin').textContent = `$${(acc.freeMargin || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                        }
+                    } catch (e) {}
+                };
+                liveWs.onclose = () => {
+                    setTimeout(connectLiveWs, 3000);
+                };
+            } catch (e) {}
+        }
+        connectLiveWs();
+
         // Initial load
         loadDashboard();
         loadApiKeysUsage();
+        refreshMT5Data();
         
-        // Auto refresh every 30 seconds
+        // Auto refresh
         setInterval(loadDashboard, 30000);
+        setInterval(refreshMT5Data, 5000);
     </script>
 </body>
 </html>

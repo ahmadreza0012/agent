@@ -5,6 +5,9 @@
  */
 
 import express from 'express';
+import https from 'node:https';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 import { evaluateMarketWith60Features } from './sixty_features_quant_engine.js';
 import { agentLearner } from './self_improving_agent.js';
 
@@ -28,7 +31,11 @@ export const NOBITEX_POPULAR_MARKETS = [
 export const NOBITEX_STATE = {
   config: {
     apiToken: process.env.NOBITEX_API_KEY || process.env.NOBITEX_API_TOKEN || '',
-    apiUrl: 'https://api.nobitex.ir',
+    apiKey: process.env.NOBITEX_API_KEY || '',
+    secretKey: process.env.NOBITEX_SECRET_KEY || '',
+    proxyUrl: process.env.NOBITEX_PROXY_URL || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '',
+    apiGateway: process.env.NOBITEX_API_GATEWAY || '',
+    apiUrl: 'https://nobitex.ir',
     autoTradingEnabled: false,
     maxTradeAmountIrt: 2000000, // 2 million Tomans per trade max
     maxTradeAmountUsdt: 50,     // 50 USDT max per trade
@@ -281,25 +288,72 @@ function addNobitexAgentLog(action, message, level = 'info') {
   }
 }
 
-// Resilient HTTP Client for Nobitex API with headers, timeout, retries, and network error isolation
-async function safeNobitexRequest(url, options = {}, retries = 1, timeoutMs = 4000) {
-  const headers = {
+// Resilient HTTP Client for Nobitex API with Proxy & Gateway support
+async function safeNobitexRequest(url, options = {}, retries = 1, timeoutMs = 5000) {
+  let targetUrl = url;
+  const proxyUrl = NOBITEX_STATE.config.proxyUrl;
+  const customGateway = NOBITEX_STATE.config.apiGateway;
+
+  if (customGateway && customGateway.trim() !== '' && !customGateway.includes('nobitex.ir')) {
+    targetUrl = url.replace(/^https:\/\/apiv2\.nobitex\.ir|^https:\/\/api\.nobitex\.ir|^https:\/\/nobitex\.ir/, customGateway.replace(/\/+$/, ''));
+  }
+
+  const defaultHeaders = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     'Accept': 'application/json, text/plain, */*',
     'Accept-Language': 'fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7',
     'Origin': 'https://nobitex.ir',
     'Referer': 'https://nobitex.ir/',
+    'X-Pinggy-No-Debugger': 'yes',
     ...(options.headers || {})
   };
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      if (proxyUrl && proxyUrl.trim() !== '') {
+        const agent = proxyUrl.startsWith('socks') ? new SocksProxyAgent(proxyUrl.trim()) : new HttpsProxyAgent(proxyUrl.trim());
+        const parsed = new URL(targetUrl);
+        const reqBody = options.body ? (typeof options.body === 'string' ? options.body : JSON.stringify(options.body)) : null;
+        if (reqBody && !defaultHeaders['Content-Length']) {
+          defaultHeaders['Content-Length'] = Buffer.byteLength(reqBody);
+        }
+
+        const resObj = await new Promise((resolve, reject) => {
+          const req = https.request({
+            hostname: parsed.hostname,
+            port: parsed.port || 443,
+            path: parsed.pathname + parsed.search,
+            method: options.method || 'GET',
+            headers: defaultHeaders,
+            agent: agent,
+            timeout: timeoutMs,
+            rejectUnauthorized: false
+          }, (httpRes) => {
+            let resData = '';
+            httpRes.on('data', chunk => resData += chunk);
+            httpRes.on('end', () => {
+              resolve({
+                ok: httpRes.statusCode >= 200 && httpRes.statusCode < 300,
+                status: httpRes.statusCode,
+                json: async () => JSON.parse(resData || '{}'),
+                text: async () => resData
+              });
+            });
+          });
+          req.on('error', reject);
+          req.on('timeout', () => { req.destroy(); reject(new Error('Proxy Timeout')); });
+          if (reqBody) req.write(reqBody);
+          req.end();
+        });
+        return resObj;
+      }
+
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-      const res = await fetch(url, {
+      const res = await fetch(targetUrl, {
         ...options,
-        headers,
+        headers: defaultHeaders,
         signal: controller.signal
       });
       clearTimeout(timer);
@@ -316,10 +370,17 @@ async function safeNobitexRequest(url, options = {}, retries = 1, timeoutMs = 40
 }
 
 // Authenticate / Test Token with Nobitex API
-export async function authenticateNobitex(apiToken = null, apiKey = null, secretKey = null) {
+export async function authenticateNobitex(apiToken = null, apiKey = null, secretKey = null, proxyUrl = null, apiGateway = null) {
   const keyToUse = apiKey || NOBITEX_STATE.config.apiKey;
   const secretToUse = secretKey || apiToken || NOBITEX_STATE.config.secretKey || NOBITEX_STATE.config.apiToken;
   const tokenToUse = secretToUse || keyToUse;
+
+  if (proxyUrl !== null && proxyUrl !== undefined) {
+    NOBITEX_STATE.config.proxyUrl = proxyUrl.trim();
+  }
+  if (apiGateway !== null && apiGateway !== undefined) {
+    NOBITEX_STATE.config.apiGateway = apiGateway.trim();
+  }
 
   if (!tokenToUse && !keyToUse) {
     NOBITEX_STATE.status.authenticated = false;
@@ -329,7 +390,7 @@ export async function authenticateNobitex(apiToken = null, apiKey = null, secret
 
   try {
     const startTime = Date.now();
-    const res = await safeNobitexRequest(`${NOBITEX_STATE.config.apiUrl}/v2/wallets`, {
+    let res = await safeNobitexRequest(`https://apiv2.nobitex.ir/users/wallets/list`, {
       method: 'POST',
       headers: {
         'Authorization': `Token ${tokenToUse}`,
@@ -337,11 +398,22 @@ export async function authenticateNobitex(apiToken = null, apiKey = null, secret
       }
     }, 1, 4000);
 
+    if (!res || !res.ok) {
+      res = await safeNobitexRequest(`https://apiv2.nobitex.ir/v2/wallets`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${tokenToUse}`,
+          'Content-Type': 'application/json'
+        }
+      }, 1, 4000);
+    }
+
     NOBITEX_STATE.status.latencyMs = Date.now() - startTime;
 
     if (res && res.ok) {
       const data = await res.json().catch(() => ({}));
-      if (data.status === 'ok' && data.wallets) {
+      if (data.status === 'ok' && (data.wallets || data.walletsList)) {
+        const rawWallets = Array.isArray(data.wallets) ? data.wallets : (Array.isArray(data.walletsList) ? data.walletsList : Object.values(data.wallets || {}));
         NOBITEX_STATE.config.apiKey = keyToUse;
         NOBITEX_STATE.config.secretKey = secretToUse;
         NOBITEX_STATE.config.apiToken = tokenToUse;
@@ -350,18 +422,18 @@ export async function authenticateNobitex(apiToken = null, apiKey = null, secret
         NOBITEX_STATE.status.lastAuthAttempt = new Date().toISOString();
 
         // Update wallets
-        NOBITEX_STATE.wallets = data.wallets.map(w => {
+        NOBITEX_STATE.wallets = rawWallets.map(w => {
           const bal = parseFloat(w.balance) || 0;
           const blocked = parseFloat(w.blocked) || 0;
           const avail = bal - blocked;
           return {
-            currency: w.currency.toUpperCase(),
-            symbol: w.currency.toUpperCase(),
-            title_fa: getCurrencyTitleFa(w.currency),
+            currency: (w.currency || 'IRT').toUpperCase(),
+            symbol: (w.currency || 'IRT').toUpperCase(),
+            title_fa: getCurrencyTitleFa(w.currency || 'irt'),
             balance: bal,
             frozen: blocked,
             available: avail > 0 ? avail : 0,
-            value_irt: calculateWalletValueIrt(w.currency, avail)
+            value_irt: calculateWalletValueIrt(w.currency || 'irt', avail)
           };
         });
 
@@ -369,7 +441,7 @@ export async function authenticateNobitex(apiToken = null, apiKey = null, secret
 
         // Fetch real open orders and executed trades from Nobitex
         try {
-          const ordersRes = await safeNobitexRequest(`${NOBITEX_STATE.config.apiUrl}/market/orders/list`, {
+          const ordersRes = await safeNobitexRequest(`https://apiv2.nobitex.ir/market/orders/list`, {
             method: 'POST',
             headers: {
               'Authorization': `Token ${tokenToUse}`,
@@ -1065,9 +1137,69 @@ nobitexRouter.delete('/order/:id', async (req, res) => {
   return res.json({ success: true, message: `سفارش #${id} لغو شد.` });
 });
 
+nobitexRouter.post('/wallets/balance', async (req, res) => {
+  const { currency = 'rls', api_token } = req.body;
+  const tokenToUse = api_token || NOBITEX_STATE.config.apiToken || NOBITEX_STATE.config.secretKey || NOBITEX_STATE.config.apiKey;
+
+  if (!tokenToUse) {
+    return res.status(400).json({ success: false, error: 'کلید API نوبیتکس وارد نشده است.' });
+  }
+
+  try {
+    const rawRes = await safeNobitexRequest('https://apiv2.nobitex.ir/users/wallets/balance', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${tokenToUse}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ currency: currency.toLowerCase() })
+    }, 1, 5000);
+
+    if (rawRes && rawRes.ok) {
+      const data = await rawRes.json().catch(() => ({}));
+      addNobitexAgentLog('WALLET_BALANCE_CHECK', `استعلام موجودی ${currency.toUpperCase()} نوبیتکس انجام شد: ${JSON.stringify(data.balance || data)}`, 'success');
+      return res.json({ success: true, data });
+    } else {
+      const errText = rawRes ? await rawRes.text().catch(() => '') : 'عدم پاسخ‌دهی سرور';
+      return res.status(rawRes ? rawRes.status : 500).json({ success: false, error: errText });
+    }
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+nobitexRouter.post('/wallets/list', async (req, res) => {
+  const { api_token } = req.body;
+  const tokenToUse = api_token || NOBITEX_STATE.config.apiToken || NOBITEX_STATE.config.secretKey || NOBITEX_STATE.config.apiKey;
+
+  if (!tokenToUse) {
+    return res.status(400).json({ success: false, error: 'کلید API نوبیتکس وارد نشده است.' });
+  }
+
+  try {
+    const rawRes = await safeNobitexRequest('https://apiv2.nobitex.ir/users/wallets/list', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${tokenToUse}`,
+        'Content-Type': 'application/json'
+      }
+    }, 1, 5000);
+
+    if (rawRes && rawRes.ok) {
+      const data = await rawRes.json().catch(() => ({}));
+      return res.json({ success: true, data });
+    } else {
+      const errText = rawRes ? await rawRes.text().catch(() => '') : 'عدم پاسخ‌دهی سرور';
+      return res.status(rawRes ? rawRes.status : 500).json({ success: false, error: errText });
+    }
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 nobitexRouter.post('/auth/connect', async (req, res) => {
-  const { api_token, api_key, secret_key } = req.body;
-  const authRes = await authenticateNobitex(api_token, api_key, secret_key);
+  const { api_token, api_key, secret_key, proxy_url, api_gateway } = req.body;
+  const authRes = await authenticateNobitex(api_token, api_key, secret_key, proxy_url, api_gateway);
   return res.json(authRes);
 });
 

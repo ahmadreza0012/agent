@@ -9,6 +9,7 @@ import { executeCapabilityDomain, CAPABILITY_HANDLERS } from './capability_engin
 import { paperRouter, buildTerminalBundle } from './paper_exchange_engine.js';
 import { bitpinRouter } from './bitpin_live_engine.js';
 import { nobitexRouter } from './nobitex_live_engine.js';
+import { mt5Router, updateMT5StateDirect } from './mt5_bridge_engine.js';
 import { mcpRouter } from './mcp_server.js';
 import {
   getDatabaseStats,
@@ -54,7 +55,11 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '5000', 10);
 const HOST = '0.0.0.0';
 
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'User-Agent', 'X-Requested-With', 'Accept', 'Origin']
+}));
 app.use(express.json());
 app.use(express.static(__dirname));
 
@@ -1341,6 +1346,10 @@ app.use('/api/bitpin', bitpinRouter);
 app.use('/api/v1/nobitex', nobitexRouter);
 app.use('/api/nobitex', nobitexRouter);
 
+// Mount MetaTrader 5 Bridge Router
+app.use('/api/v1/mt5', mt5Router);
+app.use('/api/mt5', mt5Router);
+
 // Mount Model Context Protocol (MCP) Router
 app.use('/api/v1/mcp', mcpRouter);
 app.use('/api/mcp', mcpRouter);
@@ -1493,6 +1502,15 @@ wss.on('connection', (ws) => {
       }
       if (data.type === 'PING') {
         ws.send(JSON.stringify({ type: 'PONG', timestamp: Date.now() }));
+      }
+      if (data.type === 'MT5_SYNC' && data.payload) {
+        const updatedState = updateMT5StateDirect(data.payload);
+        ws.send(JSON.stringify({ type: 'MT5_SYNC_ACK', success: true, balance: updatedState.account.balance, timestamp: Date.now() }));
+        // Broadcast new MT5 state to all clients
+        const broadcastMsg = JSON.stringify({ type: 'MT5_LIVE_UPDATE', data: updatedState });
+        wss.clients.forEach(c => {
+          if (c.readyState === 1) c.send(broadcastMsg);
+        });
       }
     } catch (e) {}
   });
